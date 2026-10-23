@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build and test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
+
+      - name: Bundle app
+        run: Scripts/make-app.sh release
+
+      - name: Zip app
+        run: ditto -c -k --keepParent build/Vigil.app build/Vigil-unsigned.zip
+
+      - name: Upload app (ad-hoc signed, not notarized)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vigil-unsigned
+          path: build/Vigil-unsigned.zip
+          retention-days: 14

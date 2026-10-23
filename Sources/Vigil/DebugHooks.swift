@@ -92,29 +92,12 @@ enum DebugHooks {
         // Materials and Liquid Glass are composited by the window server and come out blank
         // in a cached display. Flatten them to plain backgrounds for the capture, then restore.
         var restorers: [() -> Void] = []
-        func neutralize(_ view: NSView) {
-            let className = NSStringFromClass(type(of: view))
-            if let effect = view as? NSVisualEffectView {
-                let material = effect.material
-                let state = effect.state
-                let blending = effect.blendingMode
-                effect.material = .windowBackground
-                effect.state = .inactive
-                effect.blendingMode = .withinWindow
-                restorers.append { effect.material = material; effect.state = state; effect.blendingMode = blending }
-            } else if Self.isEffectOnlyView(className) {
-                let wasHidden = view.isHidden
-                view.isHidden = true
-                restorers.append { view.isHidden = wasHidden }
-            }
-            for subview in view.subviews { neutralize(subview) }
-        }
-        neutralize(view)
+        neutralizeEffects(in: view, restorers: &restorers)
         defer { for restore in restorers.reversed() { restore() } }
 
         let bounds = view.bounds
         guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { return }
-        view.cacheDisplay(in: bounds, to: rep)
+        window.effectiveAppearance.performAsCurrentDrawingAppearance { view.cacheDisplay(in: bounds, to: rep) }
         guard let data = rep.representation(using: .png, properties: [:]) else { return }
         try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
         // Popovers and panels are separate windows; save each visible one as well.
@@ -123,8 +106,21 @@ enum DebugHooks {
             && other.frame.width > 40 && other.frame.height > 40 && !other.styleMask.contains(.titled) {
             guard let otherView = other.contentView?.superview ?? other.contentView,
                   let otherRep = otherView.bitmapImageRepForCachingDisplay(in: otherView.bounds) else { continue }
-            otherView.cacheDisplay(in: otherView.bounds, to: otherRep)
-            if let otherData = otherRep.representation(using: .png, properties: [:]) {
+            var otherRestorers: [() -> Void] = []
+            neutralizeEffects(in: otherView, restorers: &otherRestorers)
+            // Popovers draw their chrome with their own appearance; match the main window's so
+            // flattened materials and vibrant text agree on light versus dark.
+            let previousAppearance = other.appearance
+            other.appearance = window.effectiveAppearance
+            other.effectiveAppearance.performAsCurrentDrawingAppearance {
+                otherView.cacheDisplay(in: otherView.bounds, to: otherRep)
+            }
+            other.appearance = previousAppearance
+            for restore in otherRestorers.reversed() { restore() }
+            // Nothing paints behind popover content once its material is flattened, so the
+            // capture is transparent; composite it over the window background.
+            let flattened = composited(otherRep, appearance: window.effectiveAppearance)
+            if let otherData = flattened.representation(using: .png, properties: [:]) {
                 extra += 1
                 try? otherData.write(to: URL(fileURLWithPath: path + ".extra\(extra).png"), options: .atomic)
             }
@@ -151,6 +147,41 @@ enum DebugHooks {
         try? names.joined(separator: "\n").write(toFile: path + ".views.txt", atomically: true, encoding: .utf8)
     }
 
+    private static func composited(_ rep: NSBitmapImageRep, appearance: NSAppearance) -> NSBitmapImageRep {
+        guard let out = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: rep.pixelsWide, pixelsHigh: rep.pixelsHigh,
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return rep }
+        out.size = rep.size
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        guard let context = NSGraphicsContext(bitmapImageRep: out) else { return rep }
+        NSGraphicsContext.current = context
+        appearance.performAsCurrentDrawingAppearance {
+            NSColor.windowBackgroundColor.setFill()
+            NSRect(origin: .zero, size: rep.size).fill()
+        }
+        rep.draw(in: NSRect(origin: .zero, size: rep.size))
+        return out
+    }
+
+    private static func neutralizeEffects(in view: NSView, restorers: inout [() -> Void]) {
+        let className = NSStringFromClass(type(of: view))
+        if let effect = view as? NSVisualEffectView {
+            let material = effect.material
+            let state = effect.state
+            let blending = effect.blendingMode
+            effect.material = .windowBackground
+            effect.state = .inactive
+            effect.blendingMode = .withinWindow
+            restorers.append { effect.material = material; effect.state = state; effect.blendingMode = blending }
+        } else if isEffectOnlyView(className) {
+            let wasHidden = view.isHidden
+            view.isHidden = true
+            restorers.append { view.isHidden = wasHidden }
+        }
+        for subview in view.subviews { neutralizeEffects(in: subview, restorers: &restorers) }
+    }
+
     /// Views that only paint an effect (glass backdrops, scroll-edge pockets) and hold no content.
     private static func isEffectOnlyView(_ className: String) -> Bool {
         if className.contains("Glass") && className.contains("RootView") { return true }
@@ -159,27 +190,4 @@ enum DebugHooks {
         return false
     }
 
-    /// Renders the layer tree instead of asking views to draw; backdrop layers come out empty
-    /// rather than opaque, which keeps content under materials visible.
-    static func writeLayerImage(of view: NSView, scale: CGFloat, to path: String) {
-        guard let layer = view.layer else { return }
-        let size = view.bounds.size
-        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
-                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
-        rep.size = size
-        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return }
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        let cg = context.cgContext
-        cg.setFillColor(NSColor.windowBackgroundColor.cgColor)
-        cg.fill(CGRect(origin: .zero, size: size))
-        if layer.isGeometryFlipped == false, view.isFlipped == false {
-            // AppKit layer trees are rendered bottom-up into a flipped NSGraphicsContext.
-        }
-        layer.render(in: cg)
-        NSGraphicsContext.restoreGraphicsState()
-        guard let data = rep.representation(using: .png, properties: [:]) else { return }
-        try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
-    }
 }
