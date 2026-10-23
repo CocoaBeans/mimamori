@@ -82,6 +82,7 @@ struct VigilCommands: Commands {
                 .keyboardShortcut("f")
             Toggle("Flagged Only", isOn: Binding(get: { model.flaggedOnly }, set: { model.flaggedOnly = $0 }))
                 .keyboardShortcut("f", modifiers: [.command, .shift])
+            Toggle("Hide Reviewed Files", isOn: Binding(get: { model.hideReviewed }, set: { model.hideReviewed = $0 }))
             Toggle("Wrap Diff Lines", isOn: Binding(
                 get: { model.settings.wrapDiffLines },
                 set: { value in
@@ -90,6 +91,14 @@ struct VigilCommands: Commands {
                     model.updateSettings(copy)
                 }))
                 .keyboardShortcut("w", modifiers: [.command, .option])
+            Divider()
+            Button(model.selectedChangeIsReviewed ? "Mark as Not Reviewed" : "Mark as Reviewed") {
+                model.toggleReviewForSelection()
+            }
+            .keyboardShortcut(.return, modifiers: .command)
+            Button("Mark All as Reviewed") { model.selectedSession?.markAllReviewed() }
+                .keyboardShortcut(.return, modifiers: [.command, .option])
+            Button("Clear All Reviews") { model.selectedSession?.clearAllReviews() }
         }
         SidebarCommands()
         InspectorCommands()

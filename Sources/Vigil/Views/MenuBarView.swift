@@ -90,6 +90,10 @@ struct MenuBarMenu: View {
         } else {
             title += " · \(session.changes.count) changed"
             if session.flaggedCount > 0 { title += ", \(session.flaggedCount) flagged" }
+            let left = session.unreviewedCount
+            if left < session.changes.count {
+                title += left == 0 ? ", all reviewed" : ", \(left) to review"
+            }
         }
         return title
     }

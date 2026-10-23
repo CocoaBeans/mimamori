@@ -226,7 +226,7 @@ public struct GitClient: Sendable {
 
     public func rawDiff(base: String, indexFile: URL, in worktree: URL) async throws -> [RawDiffEntry] {
         let result = try await run(
-            ["diff", "--cached", "--raw", "-z", "-M", "--full-index", "--no-ext-diff", base],
+            ["diff", "--cached", "--raw", "-z", "-M", "--no-abbrev", "--no-ext-diff", base],
             in: worktree, options: Options(indexFile: indexFile, timeout: .seconds(120)))
         return RawDiffParser.parse(result.stdout)
     }
@@ -248,6 +248,19 @@ public struct GitClient: Sendable {
         let result = try await run(arguments, in: worktree,
                                    options: Options(indexFile: indexFile, timeout: .seconds(120)))
         return result.stdoutText
+    }
+
+    /// Unified diff between two blobs. Its paths are the blob ids; callers relabel them.
+    public func blobPatch(from old: String, to new: String, in worktree: URL, context: Int = 3) async throws -> String {
+        let result = try await run(["diff", "--no-ext-diff", "--no-color", "-p", "--unified=\(context)", old, new],
+                                   in: worktree, options: Options(timeout: .seconds(120)))
+        return result.stdoutText
+    }
+
+    /// True when the object is in the repository's object store.
+    public func objectExists(_ oid: String, in worktree: URL) async -> Bool {
+        let result = try? await run(["cat-file", "-e", oid], in: worktree, options: Options(allowedExitCodes: [0, 1, 128]))
+        return result?.status == 0
     }
 
     // MARK: Shadow index maintenance

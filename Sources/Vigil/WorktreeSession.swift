@@ -29,6 +29,7 @@ final class WorktreeSession: Identifiable {
     private(set) var lastActivityDate: Date?
     private(set) var watcherActive = false
     private(set) var attributions: [String: ChangeAttribution] = [:]
+    private(set) var reviews: ReviewLedger
     var selectedPath: String?
     /// Asked for every file event; answers with the agent tool call that caused it, when known.
     var attributionProvider: (@MainActor (String, Date) -> ChangeAttribution?)?
@@ -59,6 +60,7 @@ final class WorktreeSession: Identifiable {
         self.settings = settings
         self.baseline = persisted.baseline
         self.scopePrefixes = persisted.scopePrefixes
+        self.reviews = persisted.reviews
         self.onActivity = onActivity
         self.onSettingsChanged = onSettingsChanged
     }
@@ -68,10 +70,42 @@ final class WorktreeSession: Identifiable {
     var flaggedCount: Int { changes.flaggedCount }
     var isBusy: Bool { phase == .refreshing || phase == .indexing || phase == .starting }
     var persistedSettings: PersistedWorktreeSettings {
-        PersistedWorktreeSettings(baseline: baseline, scopePrefixes: scopePrefixes)
+        PersistedWorktreeSettings(baseline: baseline, scopePrefixes: scopePrefixes, reviews: reviews)
     }
 
     func change(for path: String) -> FileChange? { changesByPath[path] }
+
+    // MARK: Review
+
+    /// Marks older than this are forgotten once their file no longer differs from the baseline.
+    private static let reviewRetention: TimeInterval = 30 * 86400
+
+    var reviewedCount: Int { changes.reviewedCount(in: reviews) }
+    var unreviewedCount: Int { changes.count - reviewedCount }
+
+    func reviewStatus(of change: FileChange) -> ReviewStatus { reviews.status(of: change) }
+
+    func setReviewed(_ reviewed: Bool, paths: [String]) {
+        let now = Date()
+        for path in paths {
+            if reviewed {
+                if let change = changesByPath[path] { reviews.markReviewed(change, at: now) }
+            } else {
+                reviews.clear(path)
+            }
+        }
+        onSettingsChanged(self)
+    }
+
+    func markAllReviewed() {
+        setReviewed(true, paths: changes.map(\.path))
+    }
+
+    func clearAllReviews() {
+        guard !reviews.isEmpty else { return }
+        reviews.clearAll()
+        onSettingsChanged(self)
+    }
 
     // MARK: Lifecycle
 
@@ -342,10 +376,19 @@ final class WorktreeSession: Identifiable {
                     let suffix = "by \(attribution.label)"
                     events[index].detail = events[index].detail.map { "\($0) · \(suffix)" } ?? suffix
                 }
+                if let change = byPath[path], case .changedSinceReview = reviews.status(of: change) {
+                    let suffix = "changed since your review"
+                    events[index].detail = events[index].detail.map { "\($0) · \(suffix)" } ?? suffix
+                }
             default: break
             }
         }
         attributions = attributions.filter { byPath[$0.key] != nil }
+        // An unavailable baseline lists nothing, which says nothing about what is still changed.
+        if fresh.baseline.isAvailable, !reviews.isEmpty,
+           reviews.prune(keepingPaths: Set(byPath.keys), olderThan: now.addingTimeInterval(-Self.reviewRetention)) {
+            onSettingsChanged(self)
+        }
         if lastChanged.count > 5000 {
             let cutoff = now.addingTimeInterval(-settings.recencyWindowSeconds * 4)
             lastChanged = lastChanged.filter { $0.value > cutoff }
@@ -426,5 +469,10 @@ final class WorktreeSession: Identifiable {
     func diff(for change: FileChange) async throws -> FileDiff? {
         guard let inspector, let base = state?.baseline.treeish else { return nil }
         return try await inspector.diff(for: change, base: base)
+    }
+
+    func diffSinceReview(for change: FileChange, reviewedBlob: String) async throws -> FileDiff? {
+        guard let inspector else { return nil }
+        return try await inspector.diffSinceReview(for: change, reviewedBlob: reviewedBlob)
     }
 }

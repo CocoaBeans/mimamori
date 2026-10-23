@@ -5,13 +5,6 @@ struct ChangeListView: View {
     @Environment(AppModel.self) private var model
     @Bindable var session: WorktreeSession
 
-    private struct Row: Identifiable, Hashable {
-        let change: FileChange
-        let recency: Double
-        let lastChanged: Date?
-        var id: String { change.path }
-    }
-
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -32,6 +25,14 @@ struct ChangeListView: View {
             }
             .navigationTitle(session.displayName)
             .navigationSubtitle(Self.shortPath(session.id))
+    }
+
+    private var emptyFilterDescription: String {
+        switch (model.flaggedOnly, model.hideReviewed) {
+        case (true, true): "No file left to review needs attention."
+        case (true, false): "No changed file needs attention."
+        default: "Every changed file is hidden by the list's filters."
+        }
     }
 
     /// The last two path components, enough to tell worktrees apart without a toolbar-wide subtitle.
@@ -67,20 +68,18 @@ struct ChangeListView: View {
                 Button("Show Uncommitted") { session.setBaseline(.head) }
             }
         } else {
-            let rows = rows
+            let rows = model.listedChanges(in: session)
             if rows.isEmpty {
-                if session.changes.isEmpty {
-                    ContentUnavailableView("No Changes", systemImage: "checkmark.circle",
-                                           description: Text("The working tree matches \(session.state?.baseline.label ?? "the baseline")."))
-                } else {
-                    ContentUnavailableView.search(text: model.filterText)
-                }
+                emptyList
             } else {
                 List(selection: $session.selectedPath) {
                     ForEach(rows) { row in
+                        let review = session.reviewStatus(of: row.change)
                         ChangeRow(change: row.change, recency: row.recency, lastChanged: row.lastChanged,
                                   now: model.now, worktreePath: session.id,
-                                  attribution: session.attributions[row.change.path])
+                                  attribution: session.attributions[row.change.path],
+                                  review: review,
+                                  onToggleReviewed: { session.setReviewed(!review.isReviewed, paths: [row.change.path]) })
                             .tag(row.change.path)
                             .listRowBackground(rowBackground(recency: row.recency, selected: session.selectedPath == row.change.path))
                     }
@@ -95,20 +94,53 @@ struct ChangeListView: View {
         Color.accentColor.opacity(selected ? 0 : 0.14 * recency)
     }
 
-    private var rows: [Row] {
-        let now = model.now
-        let window = max(5, model.settings.recencyWindowSeconds)
-        let filter = model.filterText.trimmingCharacters(in: .whitespaces).lowercased()
-        var rows: [Row] = []
+    @ViewBuilder
+    private var emptyList: some View {
+        if session.changes.isEmpty {
+            ContentUnavailableView("No Changes", systemImage: "checkmark.circle",
+                                   description: Text("The working tree matches \(session.state?.baseline.label ?? "the baseline")."))
+        } else if !model.filterText.trimmingCharacters(in: .whitespaces).isEmpty {
+            ContentUnavailableView.search(text: model.filterText)
+        } else if model.hideReviewed && session.unreviewedCount == 0 {
+            ContentUnavailableView {
+                Label("Everything Reviewed", systemImage: "checkmark.circle")
+            } description: {
+                Text("You have reviewed all \(session.changes.count) changed files. Files an agent edits again come back here.")
+            } actions: {
+                Button("Show Reviewed Files") { model.hideReviewed = false }
+            }
+        } else {
+            ContentUnavailableView("Nothing to Show", systemImage: "line.3.horizontal.decrease.circle",
+                                   description: Text(emptyFilterDescription))
+        }
+    }
+}
+
+/// One file in the change list, with how recently it changed.
+struct ListedChange: Identifiable, Hashable {
+    let change: FileChange
+    let recency: Double
+    let lastChanged: Date?
+    var id: String { change.path }
+}
+
+extension AppModel {
+    /// The session's changes as the list shows them: filtered and sorted.
+    func listedChanges(in session: WorktreeSession) -> [ListedChange] {
+        let now = self.now
+        let window = max(5, settings.recencyWindowSeconds)
+        let filter = filterText.trimmingCharacters(in: .whitespaces).lowercased()
+        var rows: [ListedChange] = []
         rows.reserveCapacity(session.changes.count)
         for change in session.changes {
-            if model.flaggedOnly && !change.isFlagged { continue }
+            if flaggedOnly && !change.isFlagged { continue }
+            if hideReviewed && session.reviewStatus(of: change).isReviewed { continue }
             if !filter.isEmpty && !change.path.lowercased().contains(filter) && !(change.oldPath?.lowercased().contains(filter) ?? false) { continue }
             let date = session.lastChanged[change.path]
             let recency = date.map { max(0, 1 - now.timeIntervalSince($0) / window) } ?? 0
-            rows.append(Row(change: change, recency: recency, lastChanged: date))
+            rows.append(ListedChange(change: change, recency: recency, lastChanged: date))
         }
-        switch model.sortOrder {
+        switch sortOrder {
         case .recent:
             rows.sort { a, b in
                 switch (a.lastChanged, b.lastChanged) {
@@ -140,6 +172,7 @@ struct ChangeListView: View {
     }
 }
 
+
 struct ChangeRow: View {
     let change: FileChange
     let recency: Double
@@ -147,6 +180,8 @@ struct ChangeRow: View {
     let now: Date
     let worktreePath: String
     var attribution: ChangeAttribution? = nil
+    var review: ReviewStatus = .unreviewed
+    var onToggleReviewed: (() -> Void)? = nil
 
     private var visibleFlags: [AttentionFlag] {
         change.flags.filter { $0.severity >= .warning }.sorted { $0.severity > $1.severity }
@@ -156,6 +191,7 @@ struct ChangeRow: View {
         HStack(alignment: .top, spacing: 8) {
             StatusGlyph(kind: change.kind)
                 .padding(.top, 1)
+                .opacity(review.isReviewed ? 0.45 : 1)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 0) {
                     if !change.directory.isEmpty {
@@ -163,10 +199,18 @@ struct ChangeRow: View {
                             .foregroundStyle(.tertiary)
                     }
                     Text(change.fileName)
-                        .fontWeight(.medium)
+                        .fontWeight(review.isReviewed ? .regular : .medium)
+                        .foregroundStyle(review.isReviewed ? .secondary : .primary)
                 }
                 .lineLimit(1)
                 .truncationMode(.head)
+                if case .changedSinceReview(let mark) = review {
+                    Label("changed since your review", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                        .help("You reviewed this file at \(Format.time.string(from: mark.reviewedAt)); it has changed since")
+                }
                 if let old = change.oldPath {
                     Text("from \(old)")
                         .font(.caption)
@@ -195,6 +239,12 @@ struct ChangeRow: View {
             Spacer(minLength: 6)
             VStack(alignment: .trailing, spacing: 3) {
                 HStack(spacing: 5) {
+                    if review.isReviewed {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .help("Reviewed")
+                    }
                     FlagIcons(flags: change.flags.filter { $0.severity == .info })
                     if change.isUntracked {
                         Text("new")
@@ -220,6 +270,10 @@ struct ChangeRow: View {
         .contentShape(Rectangle())
         .help(change.flags.map(\.message).joined(separator: "\n"))
         .contextMenu {
+            if let onToggleReviewed {
+                Button(review.isReviewed ? "Mark as Not Reviewed" : "Mark as Reviewed", action: onToggleReviewed)
+                Divider()
+            }
             Button("Open") { Workspace.open(path: change.path, in: worktreePath) }
             Button("Reveal in Finder") { Workspace.reveal(path: change.path, in: worktreePath) }
             Button("Copy Path") { Workspace.copy(change.path) }
@@ -250,8 +304,16 @@ struct WorktreeHeaderView: View {
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 8) {
-                    Text("\(session.changes.count) files")
-                        .foregroundStyle(.secondary)
+                    let reviewed = session.reviewedCount
+                    if reviewed > 0 {
+                        Label("\(reviewed) of \(session.changes.count) reviewed",
+                              systemImage: reviewed == session.changes.count ? "checkmark.circle.fill" : "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                            .help("Files you have marked reviewed. ⌘↩ marks the selected file and moves to the next.")
+                    } else {
+                        Text("\(session.changes.count) files")
+                            .foregroundStyle(.secondary)
+                    }
                     DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions)
                     AttentionBadgeButton(sessions: [session], arrowEdge: .top, debugID: "header")
                 }
@@ -358,7 +420,7 @@ struct FilterField: View {
     }
 }
 
-/// Flagged-only toggle and sort menu for the change list.
+/// Flagged-only and hide-reviewed toggles and the sort menu for the change list.
 struct ListControls: View {
     @Environment(AppModel.self) private var model
 
@@ -372,6 +434,13 @@ struct ListControls: View {
             .buttonStyle(.borderless)
             .tint(.orange)
             .help("Show only files that need attention (⇧⌘F)")
+
+            Toggle(isOn: $model.hideReviewed) {
+                Image(systemName: model.hideReviewed ? "eye.slash.fill" : "eye.slash")
+            }
+            .toggleStyle(.button)
+            .buttonStyle(.borderless)
+            .help(model.hideReviewed ? "Reviewed files are hidden. Click to show them." : "Hide files you have reviewed")
 
             Menu {
                 Picker("Sort By", selection: $model.sortOrder) {

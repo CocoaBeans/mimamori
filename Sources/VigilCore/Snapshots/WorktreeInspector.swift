@@ -140,6 +140,31 @@ public actor WorktreeInspector {
         return diff
     }
 
+    /// What changed in a file since the version you reviewed: that blob against the current one.
+    /// Nil when the file is gone or the reviewed blob is no longer in the object store
+    /// (unreferenced objects are eventually pruned by `git gc`).
+    public func diffSinceReview(for change: FileChange, reviewedBlob: String) async throws -> FileDiff? {
+        guard let current = change.newOID else { return nil }
+        let key = "review|\(reviewedBlob)|\(current)|\(change.path)"
+        if let cached = diffCache[key] { return cached }
+        guard await git.objectExists(reviewedBlob, in: worktree) else { return nil }
+        let patch = try await git.blobPatch(from: reviewedBlob, to: current, in: worktree)
+        // Identical content (a mode-only change, say) yields no patch at all.
+        var diff = DiffParser.parse(patch).first ?? FileDiff()
+        diff.oldPath = change.path
+        diff.newPath = change.path
+        // git names the sides after the blob ids; relabel them so a copied patch applies.
+        diff.headerLines = ["diff --git a/\(change.path) b/\(change.path)"]
+            + diff.headerLines.filter { $0.hasPrefix("index ") }
+            + ["--- a/\(change.path)", "+++ b/\(change.path)"]
+        diff.isNewFile = false
+        diff.isDeletedFile = false
+        diff.isRename = false
+        diffCache[key] = diff
+        trimCaches()
+        return diff
+    }
+
     // MARK: Snapshots
 
     public func snapshots() async -> [SnapshotRecord] {

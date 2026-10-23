@@ -33,6 +33,7 @@ final class AppModel {
     var repositoryPendingRemoval: RepositoryEntry?
     var showActivity: Bool
     var flaggedOnly: Bool
+    var hideReviewed: Bool
     var sortOrder: ChangeSortOrder
     var activityScopeAll: Bool
     var filterText = ""
@@ -54,6 +55,7 @@ final class AppModel {
         self.settings = persisted.settings
         self.showActivity = persisted.ui.showActivity
         self.flaggedOnly = persisted.ui.flaggedOnly
+        self.hideReviewed = persisted.ui.hideReviewed
         self.sortOrder = persisted.ui.sortOrder
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
@@ -63,6 +65,10 @@ final class AppModel {
         agentHub.resolveWorktree = { [weak self] cwd in self?.worktree(containing: cwd) }
         agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
         DebugHooks.start(model: self)
+        // Review marks and other edits are saved after a short delay; do not lose them on quit.
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.persistNow() }
+        }
         Task { await bootstrap() }
     }
 
@@ -399,6 +405,35 @@ final class AppModel {
 
     func clearActivity() { activity.removeAll() }
 
+    /// Marks the selected file reviewed and moves on to the next listed file still to review;
+    /// on a file already reviewed, clears the mark instead.
+    func toggleReviewForSelection() {
+        guard let session = selectedSession, let path = session.selectedPath, let change = session.change(for: path) else { return }
+        if session.reviewStatus(of: change).isReviewed {
+            session.setReviewed(false, paths: [path])
+            return
+        }
+        // Read the order first: hiding reviewed files would drop this one from the list.
+        let listed = listedChanges(in: session).map(\.change.path)
+        session.setReviewed(true, paths: [path])
+        if let next = nextUnreviewed(after: path, in: listed, session: session) {
+            session.selectedPath = next
+        }
+    }
+
+    private func nextUnreviewed(after path: String, in listed: [String], session: WorktreeSession) -> String? {
+        let start = listed.firstIndex(of: path).map { $0 + 1 } ?? 0
+        let ordered = listed[start...] + listed[..<min(start, listed.count)]
+        return ordered.first { candidate in
+            candidate != path && session.change(for: candidate).map { !session.reviewStatus(of: $0).isReviewed } == true
+        }
+    }
+
+    var selectedChangeIsReviewed: Bool {
+        guard let session = selectedSession, let path = session.selectedPath, let change = session.change(for: path) else { return false }
+        return session.reviewStatus(of: change).isReviewed
+    }
+
     var worktreesNeedingAttention: [String] { agentHub.worktreesNeedingAttention }
 
     private func record(agentNotes notes: [AgentNote], agent: AgentKind, worktree: String) {
@@ -450,7 +485,8 @@ final class AppModel {
 
     func persistUISoon() {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
-                                        selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll)
+                                        selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
+                                        hideReviewed: hideReviewed)
         persistSoon()
     }
 
@@ -466,7 +502,8 @@ final class AppModel {
 
     func persistNow() {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
-                                        selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll)
+                                        selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
+                                        hideReviewed: hideReviewed)
         saveTask?.cancel()
         Persistence.save(persisted)
     }

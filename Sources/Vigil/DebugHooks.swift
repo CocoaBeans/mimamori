@@ -8,7 +8,9 @@ import VigilCore
 ///     VIGIL_SCREENSHOT_INTERVAL=seconds      and keep rewriting it (also paces the dump)
 ///     VIGIL_DEBUG_DUMP=/path/file.txt        write a text summary of the model state
 ///     VIGIL_DEBUG_SELECT=relative/path       select this file in the selected worktree once it appears
+///     VIGIL_DEBUG_REVIEW=path,path           mark these files in the selected worktree reviewed once they appear
 ///     VIGIL_WINDOW=1000x640                  resize the main window after launch
+///     VIGIL_SUPPORT_DIR=/path                keep state, shadow indexes and the socket here instead
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -23,10 +25,12 @@ enum DebugHooks {
         let screenshot = value("VIGIL_SCREENSHOT")
         let dump = value("VIGIL_DEBUG_DUMP")
         let select = value("VIGIL_DEBUG_SELECT")
-        guard screenshot != nil || dump != nil || select != nil else { return }
+        var toReview = Set((value("VIGIL_DEBUG_REVIEW") ?? "").split(separator: ",").map(String.init))
+        guard screenshot != nil || dump != nil || select != nil || !toReview.isEmpty else { return }
         let interval = Double(value("VIGIL_SCREENSHOT_INTERVAL") ?? "") ?? 0
 
         let windowSize = value("VIGIL_WINDOW")
+        var toggledReview = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
             if let windowSize {
@@ -42,6 +46,19 @@ enum DebugHooks {
                 if let select, let session = model.selectedSession,
                    session.change(for: select) != nil, session.selectedPath != select {
                     session.selectedPath = select
+                }
+                if let session = model.selectedSession {
+                    let ready = toReview.filter { session.change(for: $0) != nil }
+                    if !ready.isEmpty {
+                        session.setReviewed(true, paths: Array(ready))
+                        toReview.subtract(ready)
+                    }
+                }
+                // "toggle-review": press ⌘↩ once on the selected file, after the marks above.
+                if model.debugFlags.contains("toggle-review"), !toggledReview, let session = model.selectedSession,
+                   let selected = session.selectedPath, session.change(for: selected) != nil {
+                    model.toggleReviewForSelection()
+                    toggledReview = true
                 }
                 if model.debugFlags.contains("cycle") {
                     let ids = model.orderedSessions.map(\.id)
@@ -63,17 +80,23 @@ enum DebugHooks {
         lines.append("time: \(Format.dateTime.string(from: Date()))")
         lines.append("git: \(model.gitVersion ?? "none") error=\(model.gitError ?? "-")")
         lines.append("selected: \(model.selectedWorktreeID ?? "-") showActivity=\(model.showActivity) sort=\(model.sortOrder.rawValue) flaggedOnly=\(model.flaggedOnly)")
-        lines.append("settings updates: requested=\(model.settingsUpdateRequests) applied=\(model.settingsUpdatesApplied)")
+        lines.append("settings updates: requested=\(model.settingsUpdateRequests) applied=\(model.settingsUpdatesApplied) hideReviewed=\(model.hideReviewed)")
         for repo in model.repositories {
             lines.append("repo \(repo.displayName) [\(repo.rootPath)] error=\(repo.error ?? "-")")
             for worktree in repo.worktrees {
                 let session = model.sessions[worktree.path]
                 let phase = session.map { String(describing: $0.phase) } ?? "none"
                 let duration = session?.lastRefreshDuration.map { String(format: "%.3fs", $0) } ?? "-"
-                lines.append("  worktree \(worktree.name) branch=\(worktree.branch ?? "-") main=\(worktree.isMain) phase=\(phase) changes=\(session?.changes.count ?? -1) flagged=\(session?.flaggedCount ?? -1) baseline=\"\(session?.state?.baseline.label ?? "-")\" watcher=\(session?.watcherActive ?? false) snapshots=\(session?.snapshots.count ?? 0) start=\(session?.startSnapshot != nil) selected=\(session?.selectedPath ?? "-") lastRefresh=\(duration) error=\(session?.lastError ?? "-")")
+                lines.append("  worktree \(worktree.name) branch=\(worktree.branch ?? "-") main=\(worktree.isMain) phase=\(phase) changes=\(session?.changes.count ?? -1) flagged=\(session?.flaggedCount ?? -1) baseline=\"\(session?.state?.baseline.label ?? "-")\" watcher=\(session?.watcherActive ?? false) snapshots=\(session?.snapshots.count ?? 0) start=\(session?.startSnapshot != nil) selected=\(session?.selectedPath ?? "-") reviewed=\(session?.reviewedCount ?? 0) lastRefresh=\(duration) error=\(session?.lastError ?? "-")")
                 for change in session?.changes ?? [] {
                     let flags = change.flags.map { "\($0.rule.rawValue):\($0.message)" }.joined(separator: "; ")
-                    lines.append("    \(change.kind.glyph) \(change.path) +\(change.additions.map(String.init) ?? "-") -\(change.deletions.map(String.init) ?? "-") untracked=\(change.isUntracked) flags=[\(flags)]")
+                    let review: String
+                    switch session?.reviewStatus(of: change) ?? .unreviewed {
+                    case .unreviewed: review = "-"
+                    case .reviewed: review = "reviewed"
+                    case .changedSinceReview: review = "changed-since-review"
+                    }
+                    lines.append("    \(change.kind.glyph) \(change.path) +\(change.additions.map(String.init) ?? "-") -\(change.deletions.map(String.init) ?? "-") untracked=\(change.isUntracked) review=\(review) flags=[\(flags)]")
                 }
             }
         }
@@ -85,6 +108,15 @@ enum DebugHooks {
         }
         for (worktree, status) in hub.statuses.sorted(by: { $0.key < $1.key }) {
             lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count)")
+        }
+        if let monitor = NSApp.mainMenu?.items.first(where: { $0.title == "Monitor" })?.submenu {
+            // Menus may be rebuilt lazily, just before they open; ask for that first.
+            monitor.delegate?.menuNeedsUpdate?(monitor)
+            monitor.update()
+            let items = monitor.items.filter { !$0.isSeparatorItem }.map { item in
+                "\(item.title)\(item.state == .on ? " [on]" : "")\(item.isEnabled ? "" : " (disabled)")"
+            }
+            lines.append("monitor menu: " + items.joined(separator: " | "))
         }
         lines.append("activity (\(model.activity.count)):")
         for entry in model.activity.prefix(40) {

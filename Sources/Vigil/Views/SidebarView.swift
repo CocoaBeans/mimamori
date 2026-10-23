@@ -184,12 +184,35 @@ struct WorktreeRow: View {
                 if session.flaggedCount > 0 {
                     CountBadge(count: session.flaggedCount, tint: .orange)
                 }
-                if !session.changes.isEmpty {
-                    CountBadge(count: session.changes.count)
-                }
+                ReviewCountBadge(session: session)
             }
         }
         .padding(.vertical, 1)
         .help(Format.abbreviate(path: info.path))
+    }
+}
+
+/// Changed-file count for a worktree. Once you start reviewing it counts what is left
+/// to review instead, and turns into a checkmark when nothing is.
+struct ReviewCountBadge: View {
+    let session: WorktreeSession
+
+    var body: some View {
+        let total = session.changes.count
+        let left = session.unreviewedCount
+        if total == 0 {
+            EmptyView()
+        } else if left == total {
+            CountBadge(count: total)
+                .help(total == 1 ? "1 changed file" : "\(total) changed files")
+        } else if left == 0 {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(total == 1 ? "1 changed file, reviewed" : "All \(total) changed files reviewed")
+        } else {
+            CountBadge(count: left, tint: .accentColor)
+                .help("\(left) of \(total) changed files left to review")
+        }
     }
 }

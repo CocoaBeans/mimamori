@@ -26,6 +26,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 - **Follows every worktree.** Add a repository and Vigil discovers its linked worktrees (for example the ones agent tools create under `.claude/worktrees/`) and watches them all. Repositories collapse in the sidebar; worktrees you do not care about can be hidden. Stop watching a repository from any of its rows' context menu, the File menu (⌘⌫), or the Delete key.
 - **Flags what deserves a look.** Lockfiles, `.env` and key material, secret-looking strings in added lines, CI and agent instruction files, `.gitignore` edits, mass deletions, deleted or skipped tests, conflict markers, lint suppressions, debug leftovers, permission changes, huge files, and edits outside a scope you define. Click the orange count to see every flagged file and why. Every rule can be switched off and thresholds are adjustable.
 - **Shows diffs the way you read them.** Unified diff with line numbers, word-level emphasis on the parts of a line that actually changed, wrapping or horizontal scrolling, copy as a patch, and flags that jump to the offending line. ⌘F filters the file list.
+- **Remembers what you have reviewed.** Mark a file reviewed (⌘↩ marks it and moves to the next one) and it dims in the list; hide reviewed files to see only what is left. A mark covers the content you saw, so when an agent edits the file again it comes back as *changed since your review*, and the diff can show just the edits made after you looked. The sidebar counts what is left to review in each worktree.
 - **Records snapshots.** When the tree changes, Vigil writes a commit object of the whole working tree (untracked files included) under `refs/monitor/<worktree-id>/`. Branches, the index and the working tree are untouched. Snapshots keep the Start marker alive across restarts and let you compare against any earlier moment.
 - **Keeps an activity feed.** Created, modified, deleted and reverted files, commits, branch switches and new flags, newest first, for one worktree or all of them. Click an entry to jump to the file.
 - **Knows where the agents are.** Vigil scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in. With Claude Code hooks installed (Settings › Agents, one click, reversible) it also knows exactly what the agent is doing: when a turn starts and ends, each tool call, and when it is waiting for your permission or input. File changes are attributed to the tool call that made them, worktrees that need you are counted in the sidebar and the menu bar, and you can be notified when an agent needs permission.
@@ -72,6 +73,7 @@ This creates a throwaway repository, prints its path, and then edits, adds, dele
   git for-each-ref --format='%(refname)' refs/monitor | xargs -n1 git update-ref -d
   ```
 
+- **Review marks** record, per file, the blob you saw (from the shadow index). Comparing that against the current blob tells reviewed, unreviewed and changed-since-review apart, and `git diff <reviewed blob> <current blob>` gives the since-review diff. Marks live with the worktree's settings in `state.json`; blobs nothing else references are eventually pruned by `git gc`, after which only the full diff is available.
 - **Refresh pacing.** File events are debounced (default 400 ms) with a maximum delay (default 2.5 s) so continuous churn still refreshes. A quiet, staggered backstop poll runs every 45 s per worktree.
 
 ## Agents and hooks
@@ -124,8 +126,10 @@ Environment variables for driving the app headlessly, useful on machines without
 | `VIGIL_SCREENSHOT_INTERVAL=5` | Rewrite it (and the dump) every 5 seconds |
 | `VIGIL_DEBUG_DUMP=/path.txt` | Write a text summary of repositories, sessions, changes and activity |
 | `VIGIL_DEBUG_SELECT=src/app.py` | Select that file in the selected worktree once it appears |
+| `VIGIL_DEBUG_REVIEW=README.md,src/app.py` | Mark those files in the selected worktree reviewed once they appear |
 | `VIGIL_WINDOW=1000x640` | Resize the main window after launch (clamped to the content minimum) |
-| `VIGIL_DEBUG_FLAGS=popover:sidebar,cycle` | Open the attention popover; cycle the selection through all worktrees |
+| `VIGIL_DEBUG_FLAGS=popover:sidebar,cycle` | Open the attention popover; cycle the selection through all worktrees; `toggle-review` presses ⌘↩ once on the selected file |
+| `VIGIL_SUPPORT_DIR=/tmp/vigil-scratch` | Keep state, shadow indexes and the hook socket in that folder, leaving your real setup alone |
 
 Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
 
@@ -136,7 +140,6 @@ Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
 ## Ideas not built yet
 
 - A read-only transcript adapter for agents without hooks installed.
-- A "mark as reviewed" state so only changes you have not looked at stand out.
 - Side-by-side diffs and syntax highlighting.
 - A timeline scrubber across snapshots.
 - A gated "discard this hunk" escape hatch.

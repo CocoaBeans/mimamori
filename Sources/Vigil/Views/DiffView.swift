@@ -10,6 +10,26 @@ struct DiffView: View {
     @State private var errorText: String?
     @State private var showAll = false
     @State private var targetLineID: Int?
+    /// The file and reviewed version for which you chose the full diff over the since-review one.
+    @State private var fullDiffKey: String?
+    /// A reviewed blob found missing from the object store.
+    @State private var missingReviewBlob: String?
+    /// Whether `diff` holds the since-review diff.
+    @State private var loadedSinceReview = false
+    /// A line to jump to once the full diff has loaded.
+    @State private var pendingJump: Int?
+
+    private var review: ReviewStatus { session.reviewStatus(of: change) }
+
+    /// The blob you reviewed, when the file has changed since and a text diff against it makes sense.
+    private var reviewedBlob: String? {
+        guard case .changedSinceReview(let mark) = review, change.newOID != nil,
+              !change.isBinary, !change.isSubmodule else { return nil }
+        return mark.blob
+    }
+
+    private var sinceReviewKey: String { "\(change.path)|\(reviewedBlob ?? "")" }
+    private var wantsSinceReview: Bool { reviewedBlob != nil && fullDiffKey != sinceReviewKey }
 
     var body: some View {
         content
@@ -17,18 +37,44 @@ struct DiffView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     DiffHeaderView(change: change, diff: diff, worktreePath: session.id,
-                           attribution: session.attributions[change.path]) { lineNumber in
+                                   attribution: session.attributions[change.path],
+                                   review: review, sinceReview: sinceReviewInfo,
+                                   onToggleReviewed: { model.toggleReviewForSelection() }) { lineNumber in
                         jump(toNewLine: lineNumber)
                     }
                     Divider()
                 }
                 .background(.bar)
             }
-            .task(id: change.contentKey) {
-            showAll = false
-            targetLineID = nil
-            await load()
+            .task(id: "\(change.contentKey)|\(reviewedBlob ?? "")|\(wantsSinceReview)") {
+                showAll = false
+                targetLineID = nil
+                await load()
+            }
+    }
+
+    private var sinceReviewInfo: DiffHeaderView.SinceReview? {
+        guard case .changedSinceReview(let mark) = review else { return nil }
+        let unavailable: String?
+        if change.newOID == nil {
+            unavailable = "It was deleted after your review."
+        } else if change.isBinary || change.isSubmodule {
+            unavailable = nil
+        } else if mark.blob == nil {
+            unavailable = "The version you reviewed was not recorded."
+        } else if missingReviewBlob == mark.blob {
+            unavailable = "The version you reviewed is no longer stored, so this is the full diff."
+        } else {
+            unavailable = nil
         }
+        let available = reviewedBlob != nil && missingReviewBlob != reviewedBlob
+        return DiffHeaderView.SinceReview(
+            reviewedAt: mark.reviewedAt,
+            unavailableReason: unavailable,
+            showingSinceReview: available
+                ? Binding(get: { fullDiffKey != sinceReviewKey }, set: { fullDiffKey = $0 ? nil : sinceReviewKey })
+                : nil,
+            shown: loadedSinceReview ? diff : nil)
     }
 
     @ViewBuilder
@@ -84,14 +130,32 @@ struct DiffView: View {
                 return
             }
         }
+        // The flagged line predates your review: it is only in the full diff.
+        if loadedSinceReview {
+            pendingJump = number
+            fullDiffKey = sinceReviewKey
+        }
     }
 
     private func load() async {
         errorText = nil
         if diff?.path != change.path { diff = nil }
         do {
+            if wantsSinceReview, let blob = reviewedBlob {
+                if let since = try await session.diffSinceReview(for: change, reviewedBlob: blob) {
+                    diff = since
+                    loadedSinceReview = true
+                    return
+                }
+                missingReviewBlob = blob
+            }
             diff = try await session.diff(for: change)
+            loadedSinceReview = false
             if diff == nil { errorText = "git produced no diff for this file." }
+            if let line = pendingJump {
+                pendingJump = nil
+                jump(toNewLine: line)
+            }
         } catch {
             errorText = error.localizedDescription
         }
@@ -104,7 +168,21 @@ struct DiffHeaderView: View {
     let diff: FileDiff?
     let worktreePath: String
     var attribution: ChangeAttribution? = nil
+    var review: ReviewStatus = .unreviewed
+    var sinceReview: SinceReview? = nil
+    var onToggleReviewed: (() -> Void)? = nil
     let onJump: (Int) -> Void
+
+    /// How the file stands against the version you reviewed, when it changed since.
+    struct SinceReview {
+        var reviewedAt: Date
+        /// Why there is no since-review diff to offer, when that is not obvious.
+        var unavailableReason: String?
+        /// Picks between the since-review and the full diff; nil when only the full diff exists.
+        var showingSinceReview: Binding<Bool>?
+        /// The since-review diff when it is the one on screen.
+        var shown: FileDiff?
+    }
 
     private var wrapBinding: Binding<Bool> {
         Binding(
@@ -128,6 +206,18 @@ struct DiffHeaderView: View {
                     .textSelection(.enabled)
                     .layoutPriority(0)
                 Spacer(minLength: 8)
+                if let onToggleReviewed {
+                    Toggle(isOn: Binding(get: { review.isReviewed }, set: { _ in onToggleReviewed() })) {
+                        Label("Reviewed", systemImage: review.isReviewed ? "checkmark.circle.fill" : "circle")
+                    }
+                    .toggleStyle(.button)
+                    .labelStyle(.titleAndIcon)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help(review.isReviewed
+                          ? "You reviewed this version. Click to mark it as not reviewed (⌘↩)."
+                          : "Mark as reviewed and go to the next file to review (⌘↩)")
+                }
                 HStack(spacing: 6) {
                     Toggle(isOn: wrapBinding) {
                         Image(systemName: "arrow.turn.down.left")
@@ -203,6 +293,9 @@ struct DiffHeaderView: View {
                         .fixedSize()
                 }
             }
+            if let sinceReview {
+                SinceReviewRow(info: sinceReview)
+            }
             if !change.flags.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(change.flags.sorted { $0.severity > $1.severity }) { flag in
@@ -224,6 +317,55 @@ struct DiffHeaderView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+    }
+
+    private struct SinceReviewRow: View {
+        let info: SinceReview
+
+        private var when: String {
+            Calendar.current.isDateInToday(info.reviewedAt)
+                ? Format.time.string(from: info.reviewedAt)
+                : Format.dateTime.string(from: info.reviewedAt)
+        }
+
+        var body: some View {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .foregroundStyle(Color.accentColor)
+                // Drop words before truncating, so the time survives a narrow pane.
+                ViewThatFits(in: .horizontal) {
+                    Text("Changed since your review at \(when)")
+                    Text("Changed since your \(when) review")
+                    Text("Changed since review")
+                }
+                .lineLimit(1)
+                .help("You marked this file reviewed at \(when); it has changed since")
+                if let shown = info.shown {
+                    DeltaText(additions: shown.additions, deletions: shown.deletions)
+                        .fixedSize()
+                }
+                if let reason = info.unavailableReason {
+                    Text(reason)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 8)
+                if let selection = info.showingSinceReview {
+                    Picker("Show", selection: selection) {
+                        Text("Since Review").tag(true)
+                        Text("Full Diff").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help("Since Review shows only what changed after you marked the file reviewed")
+                }
+            }
+            .font(.caption)
+            .padding(.top, 1)
+        }
     }
 
     private struct Tag: View {

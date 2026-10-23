@@ -28,6 +28,7 @@ struct ContentView: View {
         .toolbar { toolbarItems }
         .onChange(of: model.showActivity) { model.persistUISoon() }
         .onChange(of: model.flaggedOnly) { model.persistUISoon() }
+        .onChange(of: model.hideReviewed) { model.persistUISoon() }
         .onChange(of: model.sortOrder) { model.persistUISoon() }
         .onChange(of: model.selectedWorktreeID) { model.persistUISoon() }
         .frame(minHeight: 480)

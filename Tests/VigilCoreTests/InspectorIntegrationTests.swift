@@ -145,6 +145,42 @@ struct InspectorIntegrationTests {
         #expect(state.branch.branch == "wt-branch")
     }
 
+    @Test func diffSinceReviewShowsOnlyTheLaterEdit() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        let inspector = try await WorktreeInspector(git: box.git, worktree: box.repo, shadowIndexDirectory: box.indexDir)
+
+        // First edit, which you review.
+        try box.write("src/app.py", "def greet(name):\n    return f\"Howdy, {name}!\"\n")
+        let first = try #require(try await inspector.refresh(baseline: .head).changes.first { $0.path == "src/app.py" })
+        // Full object names, so a mark stays unambiguous as the object store grows.
+        #expect((first.newOID?.count ?? 0) >= 40)
+        var ledger = ReviewLedger()
+        ledger.markReviewed(first)
+
+        // The agent edits the file again; the blob you saw is still in the object store.
+        try box.write("src/app.py", "def greet(name):\n    return f\"Howdy, {name}!\"\n\n\ndef add(a, b):\n    return a + b\n")
+        let second = try #require(try await inspector.refresh(baseline: .head).changes.first { $0.path == "src/app.py" })
+        guard case .changedSinceReview(let mark) = ledger.status(of: second) else {
+            Issue.record("expected the second edit to read as changed since review")
+            return
+        }
+        let blob = try #require(mark.blob)
+        let sinceReview = try #require(try await inspector.diffSinceReview(for: second, reviewedBlob: blob))
+        #expect(sinceReview.path == "src/app.py")
+        #expect(sinceReview.additions == 4)
+        #expect(sinceReview.deletions == 0)
+        #expect(!sinceReview.addedLines.contains { $0.text.contains("Howdy") })
+
+        // Against the baseline, the full diff still carries both edits.
+        let full = try #require(try await inspector.diff(for: second, base: "HEAD"))
+        #expect(full.addedLines.contains { $0.text.contains("Howdy") })
+
+        // A blob that was never stored gives no diff rather than an error.
+        let missing = try await inspector.diffSinceReview(for: second, reviewedBlob: String(repeating: "1", count: 40))
+        #expect(missing == nil)
+    }
+
     @Test func ignoredPathsAreDetected() async throws {
         let box = try await makeSandbox()
         defer { box.cleanup() }

@@ -73,6 +73,20 @@ struct PersistedRepository: Codable, Hashable, Identifiable, Sendable {
 struct PersistedWorktreeSettings: Codable, Hashable, Sendable {
     var baseline: Baseline = .head
     var scopePrefixes: [String] = []
+    var reviews = ReviewLedger()
+
+    init(baseline: Baseline = .head, scopePrefixes: [String] = [], reviews: ReviewLedger = ReviewLedger()) {
+        self.baseline = baseline
+        self.scopePrefixes = scopePrefixes
+        self.reviews = reviews
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        baseline = try c.decodeIfPresent(Baseline.self, forKey: .baseline) ?? .head
+        scopePrefixes = try c.decodeIfPresent([String].self, forKey: .scopePrefixes) ?? []
+        reviews = try c.decodeIfPresent(ReviewLedger.self, forKey: .reviews) ?? ReviewLedger()
+    }
 }
 
 enum ChangeSortOrder: String, Codable, CaseIterable, Sendable {
@@ -94,14 +108,16 @@ struct PersistedUIState: Codable, Hashable, Sendable {
     var sortOrder: ChangeSortOrder = .recent
     var selectedWorktree: String?
     var activityScopeAll: Bool = false
+    var hideReviewed: Bool = false
 
     init(showActivity: Bool = true, flaggedOnly: Bool = false, sortOrder: ChangeSortOrder = .recent,
-         selectedWorktree: String? = nil, activityScopeAll: Bool = false) {
+         selectedWorktree: String? = nil, activityScopeAll: Bool = false, hideReviewed: Bool = false) {
         self.showActivity = showActivity
         self.flaggedOnly = flaggedOnly
         self.sortOrder = sortOrder
         self.selectedWorktree = selectedWorktree
         self.activityScopeAll = activityScopeAll
+        self.hideReviewed = hideReviewed
     }
 
     init(from decoder: Decoder) throws {
@@ -111,6 +127,7 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         sortOrder = try c.decodeIfPresent(ChangeSortOrder.self, forKey: .sortOrder) ?? .recent
         selectedWorktree = try c.decodeIfPresent(String.self, forKey: .selectedWorktree)
         activityScopeAll = try c.decodeIfPresent(Bool.self, forKey: .activityScopeAll) ?? false
+        hideReviewed = try c.decodeIfPresent(Bool.self, forKey: .hideReviewed) ?? false
     }
 }
 
@@ -139,6 +156,10 @@ struct PersistedState: Codable, Sendable {
 
 enum Persistence {
     static let supportDirectory: URL = {
+        // Debug hook: a throwaway folder, so a scripted run never touches the real state or socket.
+        if let override = ProcessInfo.processInfo.environment["VIGIL_SUPPORT_DIR"], !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
         return base.appendingPathComponent("Vigil", isDirectory: true)
