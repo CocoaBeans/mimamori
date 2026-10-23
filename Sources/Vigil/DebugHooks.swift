@@ -70,9 +70,80 @@ enum DebugHooks {
         let candidates = NSApp.windows.filter { $0.isVisible && $0.styleMask.contains(.titled) && $0.contentView != nil }
         guard let window = candidates.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }),
               let view = window.contentView?.superview ?? window.contentView else { return }
+
+        // Materials and Liquid Glass are composited by the window server and come out blank
+        // in a cached display. Flatten them to plain backgrounds for the capture, then restore.
+        var restorers: [() -> Void] = []
+        func neutralize(_ view: NSView) {
+            let className = NSStringFromClass(type(of: view))
+            if let effect = view as? NSVisualEffectView {
+                let material = effect.material
+                let state = effect.state
+                let blending = effect.blendingMode
+                effect.material = .windowBackground
+                effect.state = .inactive
+                effect.blendingMode = .withinWindow
+                restorers.append { effect.material = material; effect.state = state; effect.blendingMode = blending }
+            } else if Self.isEffectOnlyView(className) {
+                let wasHidden = view.isHidden
+                view.isHidden = true
+                restorers.append { view.isHidden = wasHidden }
+            }
+            for subview in view.subviews { neutralize(subview) }
+        }
+        neutralize(view)
+        defer { for restore in restorers.reversed() { restore() } }
+
         let bounds = view.bounds
         guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { return }
         view.cacheDisplay(in: bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return }
+        try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        writeLayerImage(of: view, scale: window.backingScaleFactor, to: path + ".layer.png")
+
+        // Also dump the class names of what sits in the window, for diagnosing blank regions.
+        var names: [String] = []
+        func collect(_ view: NSView, depth: Int) {
+            guard depth < 16 else { return }
+            var line = String(repeating: "  ", count: depth) + NSStringFromClass(type(of: view)) + " \(view.frame.integral)"
+            if let scroll = view as? NSScrollView {
+                line += " insets=\(scroll.contentInsets) visible=\(scroll.documentVisibleRect.integral) safe=\(scroll.safeAreaInsets)"
+            }
+            names.append(line)
+            for subview in view.subviews { collect(subview, depth: depth + 1) }
+        }
+        collect(view, depth: 0)
+        try? names.joined(separator: "\n").write(toFile: path + ".views.txt", atomically: true, encoding: .utf8)
+    }
+
+    /// Views that only paint an effect (glass backdrops, scroll-edge pockets) and hold no content.
+    private static func isEffectOnlyView(_ className: String) -> Bool {
+        if className.contains("Glass") && className.contains("RootView") { return true }
+        for marker in ["BackdropView", "PortalView", "PocketBlur", "LuminanceAdjustment", "DimmingView", "PocketMask"]
+        where className.contains(marker) { return true }
+        return false
+    }
+
+    /// Renders the layer tree instead of asking views to draw; backdrop layers come out empty
+    /// rather than opaque, which keeps content under materials visible.
+    static func writeLayerImage(of view: NSView, scale: CGFloat, to path: String) {
+        guard let layer = view.layer else { return }
+        let size = view.bounds.size
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = size
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        let cg = context.cgContext
+        cg.setFillColor(NSColor.windowBackgroundColor.cgColor)
+        cg.fill(CGRect(origin: .zero, size: size))
+        if layer.isGeometryFlipped == false, view.isFlipped == false {
+            // AppKit layer trees are rendered bottom-up into a flipped NSGraphicsContext.
+        }
+        layer.render(in: cg)
+        NSGraphicsContext.restoreGraphicsState()
         guard let data = rep.representation(using: .png, properties: [:]) else { return }
         try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
     }

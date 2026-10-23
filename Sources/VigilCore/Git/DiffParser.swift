@@ -140,7 +140,8 @@ public enum DiffParser {
                         current!.oldPath = current!.isNewFile ? nil : old
                         current!.newPath = current!.isDeletedFile ? nil : new
                     }
-                } else {
+                } else if !line.isEmpty, current!.hunks.isEmpty {
+                    // Header lines only precede the first hunk; anything after is noise.
                     Self.applyHeaderLine(line, to: &current!)
                 }
                 continue

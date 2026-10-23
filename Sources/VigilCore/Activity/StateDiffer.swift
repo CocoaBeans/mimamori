@@ -79,8 +79,13 @@ public enum StateDiffer {
 
         if !headMoved {
             for change in previous.headChanges where after[change.path] == nil {
-                entries.append(ActivityEntry(date: now, worktreePath: worktreePath, kind: .reverted, path: change.path,
-                                             title: change.path, detail: "back to HEAD"))
+                if change.kind == .added {
+                    entries.append(ActivityEntry(date: now, worktreePath: worktreePath, kind: .deleted, path: change.path,
+                                                 title: change.path, detail: "new file removed"))
+                } else {
+                    entries.append(ActivityEntry(date: now, worktreePath: worktreePath, kind: .reverted, path: change.path,
+                                                 title: change.path, detail: "back to HEAD"))
+                }
             }
         }
 

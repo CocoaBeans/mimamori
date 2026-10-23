@@ -12,35 +12,12 @@ struct ActivityFeedView: View {
 
     var body: some View {
         @Bindable var model = model
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Text("Activity")
-                    .font(.headline)
-                Spacer()
-                Picker("Scope", selection: $model.activityScopeAll) {
-                    Text("Worktree").tag(false)
-                    Text("All").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
-                .frame(width: 140)
-                Button {
-                    model.clearActivity()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .help("Clear the feed")
-                .disabled(model.activity.isEmpty)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            Divider()
-            let entries = entries
+        let entries = entries
+        Group {
             if entries.isEmpty {
                 ContentUnavailableView("Quiet So Far", systemImage: "eye",
                                        description: Text("Edits, commits and flags show up here as they happen."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(entries) { entry in
                     ActivityRow(entry: entry, showWorktree: model.activityScopeAll, now: model.now,
@@ -50,6 +27,36 @@ struct ActivityFeedView: View {
                 }
                 .listStyle(.plain)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Text("Activity")
+                        .font(.headline)
+                    Spacer()
+                    Picker("Scope", selection: $model.activityScopeAll) {
+                        Text("Worktree").tag(false)
+                        Text("All").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(width: 140)
+                    Button {
+                        model.clearActivity()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Clear the feed")
+                    .disabled(model.activity.isEmpty)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                Divider()
+            }
+            .background(.bar)
         }
         .onChange(of: model.activityScopeAll) { model.persistUISoon() }
     }
@@ -93,16 +100,16 @@ struct ActivityRow: View {
                         .lineLimit(2)
                         .truncationMode(.head)
                     HStack(spacing: 6) {
-                        if showWorktree, let worktreeName {
-                            Text(worktreeName).lineLimit(1)
+                        if entry.additions != nil || entry.deletions != nil {
+                            DeltaText(additions: entry.additions, deletions: entry.deletions)
                         }
                         if let detail = entry.detail {
                             Text(detail).lineLimit(1)
                         }
-                        Spacer(minLength: 4)
-                        if entry.additions != nil || entry.deletions != nil {
-                            DeltaText(additions: entry.additions, deletions: entry.deletions)
+                        if showWorktree, let worktreeName {
+                            Text(worktreeName).lineLimit(1)
                         }
+                        Spacer(minLength: 4)
                         Text(Format.relative(entry.date, to: now))
                             .monospacedDigit()
                     }

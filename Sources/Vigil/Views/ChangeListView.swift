@@ -13,17 +13,20 @@ struct ChangeListView: View {
     }
 
     var body: some View {
-        @Bindable var model = model
-        VStack(spacing: 0) {
-            WorktreeHeaderView(session: session)
-            Divider()
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .searchable(text: $model.filterText, placement: .toolbar, prompt: "Filter files")
-        .navigationTitle(session.displayName)
-        .navigationSubtitle(Format.abbreviate(path: session.id))
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    WorktreeHeaderView(session: session)
+                    FilterField()
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 9)
+                    Divider()
+                }
+                .background(.bar)
+            }
+            .navigationTitle(session.displayName)
+            .navigationSubtitle(Format.abbreviate(path: session.id))
     }
 
     @ViewBuilder
@@ -292,5 +295,41 @@ struct WorktreeHeaderView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+    }
+}
+
+/// Inline filter for the change list. ⌘F focuses it; Escape clears it.
+struct FilterField: View {
+    @Environment(AppModel.self) private var model
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        @Bindable var model = model
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Filter files", text: $model.filterText)
+                .textFieldStyle(.plain)
+                .focused($focused)
+                .onExitCommand {
+                    model.filterText = ""
+                    focused = false
+                }
+            if !model.filterText.isEmpty {
+                Button {
+                    model.filterText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear the filter")
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
+        .onChange(of: model.filterFocusToken) { focused = true }
     }
 }

@@ -75,6 +75,8 @@ struct VigilCommands: Commands {
             Button("Compare Since Start") { model.selectedSession?.setBaseline(.start) }
                 .keyboardShortcut("3")
             Divider()
+            Button("Filter Files") { model.filterFocusToken += 1 }
+                .keyboardShortcut("f")
             Toggle("Flagged Only", isOn: Binding(get: { model.flaggedOnly }, set: { model.flaggedOnly = $0 }))
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             Toggle("Wrap Diff Lines", isOn: Binding(

@@ -31,6 +31,7 @@ final class AppModel {
     var sortOrder: ChangeSortOrder
     var activityScopeAll: Bool
     var filterText = ""
+    var filterFocusToken = 0
 
     private var persisted: PersistedState
     private var saveTask: Task<Void, Never>?
