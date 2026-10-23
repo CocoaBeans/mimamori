@@ -57,6 +57,8 @@ struct VigilCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Add Repository…") { model.promptForRepository() }
                 .keyboardShortcut("o")
+            Button("Stop Watching Repository…") { model.requestRemovalOfSelectedRepository() }
+                .keyboardShortcut(.delete, modifiers: .command)
         }
         CommandMenu("Monitor") {
             Button("Refresh") { model.selectedSession?.requestRefresh(force: true) }

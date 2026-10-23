@@ -29,6 +29,8 @@ final class AppModel {
     let agentHub = AgentHub()
 
     var selectedWorktreeID: String?
+    /// Repository awaiting the user's confirmation in the sidebar's dialog.
+    var repositoryPendingRemoval: RepositoryEntry?
     var showActivity: Bool
     var flaggedOnly: Bool
     var sortOrder: ChangeSortOrder
@@ -224,6 +226,16 @@ final class AppModel {
         }
         await rediscoverWorktrees(for: id)
         startRepositoryWatcher(id: id, rootPath: rootPath)
+    }
+
+    func requestRemoval(of repo: RepositoryEntry) {
+        repositoryPendingRemoval = repo
+    }
+
+    /// Asks to stop watching the repository that owns the selected worktree.
+    func requestRemovalOfSelectedRepository() {
+        guard let session = selectedSession, let repo = repository(for: session) else { return }
+        repositoryPendingRemoval = repo
     }
 
     func removeRepository(_ id: UUID) {

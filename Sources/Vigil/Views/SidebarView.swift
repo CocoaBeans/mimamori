@@ -3,15 +3,15 @@ import VigilCore
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
-    @State private var repositoryToRemove: RepositoryEntry?
 
     var body: some View {
         List(selection: Binding(get: { model.selectedWorktreeID }, set: { model.select(worktree: $0) })) {
             ForEach(model.repositories) { repo in
-                RepositorySection(repo: repo, repositoryToRemove: $repositoryToRemove)
+                RepositorySection(repo: repo)
             }
         }
         .listStyle(.sidebar)
+        .onDeleteCommand { model.requestRemovalOfSelectedRepository() }
         .overlay {
             if model.repositories.isEmpty {
                 ContentUnavailableView {
@@ -43,13 +43,14 @@ struct SidebarView: View {
             model.addRepositories(at: urls)
             return true
         }
-        .confirmationDialog("Stop watching \(repositoryToRemove?.displayName ?? "")?",
-                            isPresented: Binding(get: { repositoryToRemove != nil }, set: { if !$0 { repositoryToRemove = nil } }),
-                            presenting: repositoryToRemove) { repo in
+        .confirmationDialog("Stop watching \(model.repositoryPendingRemoval?.displayName ?? "")?",
+                            isPresented: Binding(get: { model.repositoryPendingRemoval != nil },
+                                                 set: { if !$0 { model.repositoryPendingRemoval = nil } }),
+                            presenting: model.repositoryPendingRemoval) { repo in
             Button("Stop Watching", role: .destructive) { model.removeRepository(repo.id) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("Vigil stops watching the repository. Nothing in the repository is changed; snapshot refs under refs/monitor stay until you delete them.")
+            Text("Vigil stops watching the repository and all of its worktrees. Nothing in the repository is changed; snapshot refs under refs/monitor stay until you delete them.")
         }
         .navigationTitle("Vigil")
     }
@@ -59,7 +60,6 @@ struct SidebarView: View {
 private struct RepositorySection: View {
     @Environment(AppModel.self) private var model
     let repo: RepositoryEntry
-    @Binding var repositoryToRemove: RepositoryEntry?
 
     var body: some View {
         let visible = model.visibleWorktrees(for: repo)
@@ -81,6 +81,7 @@ private struct RepositorySection: View {
                         Button("Refresh") { model.sessions[worktree.path]?.requestRefresh(force: true) }
                         Divider()
                         Button("Hide Worktree") { model.hideWorktree(worktree.path) }
+                        Button("Stop Watching \(repo.displayName)…", role: .destructive) { model.requestRemoval(of: repo) }
                     }
             }
             if visible.isEmpty {
@@ -130,7 +131,7 @@ private struct RepositorySection: View {
                     }
                 }
                 Divider()
-                Button("Stop Watching", role: .destructive) { repositoryToRemove = repo }
+                Button("Stop Watching…", role: .destructive) { model.requestRemoval(of: repo) }
             }
         }
     }
