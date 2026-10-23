@@ -1,0 +1,34 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "Vigil",
+    platforms: [.macOS(.v15)],
+    products: [
+        .executable(name: "Vigil", targets: ["Vigil"]),
+        .library(name: "VigilCore", targets: ["VigilCore"]),
+    ],
+    targets: [
+        // Everything that knows about git, the file system and change analysis.
+        // No SwiftUI in here, so it can be tested quickly from the command line.
+        .target(name: "VigilCore"),
+
+        // The macOS app: SwiftUI shell over VigilCore.
+        .executableTarget(
+            name: "Vigil",
+            dependencies: ["VigilCore"],
+            linkerSettings: [
+                // Embed Info.plist so `swift run Vigil` behaves like a real app
+                // (name in the menu bar, activation) even without a bundle.
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Resources/Info.plist",
+                ])
+            ]
+        ),
+
+        .testTarget(name: "VigilCoreTests", dependencies: ["VigilCore"]),
+    ]
+)
