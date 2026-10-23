@@ -70,6 +70,24 @@ struct PersistedUIState: Codable, Hashable, Sendable {
     var sortOrder: ChangeSortOrder = .recent
     var selectedWorktree: String?
     var activityScopeAll: Bool = false
+
+    init(showActivity: Bool = true, flaggedOnly: Bool = false, sortOrder: ChangeSortOrder = .recent,
+         selectedWorktree: String? = nil, activityScopeAll: Bool = false) {
+        self.showActivity = showActivity
+        self.flaggedOnly = flaggedOnly
+        self.sortOrder = sortOrder
+        self.selectedWorktree = selectedWorktree
+        self.activityScopeAll = activityScopeAll
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        showActivity = try c.decodeIfPresent(Bool.self, forKey: .showActivity) ?? true
+        flaggedOnly = try c.decodeIfPresent(Bool.self, forKey: .flaggedOnly) ?? false
+        sortOrder = try c.decodeIfPresent(ChangeSortOrder.self, forKey: .sortOrder) ?? .recent
+        selectedWorktree = try c.decodeIfPresent(String.self, forKey: .selectedWorktree)
+        activityScopeAll = try c.decodeIfPresent(Bool.self, forKey: .activityScopeAll) ?? false
+    }
 }
 
 struct PersistedState: Codable, Sendable {
@@ -77,6 +95,16 @@ struct PersistedState: Codable, Sendable {
     var settings = AppSettings()
     var worktreeSettings: [String: PersistedWorktreeSettings] = [:]
     var ui = PersistedUIState()
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        repositories = try c.decodeIfPresent([PersistedRepository].self, forKey: .repositories) ?? []
+        settings = try c.decodeIfPresent(AppSettings.self, forKey: .settings) ?? AppSettings()
+        worktreeSettings = try c.decodeIfPresent([String: PersistedWorktreeSettings].self, forKey: .worktreeSettings) ?? [:]
+        ui = try c.decodeIfPresent(PersistedUIState.self, forKey: .ui) ?? PersistedUIState()
+    }
 }
 
 enum Persistence {

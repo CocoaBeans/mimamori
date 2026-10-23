@@ -49,6 +49,7 @@ final class AppModel {
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
         startTicker()
+        DebugHooks.start(model: self)
         Task { await bootstrap() }
     }
 

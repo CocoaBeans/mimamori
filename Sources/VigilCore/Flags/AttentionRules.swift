@@ -343,12 +343,15 @@ public enum AttentionRules {
         ("it.only(", "Focused test"), ("describe.only(", "Focused test"), ("test.only(", "Focused test"), ("fit(", "Focused test"),
         ("@pytest.mark.skip", "Test skipped"), ("@pytest.mark.xfail", "Test marked expected failure"), ("pytest.skip(", "Test skipped"),
         ("@unittest.skip", "Test skipped"), ("#[ignore]", "Test ignored"), ("t.Skip(", "Test skipped"), ("t.SkipNow(", "Test skipped"),
-        ("@Ignore", "Test ignored"), ("@Disabled", "Test disabled"), ("XCTSkip", "Test skipped"), ("@Test(.disabled", "Test disabled"),
-        (".disabled(", "Test disabled"), ("skip: true", "Test skipped"), ("this.skip()", "Test skipped"),
+        ("@Ignore", "Test ignored"), ("@Disabled", "Test disabled"), ("XCTSkip", "Test skipped"),
+        ("skip: true", "Test skipped"), ("this.skip()", "Test skipped"),
         ("markTestSkipped", "Test skipped"), ("markTestIncomplete", "Test incomplete"),
     ]
 
     private static func testDisabledLabel(in text: String) -> String? {
+        // Swift Testing: @Test(.disabled(...)) or @Test("name", .disabled(...)).
+        // Plain ".disabled(" is a common SwiftUI modifier, so require the @Test attribute.
+        if text.contains("@Test(") && text.contains(".disabled(") { return "Test disabled" }
         for (marker, label) in testDisabledMarkers where text.contains(marker) {
             if marker == "fit(" {
                 // Avoid matching "profit(" and friends.

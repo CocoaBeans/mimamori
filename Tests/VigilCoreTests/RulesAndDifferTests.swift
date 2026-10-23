@@ -81,6 +81,16 @@ struct AttentionRulesTests {
         #expect(byRule[.conflictMarkers]?.first?.message.contains("3 places") == true)
     }
 
+    @Test func swiftUIDisabledModifierIsNotATestFlag() {
+        let flags = AttentionRules.contentFlags(in: diff(adding: [
+            "    Button(\"Save\") { save() }.disabled(!isValid)",
+            "    @Test(\"skips\", .disabled(\"flaky\")) func skipped() {}",
+        ]), config: config)
+        let testFlags = flags.filter { $0.rule == .testDisabled }
+        #expect(testFlags.count == 1)
+        #expect(testFlags.first?.line == 2)
+    }
+
     @Test func placeholdersAreNotSecrets() {
         let flags = AttentionRules.contentFlags(in: diff(adding: [
             "api_key = \"your-api-key-here\"",
