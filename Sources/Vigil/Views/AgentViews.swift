@@ -79,7 +79,7 @@ struct AgentStatusLine: View {
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
             }
-            Text(Format.relative(presence.since, to: now))
+            Text(presence.source == .process ? "up \(Format.duration(since: presence.since, to: now))" : Format.duration(since: presence.since, to: now))
                 .foregroundStyle(.tertiary)
                 .monospacedDigit()
         }
@@ -107,6 +107,25 @@ struct AgentStatusBanner: View {
         case (.hooks, .waitingForInput): "Waiting for your input"
         case (.hooks, .idle): "Session ended"
         case (.process, _): presence.isBusy ? "Running" : "Running, idle"
+        }
+    }
+
+    /// What the clock on the right measures, said plainly.
+    private var timing: String {
+        let span = Format.duration(since: presence.since, to: now)
+        switch (presence.source, presence.activity) {
+        case (.process, _): return "running for \(span)"
+        case (.hooks, .working): return "working for \(span)"
+        case (.hooks, .needsPermission): return "waiting \(span)"
+        case (.hooks, .waitingForInput): return "idle for \(span)"
+        case (.hooks, .idle): return "ended \(Format.relative(presence.since, to: now))"
+        }
+    }
+
+    private var timingHelp: String {
+        switch presence.source {
+        case .process: "Time since the oldest agent process in this worktree started. Install hooks to see what it is doing."
+        case .hooks: "Time since the agent entered this state, as reported by its hooks."
         }
     }
 
@@ -145,9 +164,10 @@ struct AgentStatusBanner: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(Format.relative(presence.since, to: now))
+                Text(timing)
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .help(timingHelp)
                 if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
                     Text(presence.toolCallsThisTurn == 1 ? "1 tool call" : "\(presence.toolCallsThisTurn) tool calls")
                         .font(.caption.monospacedDigit())

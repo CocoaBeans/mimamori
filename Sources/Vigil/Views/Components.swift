@@ -115,6 +115,21 @@ enum Format {
         }
     }
 
+    /// "42s", "12m", "5h 12m", "2d 3h": how long something has been going on.
+    static func duration(since start: Date, to now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        switch seconds {
+        case ..<60: return "\(seconds)s"
+        case ..<3600: return "\(seconds / 60)m"
+        case ..<86400:
+            let minutes = (seconds % 3600) / 60
+            return minutes > 0 ? "\(seconds / 3600)h \(minutes)m" : "\(seconds / 3600)h"
+        default:
+            let hours = (seconds % 86400) / 3600
+            return hours > 0 ? "\(seconds / 86400)d \(hours)h" : "\(seconds / 86400)d"
+        }
+    }
+
     static let time: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
