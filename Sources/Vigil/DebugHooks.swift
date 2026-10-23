@@ -109,7 +109,18 @@ enum DebugHooks {
         view.cacheDisplay(in: bounds, to: rep)
         guard let data = rep.representation(using: .png, properties: [:]) else { return }
         try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
-        writeLayerImage(of: view, scale: window.backingScaleFactor, to: path + ".layer.png")
+        // Popovers and panels are separate windows; save each visible one as well.
+        var extra = 0
+        for other in NSApp.windows where other !== window && other.isVisible && other.contentView != nil
+            && other.frame.width > 40 && other.frame.height > 40 && !other.styleMask.contains(.titled) {
+            guard let otherView = other.contentView?.superview ?? other.contentView,
+                  let otherRep = otherView.bitmapImageRepForCachingDisplay(in: otherView.bounds) else { continue }
+            otherView.cacheDisplay(in: otherView.bounds, to: otherRep)
+            if let otherData = otherRep.representation(using: .png, properties: [:]) {
+                extra += 1
+                try? otherData.write(to: URL(fileURLWithPath: path + ".extra\(extra).png"), options: .atomic)
+            }
+        }
 
         // Also dump the class names of what sits in the window, for diagnosing blank regions.
         var names: [String] = ["window frame=\(window.frame.integral) contentMinSize=\(window.contentMinSize) minSize=\(window.minSize)"]

@@ -91,6 +91,17 @@ struct AttentionRulesTests {
         #expect(testFlags.first?.line == 2)
     }
 
+    @Test func markersNeedWordBoundaries() {
+        let flags = AttentionRules.contentFlags(in: diff(adding: [
+            "iconutil.waitUntilExit()",
+            "let profit = computeProfit(x)",
+            "xit('is skipped', () => {})",
+        ]), config: config)
+        let testFlags = flags.filter { $0.rule == .testDisabled }
+        #expect(testFlags.count == 1)
+        #expect(testFlags.first?.line == 3)
+    }
+
     @Test func placeholdersAreNotSecrets() {
         let flags = AttentionRules.contentFlags(in: diff(adding: [
             "api_key = \"your-api-key-here\"",

@@ -352,18 +352,29 @@ public enum AttentionRules {
         // Swift Testing: @Test(.disabled(...)) or @Test("name", .disabled(...)).
         // Plain ".disabled(" is a common SwiftUI modifier, so require the @Test attribute.
         if text.contains("@Test(") && text.contains(".disabled(") { return "Test disabled" }
-        for (marker, label) in testDisabledMarkers where text.contains(marker) {
-            if marker == "fit(" {
-                // Avoid matching "profit(" and friends.
-                guard let range = text.range(of: marker) else { continue }
-                if range.lowerBound > text.startIndex {
-                    let before = text[text.index(before: range.lowerBound)]
-                    if before.isLetter || before.isNumber || before == "_" || before == "." { continue }
-                }
-            }
+        for (marker, label) in testDisabledMarkers where containsToken(marker, in: text) {
             return label
         }
         return nil
+    }
+
+    /// `text.contains(marker)`, but a marker that starts with an identifier character must not be
+    /// the tail of a longer identifier: "waitUntilExit(" is not "xit(", "profit(" is not "fit(".
+    static func containsToken(_ marker: String, in text: String) -> Bool {
+        guard let first = marker.first else { return false }
+        let needsBoundary = first.isLetter || first.isNumber || first == "_"
+        var searchRange = text.startIndex..<text.endIndex
+        while let range = text.range(of: marker, range: searchRange) {
+            if !needsBoundary || range.lowerBound == text.startIndex {
+                return true
+            }
+            let before = text[text.index(before: range.lowerBound)]
+            if !(before.isLetter || before.isNumber || before == "_" || before == ".") {
+                return true
+            }
+            searchRange = range.upperBound..<text.endIndex
+        }
+        return false
     }
 
     private static let lintMarkers: [(String, String)] = [
@@ -387,7 +398,7 @@ public enum AttentionRules {
     ]
 
     private static func debugLeftoverLabel(in text: String) -> String? {
-        for (marker, label) in debugMarkers where text.contains(marker) {
+        for (marker, label) in debugMarkers where containsToken(marker, in: text) {
             if marker == "debugger" {
                 let trimmed = text.trimmingCharacters(in: .whitespaces)
                 guard trimmed == "debugger" || trimmed == "debugger;" else { continue }

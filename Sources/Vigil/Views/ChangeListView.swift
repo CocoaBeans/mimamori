@@ -244,11 +244,7 @@ struct WorktreeHeaderView: View {
                     Text("\(session.changes.count) files")
                         .foregroundStyle(.secondary)
                     DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions)
-                    if session.flaggedCount > 0 {
-                        Label("\(session.flaggedCount)", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                            .help("Files needing attention")
-                    }
+                    AttentionBadgeButton(sessions: [session], arrowEdge: .top, debugID: "header")
                 }
                 .font(.caption.monospacedDigit())
                 .fixedSize()

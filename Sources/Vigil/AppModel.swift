@@ -32,6 +32,9 @@ final class AppModel {
     var activityScopeAll: Bool
     var filterText = ""
     var filterFocusToken = 0
+    /// Developer switches from VIGIL_DEBUG_FLAGS (comma separated), e.g. "popover:sidebar".
+    let debugFlags: Set<String> = Set((ProcessInfo.processInfo.environment["VIGIL_DEBUG_FLAGS"] ?? "")
+        .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
 
     private var persisted: PersistedState
     private var saveTask: Task<Void, Never>?

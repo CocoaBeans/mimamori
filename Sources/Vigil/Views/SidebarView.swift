@@ -61,12 +61,7 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.borderless)
                 Spacer()
-                if model.totalFlagged > 0 {
-                    Label("\(model.totalFlagged)", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .help("Files needing attention across all worktrees")
-                }
+                AttentionBadgeButton(sessions: model.orderedSessions, arrowEdge: .bottom, debugID: "sidebar")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
