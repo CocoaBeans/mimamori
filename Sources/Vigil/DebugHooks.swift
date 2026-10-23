@@ -8,6 +8,7 @@ import VigilCore
 ///     VIGIL_SCREENSHOT_INTERVAL=seconds      and keep rewriting it (also paces the dump)
 ///     VIGIL_DEBUG_DUMP=/path/file.txt        write a text summary of the model state
 ///     VIGIL_DEBUG_SELECT=relative/path       select this file in the selected worktree once it appears
+///     VIGIL_WINDOW=1000x640                  resize the main window after launch
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -25,8 +26,17 @@ enum DebugHooks {
         guard screenshot != nil || dump != nil || select != nil else { return }
         let interval = Double(value("VIGIL_SCREENSHOT_INTERVAL") ?? "") ?? 0
 
+        let windowSize = value("VIGIL_WINDOW")
         Task { @MainActor [weak model] in
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: .seconds(1.5))
+            if let windowSize {
+                let parts = windowSize.lowercased().split(separator: "x").compactMap { Double($0) }
+                if parts.count == 2, let window = NSApp.windows.first(where: { $0.styleMask.contains(.titled) && $0.isVisible }) {
+                    window.setContentSize(NSSize(width: parts[0], height: parts[1]))
+                    window.center()
+                }
+            }
+            try? await Task.sleep(for: .seconds(3.5))
             repeat {
                 guard let model else { return }
                 if let select, let session = model.selectedSession,
@@ -102,12 +112,18 @@ enum DebugHooks {
         writeLayerImage(of: view, scale: window.backingScaleFactor, to: path + ".layer.png")
 
         // Also dump the class names of what sits in the window, for diagnosing blank regions.
-        var names: [String] = []
+        var names: [String] = ["window frame=\(window.frame.integral) contentMinSize=\(window.contentMinSize) minSize=\(window.minSize)"]
         func collect(_ view: NSView, depth: Int) {
             guard depth < 16 else { return }
             var line = String(repeating: "  ", count: depth) + NSStringFromClass(type(of: view)) + " \(view.frame.integral)"
             if let scroll = view as? NSScrollView {
                 line += " insets=\(scroll.contentInsets) visible=\(scroll.documentVisibleRect.integral) safe=\(scroll.safeAreaInsets)"
+            }
+            let name = NSStringFromClass(type(of: view))
+            if name.contains("SplitView") || name.contains("HostingView") || name.contains("PlatformViewHost") {
+                let fitting = view.fittingSize
+                let intrinsic = view.intrinsicContentSize
+                line += " fitting=(\(Int(fitting.width))x\(Int(fitting.height))) intrinsic=(\(Int(intrinsic.width))x\(Int(intrinsic.height)))"
             }
             names.append(line)
             for subview in view.subviews { collect(subview, depth: depth + 1) }

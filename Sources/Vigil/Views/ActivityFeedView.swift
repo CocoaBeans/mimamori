@@ -34,7 +34,8 @@ struct ActivityFeedView: View {
                 HStack(spacing: 8) {
                     Text("Activity")
                         .font(.headline)
-                    Spacer()
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
                     Picker("Scope", selection: $model.activityScopeAll) {
                         Text("Worktree").tag(false)
                         Text("All").tag(true)
@@ -42,7 +43,7 @@ struct ActivityFeedView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .controlSize(.small)
-                    .frame(width: 140)
+                    .frame(maxWidth: 130)
                     Button {
                         model.clearActivity()
                     } label: {

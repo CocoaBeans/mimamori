@@ -21,6 +21,7 @@ struct VigilApp: App {
                 .environment(model)
         }
         .defaultSize(width: 1280, height: 800)
+        .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
         .commands { VigilCommands(model: model) }
 

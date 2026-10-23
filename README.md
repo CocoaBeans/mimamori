@@ -80,6 +80,7 @@ Environment variables for driving the app headlessly (handy for development with
 | `VIGIL_SCREENSHOT_INTERVAL=5` | Rewrite it (and the dump) every 5 seconds |
 | `VIGIL_DEBUG_DUMP=/path.txt` | Write a text summary of repositories, sessions, changes and activity |
 | `VIGIL_DEBUG_SELECT=src/app.py` | Select that file in the selected worktree once it appears |
+| `VIGIL_WINDOW=1000x640` | Resize the main window after launch (clamped to the content minimum) |
 
 Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
 

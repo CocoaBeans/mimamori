@@ -8,28 +8,29 @@ struct ContentView: View {
         @Bindable var model = model
         NavigationSplitView {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 380)
+                .navigationSplitViewColumnWidth(min: 170, ideal: 220, max: 340)
         } content: {
             if let session = model.selectedSession {
                 ChangeListView(session: session)
-                    .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 640)
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 600)
             } else {
                 WelcomeView()
-                    .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 640)
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 600)
             }
         } detail: {
             detailColumn
+                .navigationSplitViewColumnWidth(min: 240, ideal: 420)
         }
         .inspector(isPresented: $model.showActivity) {
             ActivityFeedView()
-                .inspectorColumnWidth(min: 250, ideal: 320, max: 500)
+                .inspectorColumnWidth(min: 220, ideal: 260, max: 460)
         }
         .toolbar { toolbarItems }
         .onChange(of: model.showActivity) { model.persistUISoon() }
         .onChange(of: model.flaggedOnly) { model.persistUISoon() }
         .onChange(of: model.sortOrder) { model.persistUISoon() }
         .onChange(of: model.selectedWorktreeID) { model.persistUISoon() }
-        .frame(minWidth: 960, minHeight: 560)
+        .frame(minHeight: 480)
     }
 
     @ViewBuilder
@@ -44,9 +45,10 @@ struct ContentView: View {
         }
     }
 
+    /// Window-level items only. The monitor controls live in the change list header,
+    /// so the inspector's width never affects their spacing.
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
-        let session = model.selectedSession
         ToolbarItem(placement: .navigation) {
             Button {
                 model.promptForRepository()
@@ -55,40 +57,7 @@ struct ContentView: View {
             }
             .help("Watch another repository or worktree (⌘O)")
         }
-        ToolbarItemGroup(placement: .primaryAction) {
-            if let session {
-                BaselinePicker(session: session)
-                Button {
-                    Task { await session.markStart() }
-                } label: {
-                    Label("Mark Start", systemImage: session.startSnapshot == nil ? "flag" : "flag.fill")
-                }
-                .help("Snapshot the working tree now and compare against it (⇧⌘S)")
-
-                Button {
-                    session.requestRefresh(force: true)
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .help("Refresh now (⌘R)")
-
-                Toggle(isOn: Binding(get: { model.flaggedOnly }, set: { model.flaggedOnly = $0 })) {
-                    Label("Flagged Only", systemImage: "exclamationmark.triangle")
-                }
-                .help("Show only files that need attention (⇧⌘F)")
-
-                Menu {
-                    Picker("Sort By", selection: Binding(get: { model.sortOrder }, set: { model.sortOrder = $0 })) {
-                        ForEach(ChangeSortOrder.allCases, id: \.self) { order in
-                            Text(order.title).tag(order)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down")
-                }
-                .help("Sort order")
-            }
+        ToolbarItem(placement: .primaryAction) {
             Toggle(isOn: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) {
                 Label("Activity", systemImage: "list.bullet.rectangle")
             }
@@ -129,11 +98,14 @@ struct BaselinePicker: View {
             }
         } label: {
             Label(currentTitle, systemImage: "arrow.left.arrow.right")
+                .labelStyle(.titleAndIcon)
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
         .help("What the working tree is compared against")
     }
 
-    private var currentTitle: String {
+    var currentTitle: String {
         switch session.baseline {
         case .head: "Uncommitted"
         case .branchPoint: "Since Branch Point"

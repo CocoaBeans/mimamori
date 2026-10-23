@@ -18,15 +18,26 @@ struct ChangeListView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     WorktreeHeaderView(session: session)
-                    FilterField()
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 9)
+                    HStack(spacing: 8) {
+                        FilterField()
+                        ListControls()
+                        Divider().frame(height: 16)
+                        SessionControls(session: session)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 9)
                     Divider()
                 }
                 .background(.bar)
             }
             .navigationTitle(session.displayName)
-            .navigationSubtitle(Format.abbreviate(path: session.id))
+            .navigationSubtitle(Self.shortPath(session.id))
+    }
+
+    /// The last two path components, enough to tell worktrees apart without a toolbar-wide subtitle.
+    private static func shortPath(_ path: String) -> String {
+        let components = path.split(separator: "/").map(String.init)
+        return components.suffix(2).joined(separator: "/")
     }
 
     @ViewBuilder
@@ -219,6 +230,7 @@ struct WorktreeHeaderView: View {
                 Text(session.state?.branch.displayName ?? session.displayName)
                     .font(.headline)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 if let branch = session.state?.branch {
                     if let ahead = branch.ahead, ahead > 0 {
                         Text("↑\(ahead)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -227,7 +239,19 @@ struct WorktreeHeaderView: View {
                         Text("↓\(behind)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
                 }
-                Spacer()
+                Spacer(minLength: 8)
+                HStack(spacing: 8) {
+                    Text("\(session.changes.count) files")
+                        .foregroundStyle(.secondary)
+                    DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions)
+                    if session.flaggedCount > 0 {
+                        Label("\(session.flaggedCount)", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .help("Files needing attention")
+                    }
+                }
+                .font(.caption.monospacedDigit())
+                .fixedSize()
                 if session.isBusy {
                     ProgressView().controlSize(.small)
                 } else if session.watcherActive {
@@ -251,24 +275,17 @@ struct WorktreeHeaderView: View {
                         .lineLimit(1)
                 }
             }
-            HStack(spacing: 10) {
-                if let state = session.state {
-                    Label(state.baseline.label, systemImage: "arrow.left.arrow.right")
+            HStack(spacing: 8) {
+                BaselinePicker(session: session)
+                    .controlSize(.small)
+                if let state = session.state, state.baseline.baseline != .head {
+                    Text(state.baseline.label)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                Spacer()
-                Text("\(session.changes.count) files")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions)
-                if session.flaggedCount > 0 {
-                    Label("\(session.flaggedCount)", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.orange)
-                        .help("Files needing attention")
-                }
+                Spacer(minLength: 0)
             }
             if let start = session.startSnapshot {
                 HStack(spacing: 6) {
@@ -279,6 +296,7 @@ struct WorktreeHeaderView: View {
                         .foregroundStyle(.secondary)
                 }
                 .font(.caption)
+                .lineLimit(1)
             }
             if let error = session.lastError, session.state != nil {
                 Label(error, systemImage: "exclamationmark.circle")
@@ -290,6 +308,7 @@ struct WorktreeHeaderView: View {
                 Label("\(excluded.count) large untracked files are not diffed", systemImage: "externaldrive")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                     .help(excluded.joined(separator: "\n"))
             }
         }
@@ -331,5 +350,64 @@ struct FilterField: View {
         .padding(.vertical, 5)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
         .onChange(of: model.filterFocusToken) { focused = true }
+    }
+}
+
+/// Flagged-only toggle and sort menu for the change list.
+struct ListControls: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        HStack(spacing: 4) {
+            Toggle(isOn: $model.flaggedOnly) {
+                Image(systemName: model.flaggedOnly ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
+            }
+            .toggleStyle(.button)
+            .buttonStyle(.borderless)
+            .tint(.orange)
+            .help("Show only files that need attention (⇧⌘F)")
+
+            Menu {
+                Picker("Sort By", selection: $model.sortOrder) {
+                    ForEach(ChangeSortOrder.allCases, id: \.self) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Sort: \(model.sortOrder.title)")
+        }
+        .controlSize(.small)
+    }
+}
+
+/// Mark Start and Refresh, next to the filter.
+struct SessionControls: View {
+    let session: WorktreeSession
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                Task { await session.markStart() }
+            } label: {
+                Image(systemName: session.startSnapshot == nil ? "flag" : "flag.fill")
+            }
+            .help("Mark Start: snapshot the working tree now and compare against it (⇧⌘S)")
+            Button {
+                session.requestRefresh(force: true)
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("Refresh now (⌘R)")
+            .disabled(session.isBusy)
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
     }
 }
