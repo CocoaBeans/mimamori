@@ -10,7 +10,7 @@ jobs:
     name: Build and test (macOS)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Toolchain
         run: |
@@ -29,9 +29,12 @@ jobs:
       - name: Zip app
         run: ditto -c -k --keepParent build/Vigil.app build/Vigil-unsigned.zip
 
+      # Convenience only: artifact storage on private repositories is quota-limited,
+      # so a failed upload must not fail the build.
       - name: Upload app (ad-hoc signed, not notarized)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
+        continue-on-error: true
         with:
           name: Vigil-unsigned
           path: build/Vigil-unsigned.zip
-          retention-days: 14
+          retention-days: 7
