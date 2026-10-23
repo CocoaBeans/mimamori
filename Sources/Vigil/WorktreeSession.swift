@@ -290,8 +290,13 @@ final class WorktreeSession: Identifiable {
             lastError = nil
             await snapshotIfNeeded(fresh)
         } catch {
-            phase = FileManager.default.fileExists(atPath: id) ? .failed : .missing
-            lastError = error.localizedDescription
+            if FileManager.default.fileExists(atPath: id) {
+                phase = .failed
+                lastError = error.localizedDescription
+            } else {
+                phase = .missing
+                lastError = "The worktree folder no longer exists."
+            }
         }
         lastRefreshDuration = Date().timeIntervalSince(started)
     }

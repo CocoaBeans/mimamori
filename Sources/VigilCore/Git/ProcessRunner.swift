@@ -10,13 +10,15 @@ public struct ProcessResult: Sendable {
 }
 
 public enum ProcessError: Error, LocalizedError, Sendable {
-    case launchFailed(String)
+    case launchFailed(reason: String, command: String)
     case timedOut(String)
+    case directoryMissing(String)
 
     public var errorDescription: String? {
         switch self {
-        case .launchFailed(let s): "Could not launch process: \(s)"
+        case .launchFailed(let reason, let command): "Could not launch \(command.split(separator: " ").first ?? "process"): \(reason)"
         case .timedOut(let s): "Process timed out: \(s)"
+        case .directoryMissing(let path): "The folder no longer exists: \(path)"
         }
     }
 }
@@ -56,6 +58,9 @@ public enum ProcessRunner {
     ) async throws -> ProcessResult {
         _ = ignoreSIGPIPE
         let description = ([executable.lastPathComponent] + arguments).joined(separator: " ")
+        if let currentDirectory, !FileManager.default.fileExists(atPath: currentDirectory.path) {
+            throw ProcessError.directoryMissing(currentDirectory.path)
+        }
 
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ProcessResult, Error>) in
             let process = Process()
@@ -80,11 +85,14 @@ public enum ProcessRunner {
             let timedOut = Flag()
             let group = DispatchGroup()
 
+            // Read until EOF, then close the descriptor right away. Waiting for deallocation
+            // leaks pipes for as long as anything retains the Process (see the timeout below).
             group.enter()
             outPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 if data.isEmpty {
                     handle.readabilityHandler = nil
+                    try? handle.close()
                     group.leave()
                 } else {
                     out.append(data)
@@ -95,6 +103,7 @@ public enum ProcessRunner {
                 let data = handle.availableData
                 if data.isEmpty {
                     handle.readabilityHandler = nil
+                    try? handle.close()
                     group.leave()
                 } else {
                     err.append(data)
@@ -108,7 +117,15 @@ public enum ProcessRunner {
             } catch {
                 outPipe.fileHandleForReading.readabilityHandler = nil
                 errPipe.fileHandleForReading.readabilityHandler = nil
-                continuation.resume(throwing: ProcessError.launchFailed("\(description): \(error.localizedDescription)"))
+                try? outPipe.fileHandleForReading.close()
+                try? errPipe.fileHandleForReading.close()
+                try? outPipe.fileHandleForWriting.close()
+                try? errPipe.fileHandleForWriting.close()
+                if let inPipe {
+                    try? inPipe.fileHandleForReading.close()
+                    try? inPipe.fileHandleForWriting.close()
+                }
+                continuation.resume(throwing: ProcessError.launchFailed(reason: error.localizedDescription, command: description))
                 return
             }
 
@@ -121,25 +138,23 @@ public enum ProcessRunner {
             }
 
             let boxed = Box(process)
-            let timeoutItem = DispatchWorkItem {
-                if boxed.value.isRunning {
-                    timedOut.raise()
-                    boxed.value.terminate()
-                }
+            // The timer must not keep a finished Process (and its pipes) alive until the deadline.
+            let timeoutItem = DispatchWorkItem { [weak boxed] in
+                guard let process = boxed?.value, process.isRunning else { return }
+                timedOut.raise()
+                process.terminate()
             }
             let seconds = Double(timeout.components.seconds) + Double(timeout.components.attoseconds) / 1e18
             DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: timeoutItem)
 
             group.notify(queue: DispatchQueue.global(qos: .userInitiated)) {
                 timeoutItem.cancel()
+                let status = boxed.value.terminationStatus
+                boxed.value.terminationHandler = nil
                 if timedOut.isRaised {
                     continuation.resume(throwing: ProcessError.timedOut(description))
                 } else {
-                    continuation.resume(returning: ProcessResult(
-                        status: boxed.value.terminationStatus,
-                        stdout: out.value,
-                        stderr: err.value
-                    ))
+                    continuation.resume(returning: ProcessResult(status: status, stdout: out.value, stderr: err.value))
                 }
             }
         }

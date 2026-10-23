@@ -24,6 +24,8 @@ final class AppModel {
     private(set) var gitError: String?
     private(set) var gitVersion: String?
     private(set) var now = Date()
+    private(set) var collapsedRepositories: Set<UUID>
+    private(set) var hiddenWorktrees: Set<String>
 
     var selectedWorktreeID: String?
     var showActivity: Bool
@@ -52,6 +54,8 @@ final class AppModel {
         self.sortOrder = persisted.ui.sortOrder
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
+        self.collapsedRepositories = persisted.collapsedRepositories
+        self.hiddenWorktrees = persisted.hiddenWorktrees
         startTicker()
         DebugHooks.start(model: self)
         Task { await bootstrap() }
@@ -65,7 +69,54 @@ final class AppModel {
     }
 
     var orderedSessions: [WorktreeSession] {
-        repositories.flatMap { repo in repo.worktrees.compactMap { sessions[$0.path] } }
+        repositories.flatMap { repo in visibleWorktrees(for: repo).compactMap { sessions[$0.path] } }
+    }
+
+    func visibleWorktrees(for repo: RepositoryEntry) -> [WorktreeInfo] {
+        repo.worktrees.filter { !hiddenWorktrees.contains($0.path) }
+    }
+
+    func hiddenWorktrees(for repo: RepositoryEntry) -> [WorktreeInfo] {
+        repo.worktrees.filter { hiddenWorktrees.contains($0.path) }
+    }
+
+    func visibleSessions(for repo: RepositoryEntry) -> [WorktreeSession] {
+        visibleWorktrees(for: repo).compactMap { sessions[$0.path] }
+    }
+
+    func isCollapsed(_ repo: RepositoryEntry) -> Bool { collapsedRepositories.contains(repo.id) }
+
+    func setCollapsed(_ collapsed: Bool, for repoID: UUID) {
+        if collapsed { collapsedRepositories.insert(repoID) } else { collapsedRepositories.remove(repoID) }
+        persisted.collapsedRepositories = collapsedRepositories
+        persistSoon()
+    }
+
+    /// Stops watching a worktree and removes it from the lists until shown again.
+    func hideWorktree(_ path: String) {
+        hiddenWorktrees.insert(path)
+        persisted.hiddenWorktrees = hiddenWorktrees
+        sessions[path]?.stop()
+        sessions.removeValue(forKey: path)
+        if selectedWorktreeID == path { selectedWorktreeID = orderedSessions.first?.id }
+        persistSoon()
+    }
+
+    func showWorktree(_ path: String) {
+        hiddenWorktrees.remove(path)
+        persisted.hiddenWorktrees = hiddenWorktrees
+        persistSoon()
+        if let repo = repositories.first(where: { $0.worktrees.contains { $0.path == path } }) {
+            Task { await rediscoverWorktrees(for: repo.id) }
+        }
+    }
+
+    func showAllWorktrees(for repoID: UUID) {
+        guard let repo = repositories.first(where: { $0.id == repoID }) else { return }
+        for worktree in repo.worktrees { hiddenWorktrees.remove(worktree.path) }
+        persisted.hiddenWorktrees = hiddenWorktrees
+        persistSoon()
+        Task { await rediscoverWorktrees(for: repoID) }
     }
 
     var totalChangedFiles: Int { sessions.values.reduce(0) { $0 + $1.changes.count } }
@@ -181,6 +232,10 @@ final class AppModel {
         repositoryWatchers[id]?.stop()
         repositoryWatchers.removeValue(forKey: id)
         persisted.repositories.removeAll { $0.id == id }
+        collapsedRepositories.remove(id)
+        for worktree in repo.worktrees { hiddenWorktrees.remove(worktree.path) }
+        persisted.collapsedRepositories = collapsedRepositories
+        persisted.hiddenWorktrees = hiddenWorktrees
         if let selected = selectedWorktreeID, sessions[selected] == nil {
             selectedWorktreeID = orderedSessions.first?.id
         }
@@ -192,16 +247,16 @@ final class AppModel {
         let rootPath = repositories[index].rootPath
         do {
             let list = try await git.worktrees(in: URL(fileURLWithPath: rootPath, isDirectory: true))
-                .filter { !$0.isBare }
+                .filter { !$0.isBare && !$0.isPrunable && FileManager.default.fileExists(atPath: $0.path) }
             repositories[index].worktrees = list
             repositories[index].error = nil
-            let known = Set(list.map(\.path))
-            // Stop sessions whose worktrees vanished.
+            let known = Set(list.map(\.path)).subtracting(hiddenWorktrees)
+            // Stop sessions whose worktrees vanished or were hidden.
             for (path, session) in sessions where session.repositoryID == id && !known.contains(path) {
                 session.stop()
                 sessions.removeValue(forKey: path)
             }
-            for info in list {
+            for info in list where !hiddenWorktrees.contains(info.path) {
                 if let session = sessions[info.path] {
                     session.updateInfo(info)
                 } else {

@@ -95,6 +95,10 @@ struct PersistedState: Codable, Sendable {
     var settings = AppSettings()
     var worktreeSettings: [String: PersistedWorktreeSettings] = [:]
     var ui = PersistedUIState()
+    /// Repositories whose sidebar section is collapsed.
+    var collapsedRepositories: Set<UUID> = []
+    /// Worktree paths the user hid; they are not watched until shown again.
+    var hiddenWorktrees: Set<String> = []
 
     init() {}
 
@@ -104,6 +108,8 @@ struct PersistedState: Codable, Sendable {
         settings = try c.decodeIfPresent(AppSettings.self, forKey: .settings) ?? AppSettings()
         worktreeSettings = try c.decodeIfPresent([String: PersistedWorktreeSettings].self, forKey: .worktreeSettings) ?? [:]
         ui = try c.decodeIfPresent(PersistedUIState.self, forKey: .ui) ?? PersistedUIState()
+        collapsedRepositories = try c.decodeIfPresent(Set<UUID>.self, forKey: .collapsedRepositories) ?? []
+        hiddenWorktrees = try c.decodeIfPresent(Set<String>.self, forKey: .hiddenWorktrees) ?? []
     }
 }
 

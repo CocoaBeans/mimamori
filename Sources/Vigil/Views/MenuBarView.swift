@@ -22,17 +22,33 @@ struct MenuBarMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        let sessions = model.orderedSessions
-        if sessions.isEmpty {
+        let repositories = model.repositories
+        if repositories.isEmpty {
             Text("No repositories watched")
         } else {
             Text("\(model.totalChangedFiles) changed · \(model.totalFlagged) flagged")
             Divider()
-            ForEach(sessions) { session in
-                Button {
-                    show(worktree: session.id)
-                } label: {
-                    Text(menuTitle(for: session))
+            ForEach(repositories) { repo in
+                let sessions = model.visibleSessions(for: repo)
+                if model.isCollapsed(repo) {
+                    // Collapsed in the sidebar: one submenu line here too.
+                    Menu(repositorySummary(repo, sessions: sessions)) {
+                        if sessions.isEmpty {
+                            Text("No visible worktrees")
+                        }
+                        ForEach(sessions) { session in
+                            Button(worktreeTitle(for: session)) { show(worktree: session.id) }
+                        }
+                    }
+                } else {
+                    Section(repo.displayName) {
+                        if sessions.isEmpty {
+                            Text("No visible worktrees")
+                        }
+                        ForEach(sessions) { session in
+                            Button(worktreeTitle(for: session)) { show(worktree: session.id) }
+                        }
+                    }
                 }
             }
         }
@@ -45,9 +61,21 @@ struct MenuBarMenu: View {
             .keyboardShortcut("q")
     }
 
-    private func menuTitle(for session: WorktreeSession) -> String {
-        let repo = model.repository(for: session)?.displayName ?? ""
-        var title = repo.isEmpty ? session.displayName : "\(repo) · \(session.displayName)"
+    private func repositorySummary(_ repo: RepositoryEntry, sessions: [WorktreeSession]) -> String {
+        let changed = sessions.reduce(0) { $0 + $1.changes.count }
+        let flagged = sessions.reduce(0) { $0 + $1.flaggedCount }
+        var title = "\(repo.displayName) · \(sessions.count) \(sessions.count == 1 ? "worktree" : "worktrees")"
+        if changed > 0 {
+            title += " · \(changed) changed"
+            if flagged > 0 { title += ", \(flagged) flagged" }
+        } else {
+            title += " · clean"
+        }
+        return title
+    }
+
+    private func worktreeTitle(for session: WorktreeSession) -> String {
+        var title = session.displayName
         if session.changes.isEmpty {
             title += " · clean"
         } else {
