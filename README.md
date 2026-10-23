@@ -41,6 +41,16 @@ Scripts/make-app.sh release
 
 You can also run it straight from SwiftPM (`swift run Vigil`), or open `Package.swift` in Xcode and run the `Vigil` scheme. Notifications only work from the app bundle.
 
+### App icon
+
+The icon is a placeholder: an emoji rendered onto a macOS-style rounded background by `Scripts/make-icon.swift`. Change it with any emoji, then rebuild:
+
+```bash
+swift Scripts/make-icon.swift "🕯️"
+```
+
+Replace `Resources/AppIcon.icns` with a designed icon whenever one exists.
+
 ### Try it with a simulated agent
 
 ```bash
