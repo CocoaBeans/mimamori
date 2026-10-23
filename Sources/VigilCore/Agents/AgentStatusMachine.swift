@@ -128,10 +128,15 @@ public struct AgentStatusMachine: Sendable {
             notes.append(AgentNote(kind: .sessionEnded, title: "\(agentName) session ended", detail: event.message))
 
         case .userPromptSubmit:
-            set(.working(tool: nil, detail: nil))
-            current.turnStartedAt = now
-            current.toolCallsThisTurn = 0
-            notes.append(AgentNote(kind: .turnStarted, title: "\(agentName) started a turn", detail: event.message))
+            // Hermes fires its equivalent before every model call; only a fresh turn resets the counters.
+            if case .working = current.activity, current.turnStartedAt != nil {
+                set(.working(tool: nil, detail: nil))
+            } else {
+                set(.working(tool: nil, detail: nil))
+                current.turnStartedAt = now
+                current.toolCallsThisTurn = 0
+                notes.append(AgentNote(kind: .turnStarted, title: "\(agentName) started a turn", detail: event.message))
+            }
 
         case .preToolUse:
             let tool = event.toolName ?? "tool"

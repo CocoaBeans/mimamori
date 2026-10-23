@@ -101,7 +101,7 @@ public actor AgentScanner {
         for pid in ProcessInspector.allPIDs() {
             guard let executable = ProcessInspector.executablePath(of: pid) else { continue }
             let name = (executable as NSString).lastPathComponent
-            let needsArguments = AgentClassifier.interpreters.contains(name)
+            let needsArguments = AgentClassifier.isInterpreter(name)
             let arguments = needsArguments ? ProcessInspector.arguments(of: pid) : []
             guard let kind = classifier.classify(executable: executable, arguments: arguments) else { continue }
             guard let cwd = ProcessInspector.currentDirectory(of: pid) else { continue }

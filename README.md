@@ -86,7 +86,9 @@ curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \
   --data-binary @- http://vigil/event >/dev/null 2>&1 || true
 ```
 
-A timestamped backup of the settings file is written first, hooks you already have are kept, and **Uninstall Hooks** removes only Vigil's entries. When Vigil is not running the command fails silently in under a second, so agents are never slowed down. Events are kept in memory only; nothing is written to disk and nothing leaves the machine. Other agents with a hook mechanism can post the same JSON shape (`hook_event_name`, `cwd`, `tool_name`, `tool_input`, …) to the socket.
+A timestamped backup of the settings file is written first, hooks you already have are kept, and **Uninstall Hooks** removes only Vigil's entries. When Vigil is not running the command fails silently in under a second, so agents are never slowed down. Events are kept in memory only; nothing is written to disk and nothing leaves the machine. **Hermes Agent** is supported the same way. **Install Hermes Hooks** writes a small script to `~/.hermes/agent-hooks/vigil.sh` and appends a delimited `hooks:` block to `~/.hermes/config.yaml` (backup first). If your config already has a `hooks:` key, Vigil copies the entries to the clipboard for you to paste instead. Hermes asks for consent once per event the first time a hook runs. Events arrive on `http://vigil/event/hermes` and are translated from Hermes's names (`pre_tool_call`, `pre_approval_request`, `on_human_input_request`, `pre_verify`, …).
+
+Other agents with a hook mechanism can post the Claude Code JSON shape (`hook_event_name`, `cwd`, `tool_name`, `tool_input`, …) to `http://vigil/event`.
 
 ## Privacy and footprint
 

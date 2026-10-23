@@ -280,9 +280,6 @@ struct WorktreeHeaderView: View {
                         .lineLimit(1)
                 }
             }
-            if let presence = model.agentHub.presence(for: session.id) {
-                AgentStatusLine(presence: presence, now: model.now)
-            }
             HStack(spacing: 8) {
                 BaselinePicker(session: session)
                     .controlSize(.small)

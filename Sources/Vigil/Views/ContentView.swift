@@ -35,11 +35,19 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailColumn: some View {
-        if let session = model.selectedSession, let path = session.selectedPath, let change = session.change(for: path) {
-            DiffView(session: session, change: change)
-        } else if model.selectedSession != nil {
-            ContentUnavailableView("Select a File", systemImage: "doc.text.magnifyingglass",
-                                   description: Text("Pick a changed file to read its diff."))
+        if let session = model.selectedSession {
+            VStack(spacing: 0) {
+                if let presence = model.agentHub.presence(for: session.id) {
+                    AgentStatusBanner(presence: presence, now: model.now)
+                }
+                if let path = session.selectedPath, let change = session.change(for: path) {
+                    DiffView(session: session, change: change)
+                } else {
+                    ContentUnavailableView("Select a File", systemImage: "doc.text.magnifyingglass",
+                                           description: Text("Pick a changed file to read its diff."))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
         } else {
             Color.clear
         }

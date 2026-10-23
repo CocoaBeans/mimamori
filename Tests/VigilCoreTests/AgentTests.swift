@@ -16,6 +16,16 @@ struct AgentClassifierTests {
         #expect(classifier.classify(executable: "/opt/homebrew/bin/myagent", arguments: [])?.displayName == "myagent")
     }
 
+    @Test func recognizesHermesConsoleScripts() {
+        // Hermes installs as a Python console script inside a venv; the interpreter is versioned.
+        let python = "/Users/x/.hermes/tools/python-3.14.7+20260901-darwin-arm64/bin/python3.14"
+        #expect(classifier.classify(executable: python, arguments: ["/Users/x/.hermes/hermes-agent/.hermes/bin/hermes", "gateway", "run"]) == .hermes)
+        #expect(classifier.classify(executable: python, arguments: ["python3.14", "/Users/x/.hermes/hermes-agent/.hermes/bin/hermes"]) == .hermes)
+        #expect(classifier.classify(executable: python, arguments: ["/Users/x/.hermes/hermes-agent/.hermes/bin/hermes-agent"]) == .hermes)
+        // A plain Python script in the same venv is not an agent.
+        #expect(classifier.classify(executable: python, arguments: ["python3.14", "-I", "-c", "import os"]) == nil)
+    }
+
     @Test func ignoresOrdinaryProcesses() {
         #expect(classifier.classify(executable: "/bin/zsh", arguments: ["-zsh"]) == nil)
         #expect(classifier.classify(executable: "/usr/local/bin/node", arguments: ["node", "server.js"]) == nil)
@@ -85,6 +95,52 @@ struct HookEventTests {
         let unknown = try #require(parse(#"{"hook_event_name":"SomethingNew","cwd":"/repo"}"#))
         #expect(unknown.name == .other && unknown.rawName == "SomethingNew")
         #expect(parse(#"{"not":"a hook"}"#) == nil)
+    }
+}
+
+@Suite("Hermes hook events")
+struct HermesHookTests {
+    private func parse(_ json: String) -> HookEvent? { HermesHookParser.parse(Data(json.utf8)) }
+
+    @Test func translatesHermesEvents() throws {
+        let pre = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"write_file","tool_input":{"path":"src/a.py","content":"x"},"session_id":"sess_1","cwd":"/repo","profile":"default","extra":{"tool_call_id":"call_9"}}"#))
+        #expect(pre.name == .preToolUse)
+        #expect(pre.rawName == "pre_tool_call")
+        #expect(pre.agent == .hermes)
+        #expect(pre.toolUseID == "call_9")
+        #expect(pre.filePath == "/repo/src/a.py")
+        #expect(pre.isMutatingTool)
+
+        let llm = try #require(parse(#"{"hook_event_name":"pre_llm_call","tool_name":null,"tool_input":null,"session_id":"sess_1","cwd":"/repo","extra":{"user_message":"fix the build"}}"#))
+        #expect(llm.name == .userPromptSubmit)
+        #expect(llm.message == "fix the build")
+
+        let approval = try #require(parse(#"{"hook_event_name":"pre_approval_request","tool_name":"terminal","tool_input":{"command":"git push"},"cwd":"/repo","extra":{}}"#))
+        #expect(approval.name == .permissionRequest)
+        #expect(approval.summary == "git push")
+
+        let human = try #require(parse(#"{"hook_event_name":"on_human_input_request","cwd":"/repo","extra":{"prompt":"Which branch?"}}"#))
+        #expect(human.name == .notification)
+        #expect(human.message?.contains("waiting for your input") == true)
+
+        let verify = try #require(parse(#"{"hook_event_name":"pre_verify","cwd":"/repo","extra":{}}"#))
+        #expect(verify.name == .stop)
+    }
+
+    @Test func repeatedModelCallsDoNotRestartTheTurn() {
+        var machine = AgentStatusMachine()
+        func llm(_ t: TimeInterval) -> HookEvent {
+            HookEvent(name: .userPromptSubmit, rawName: "pre_llm_call", agent: .hermes, cwd: "/repo", receivedAt: Date(timeIntervalSince1970: 1000 + t))
+        }
+        let first = machine.apply(llm(0))
+        #expect(first.contains { $0.kind == .turnStarted })
+        _ = machine.apply(HookEvent(name: .preToolUse, rawName: "pre_tool_call", agent: .hermes, cwd: "/repo", toolName: "terminal", toolUseID: "c1", receivedAt: Date(timeIntervalSince1970: 1001)))
+        let second = machine.apply(llm(2))
+        #expect(second.isEmpty)
+        #expect(machine.status?.toolCallsThisTurn == 1)
+        let stop = machine.apply(HookEvent(name: .stop, rawName: "pre_verify", agent: .hermes, cwd: "/repo", receivedAt: Date(timeIntervalSince1970: 1010)))
+        #expect(stop.first?.kind == .turnFinished)
+        #expect(machine.status?.activity == .waitingForInput)
     }
 }
 
@@ -184,6 +240,43 @@ struct ClaudeHooksConfigTests {
         #expect(!ClaudeHooksConfig.isInstalled(in: removed))
         let empty = ClaudeHooksConfig.uninstall(from: ClaudeHooksConfig.install(into: [:], command: command))
         #expect(empty["hooks"] == nil)
+    }
+}
+
+@Suite("Hermes hooks config")
+struct HermesHooksConfigTests {
+    let script = "~/.hermes/agent-hooks/vigil.sh"
+
+    @Test func appendsAndRemovesADelimitedBlock() throws {
+        let original = "model:\n  default: foo\nhooks_auto_accept: false\n"
+        let installed = try #require(HermesHooksConfig.install(into: original, scriptPath: script))
+        #expect(installed.hasPrefix(original))
+        #expect(installed.contains("\nhooks:\n  on_session_start:\n    - command: \"\(script)\"\n"))
+        #expect(installed.contains("  pre_tool_call:\n    - command: \"\(script)\"\n      timeout: 5\n"))
+        #expect(HermesHooksConfig.isInstalled(in: installed))
+        // Vigil's own block does not count as a user-owned hooks: key.
+        #expect(!HermesHooksConfig.hasTopLevelHooksKey(installed))
+        // Idempotent: a second install replaces, never duplicates.
+        let again = try #require(HermesHooksConfig.install(into: installed, scriptPath: script))
+        #expect(again == installed)
+        let removed = HermesHooksConfig.uninstall(from: installed)
+        #expect(removed == original)
+        #expect(!HermesHooksConfig.isInstalled(in: removed))
+    }
+
+    @Test func refusesToTouchAnExistingHooksKey() {
+        let existing = "hooks:\n  pre_tool_call:\n    - command: \"~/x.sh\"\n"
+        #expect(HermesHooksConfig.install(into: existing, scriptPath: script) == nil)
+        #expect(HermesHooksConfig.uninstall(from: existing) == existing)
+        #expect(HermesHooksConfig.yamlEntries(scriptPath: script).contains("  on_session_start:\n"))
+    }
+
+    @Test func scriptIsSafe() {
+        let text = HermesHooksConfig.script(socketPath: FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Application Support/Vigil/vigil.sock")
+        #expect(text.hasPrefix("#!/bin/sh"))
+        #expect(text.contains("$HOME/Library/Application Support/Vigil/vigil.sock"))
+        #expect(text.contains("/event/hermes"))
+        #expect(text.contains("exit 0"))
     }
 }
 

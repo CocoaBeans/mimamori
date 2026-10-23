@@ -126,6 +126,11 @@ public final class HookSocketServer: @unchecked Sendable {
             lock.lock(); eventCount += 1; lock.unlock()
             handler(event)
             return (204, "No Content", "")
+        case ("POST", "/event/hermes"):
+            guard let event = HermesHookParser.parse(body) else { return (400, "Bad Request", "not a hermes hook event\n") }
+            lock.lock(); eventCount += 1; lock.unlock()
+            handler(event)
+            return (204, "No Content", "")
         default:
             return (404, "Not Found", "")
         }

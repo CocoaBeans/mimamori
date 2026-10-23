@@ -55,7 +55,12 @@ public struct HookEvent: Sendable, Hashable {
         return Self.mutatingTools.contains(toolName) || toolName.hasPrefix("mcp__") && toolName.lowercased().contains("write")
     }
 
-    static let mutatingTools: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash", "Task", "Agent"]
+    static let mutatingTools: Set<String> = [
+        // Claude Code
+        "Edit", "Write", "MultiEdit", "NotebookEdit", "Bash", "Task", "Agent",
+        // Hermes
+        "terminal", "write_file", "patch", "apply_patch", "edit_file", "delete_file", "execute_code", "delegate_task",
+    ]
 }
 
 public enum HookEventParser {

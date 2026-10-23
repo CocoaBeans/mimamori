@@ -35,6 +35,13 @@ public struct AgentClassifier: Sendable {
     /// Interpreters whose arguments must be inspected to find the real program.
     static let interpreters: Set<String> = ["node", "nodejs", "bun", "deno", "python", "python3", "Python", "ruby", "uv", "npx", "tsx"]
 
+    /// True for interpreters, including versioned names such as `python3.14` or `node22`.
+    static func isInterpreter(_ name: String) -> Bool {
+        if interpreters.contains(name) { return true }
+        let lower = name.lowercased()
+        return lower.hasPrefix("python") || lower.hasPrefix("node") || lower.hasPrefix("ruby")
+    }
+
     private static let rules: [(needle: String, kind: AgentKind)] = [
         ("claude-code", .claudeCode), ("claude", .claudeCode),
         ("codex", .codex),
@@ -51,14 +58,16 @@ public struct AgentClassifier: Sendable {
         let name = (executable as NSString).lastPathComponent
         if let kind = match(name: name) { return kind }
         if executable.contains("/claude-code/") || executable.hasSuffix("/claude.app/Contents/MacOS/claude") { return .claudeCode }
-        guard Self.interpreters.contains(name) else { return nil }
-        // node /path/to/@anthropic-ai/claude-code/cli.js, python -m aider, …
+        guard Self.isInterpreter(name) else { return nil }
+        // node /path/to/@anthropic-ai/claude-code/cli.js, python -m aider, .venv/bin/hermes gateway run, …
         for argument in arguments.dropFirst().prefix(6) where !argument.hasPrefix("-") || argument.hasPrefix("-m") {
             let components = argument.split(separator: "/").map(String.init)
             for component in components.reversed() {
                 if let kind = match(name: component) { return kind }
             }
         }
+        // Console scripts: the first argument is the script itself, e.g. ~/.hermes/hermes-agent/.hermes/bin/hermes
+        if let script = arguments.first, let kind = match(name: (script as NSString).lastPathComponent) { return kind }
         return nil
     }
 
@@ -70,8 +79,8 @@ public struct AgentClassifier: Sendable {
         for rule in Self.rules {
             if lower == rule.needle { return rule.kind }
         }
-        // Package directories such as "claude-code" or "cursor-agent-1.2".
-        for rule in Self.rules where rule.needle.contains("-") && lower.hasPrefix(rule.needle) {
+        // Variants such as "claude-code", "hermes-agent", "cursor-agent-1.2" or "hermes_cli".
+        for rule in Self.rules where lower.hasPrefix(rule.needle + "-") || lower.hasPrefix(rule.needle + "_") {
             return rule.kind
         }
         return nil
