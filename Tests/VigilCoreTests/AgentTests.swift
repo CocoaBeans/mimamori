@@ -108,7 +108,8 @@ struct HermesHookTests {
         #expect(pre.rawName == "pre_tool_call")
         #expect(pre.agent == .hermes)
         #expect(pre.toolUseID == "call_9")
-        #expect(pre.filePath == "/repo/src/a.py")
+        // Relative paths stay relative: Hermes's cwd is the process directory, not the project.
+        #expect(pre.filePath == "src/a.py")
         #expect(pre.isMutatingTool)
 
         let llm = try #require(parse(#"{"hook_event_name":"pre_llm_call","tool_name":null,"tool_input":null,"session_id":"sess_1","cwd":"/repo","extra":{"user_message":"fix the build"}}"#))
@@ -125,6 +126,19 @@ struct HermesHookTests {
 
         let verify = try #require(parse(#"{"hook_event_name":"pre_verify","cwd":"/repo","extra":{}}"#))
         #expect(verify.name == .stop)
+    }
+
+    @Test func gatewayEventsKeepRelativePathsAndOfferHints() throws {
+        // Process cwd is ~/.hermes; the tool path is relative to the session's project.
+        let write = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"write_file","tool_input":{"path":"src/a.py","content":"x"},"session_id":"s","cwd":"/Users/x/.hermes","extra":{}}"#))
+        #expect(write.filePath == "src/a.py")
+        #expect(write.cwd == "/Users/x/.hermes")
+
+        let shell = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"cd /Users/x/Projects/harbor && swift test"},"session_id":"s","cwd":"/Users/x/.hermes","extra":{}}"#))
+        #expect(shell.absolutePathHints == ["/Users/x/Projects/harbor"])
+
+        let scoped = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"ls","workdir":"/Users/x/Projects/harbor"},"session_id":"s","cwd":"/Users/x/.hermes","extra":{}}"#))
+        #expect(scoped.cwd == "/Users/x/Projects/harbor")
     }
 
     @Test func repeatedModelCallsDoNotRestartTheTurn() {

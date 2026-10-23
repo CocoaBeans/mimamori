@@ -49,6 +49,20 @@ public struct HookEvent: Sendable, Hashable {
         self.receivedAt = receivedAt
     }
 
+    /// Absolute paths mentioned in the summary or message, for matching events whose `cwd`
+    /// is not useful (gateway agents run with their own working directory).
+    public var absolutePathHints: [String] {
+        var hints: [String] = []
+        for text in [summary, message].compactMap({ $0 }) {
+            for token in text.split(whereSeparator: { $0.isWhitespace || $0 == "\"" || $0 == "'" || $0 == "`" }) {
+                var piece = String(token)
+                while let last = piece.last, ";:,)]}".contains(last) { piece.removeLast() }
+                if piece.hasPrefix("/"), piece.count > 1 { hints.append(piece) }
+            }
+        }
+        return hints
+    }
+
     /// Tools that change files or run commands; the ones worth a feed entry by default.
     public var isMutatingTool: Bool {
         guard let toolName else { return false }
@@ -69,7 +83,10 @@ public enum HookEventParser {
         return parse(object, receivedAt: receivedAt, agent: agent)
     }
 
-    public static func parse(_ object: [String: Any], receivedAt: Date = Date(), agent: AgentKind = .claudeCode) -> HookEvent? {
+    /// `resolveRelativePaths` joins a relative tool path with `cwd`; pass false when `cwd` is
+    /// the agent process's directory rather than the session's.
+    public static func parse(_ object: [String: Any], receivedAt: Date = Date(), agent: AgentKind = .claudeCode,
+                             resolveRelativePaths: Bool = true) -> HookEvent? {
         guard let rawName = object["hook_event_name"] as? String else { return nil }
         let name = HookEvent.Name(rawValue: rawName) ?? .other
         let cwd = object["cwd"] as? String
@@ -80,7 +97,11 @@ public enum HookEventParser {
 
         if let toolInput {
             if let path = (toolInput["file_path"] ?? toolInput["notebook_path"] ?? toolInput["path"]) as? String, !path.isEmpty {
-                filePath = path.hasPrefix("/") ? path : (cwd.map { ($0 as NSString).appendingPathComponent(path) } ?? path)
+                if path.hasPrefix("/") || !resolveRelativePaths {
+                    filePath = path
+                } else {
+                    filePath = cwd.map { ($0 as NSString).appendingPathComponent(path) } ?? path
+                }
                 summary = path
             } else if let command = toolInput["command"] as? String {
                 summary = firstLine(command)

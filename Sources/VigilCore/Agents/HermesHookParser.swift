@@ -42,9 +42,18 @@ public enum HermesHookParser {
         if rawName == "on_human_input_request" {
             object["message"] = (extra["prompt"] as? String).map { "Hermes is waiting for your input: \($0)" } ?? "Hermes is waiting for your input"
         }
+        // Hermes reports the *process* working directory, which for gateway and desktop sessions
+        // is ~/.hermes rather than the project. Prefer a working directory named by the tool call
+        // or the session, and leave relative tool paths relative so the receiver can place them.
+        let toolInput = object["tool_input"] as? [String: Any] ?? [:]
+        let sessionDirectory = [toolInput["workdir"], toolInput["cwd"], toolInput["working_dir"], toolInput["directory"],
+                                extra["session_cwd"], extra["cwd"], extra["working_directory"]]
+            .compactMap { $0 as? String }.first { $0.hasPrefix("/") }
+        if let sessionDirectory { object["cwd"] = sessionDirectory }
         let mapped = eventMap[rawName] ?? .other
         object["hook_event_name"] = mapped == .other ? rawName : mapped.rawValue
-        guard var event = HookEventParser.parse(object, receivedAt: receivedAt, agent: .hermes) else { return nil }
+        guard var event = HookEventParser.parse(object, receivedAt: receivedAt, agent: .hermes,
+                                                resolveRelativePaths: sessionDirectory != nil) else { return nil }
         event.rawName = rawName
         return event
     }

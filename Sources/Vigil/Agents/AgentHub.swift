@@ -52,6 +52,8 @@ final class AgentHub {
     var onNotes: @MainActor (_ worktree: String, _ agent: AgentKind, _ notes: [AgentNote]) -> Void = { _, _, _ in }
 
     private var machines: [String: AgentStatusMachine] = [:]
+    /// Last worktree each agent session was matched to, for events that carry no usable path.
+    private var worktreeBySession: [String: String] = [:]
     private var server: HookSocketServer?
     private let scanner = AgentScanner()
     private var scanTask: Task<Void, Never>?
@@ -135,9 +137,25 @@ final class AgentHub {
         eventsReceived += 1
         lastEventAt = event.receivedAt
         isListening = server?.isListening ?? false
-        guard let cwd = event.cwd, let worktree = resolveWorktree(cwd) else {
+        // Gateway and desktop agents run with a working directory of their own (Hermes's gateway
+        // sits in ~/.hermes), so fall back to the file a tool touches, then to the session's last
+        // known worktree.
+        var resolved: String? = event.cwd.flatMap(resolveWorktree)
+        if resolved == nil, let file = event.filePath, file.hasPrefix("/") { resolved = resolveWorktree(file) }
+        if resolved == nil {
+            for hint in event.absolutePathHints {
+                if let match = resolveWorktree(hint) { resolved = match; break }
+            }
+        }
+        if resolved == nil, let session = event.sessionID { resolved = worktreeBySession[session] }
+        guard let worktree = resolved else {
             eventsUnmatched += 1
             return
+        }
+        if let session = event.sessionID { worktreeBySession[session] = worktree }
+        var event = event
+        if let file = event.filePath, !file.hasPrefix("/") {
+            event.filePath = (worktree as NSString).appendingPathComponent(file)
         }
         var machine = machines[worktree] ?? AgentStatusMachine()
         let notes = machine.apply(event)
