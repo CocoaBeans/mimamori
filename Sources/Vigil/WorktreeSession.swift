@@ -38,6 +38,7 @@ final class WorktreeSession: Identifiable {
     private var pendingPaths: Set<String> = []
     private var pendingGitChange = false
     private var pendingForced = false
+    private var pendingQuiet = false
     private var needsRefresh = false
     private var isRefreshing = false
     private var firstPendingAt: Date?
@@ -109,10 +110,15 @@ final class WorktreeSession: Identifiable {
     }
 
     func updateSettings(_ settings: AppSettings) {
+        let previous = self.settings
         self.settings = settings
-        Task { await inspector?.setConfiguration(inspectorConfiguration) }
-        startSafetyPolling()
-        requestRefresh(force: true)
+        if previous.inspector != settings.inspector {
+            Task { await inspector?.setConfiguration(inspectorConfiguration) }
+            requestRefresh(force: true)
+        }
+        if previous.safetyPollSeconds != settings.safetyPollSeconds {
+            startSafetyPolling()
+        }
     }
 
     func setBaseline(_ baseline: Baseline) {
@@ -207,6 +213,7 @@ final class WorktreeSession: Identifiable {
         guard touchedWorktree || touchedGit || forced else { return }
         if touchedGit { pendingGitChange = true }
         if forced { pendingForced = true }
+        pendingQuiet = false
         scheduleRefresh()
     }
 
@@ -221,20 +228,26 @@ final class WorktreeSession: Identifiable {
         pollTask?.cancel()
         let interval = watcherActive ? settings.safetyPollSeconds : 3
         guard interval > 0 else { return }
+        // Stagger sessions so a safety sweep never lights up every row at once.
+        let initialDelay = Double.random(in: 0...interval)
         pollTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(initialDelay))
             while !Task.isCancelled {
+                guard let self else { return }
+                // With a live watcher the poll is only a backstop: refresh without the spinner.
+                self.requestRefresh(force: !self.watcherActive, quiet: self.watcherActive)
                 try? await Task.sleep(for: .seconds(interval))
-                guard !Task.isCancelled, let self else { return }
-                self.requestRefresh(force: !self.watcherActive)
             }
         }
     }
 
     // MARK: Refresh scheduling
 
-    func requestRefresh(force: Bool = false) {
+    /// `quiet` refreshes update the data without showing the busy indicator.
+    func requestRefresh(force: Bool = false, quiet: Bool = false) {
         guard !stopped, inspector != nil else { return }
         if force { pendingForced = true }
+        pendingQuiet = pendingQuiet && quiet || (quiet && !needsRefresh)
         scheduleRefresh(immediate: force)
     }
 
@@ -262,21 +275,27 @@ final class WorktreeSession: Identifiable {
             let paths = pendingPaths
             let gitChanged = pendingGitChange
             let forced = pendingForced
+            let quiet = pendingQuiet
             pendingPaths = []
             pendingGitChange = false
             pendingForced = false
+            pendingQuiet = false
 
             if !forced, !gitChanged, !paths.isEmpty, let inspector, await inspector.allIgnored(Array(paths)) {
                 continue
             }
-            await performRefresh()
+            await performRefresh(quiet: quiet)
         }
     }
 
-    private func performRefresh() async {
+    private func performRefresh(quiet: Bool = false) async {
         guard let inspector else { return }
         let started = Date()
-        phase = state == nil ? .indexing : .refreshing
+        if state == nil {
+            phase = .indexing
+        } else if !quiet {
+            phase = .refreshing
+        }
         do {
             let previous = state
             let fresh = try await inspector.refresh(baseline: baseline)

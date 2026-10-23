@@ -326,7 +326,16 @@ final class AppModel {
         persistUISoon()
     }
 
+    /// Diagnostics: how often something asked to update settings, and how often it mattered.
+    private(set) var settingsUpdateRequests = 0
+    private(set) var settingsUpdatesApplied = 0
+
     func updateSettings(_ newValue: AppSettings) {
+        settingsUpdateRequests += 1
+        // SwiftUI bindings (the menu bar item's isInserted, for one) can write back unchanged
+        // values on every scene update; those must not touch sessions or disk.
+        guard newValue != settings else { return }
+        settingsUpdatesApplied += 1
         let old = settings
         settings = newValue
         persisted.settings = newValue

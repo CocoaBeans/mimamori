@@ -43,6 +43,13 @@ enum DebugHooks {
                    session.change(for: select) != nil, session.selectedPath != select {
                     session.selectedPath = select
                 }
+                if model.debugFlags.contains("cycle") {
+                    let ids = model.orderedSessions.map(\.id)
+                    if !ids.isEmpty {
+                        let index = model.selectedWorktreeID.flatMap { ids.firstIndex(of: $0) } ?? -1
+                        model.select(worktree: ids[(index + 1) % ids.count])
+                    }
+                }
                 if let dump { writeDump(model: model, to: dump) }
                 if let screenshot { writeMainWindowImage(to: screenshot) }
                 if interval <= 0 { break }
@@ -56,6 +63,7 @@ enum DebugHooks {
         lines.append("time: \(Format.dateTime.string(from: Date()))")
         lines.append("git: \(model.gitVersion ?? "none") error=\(model.gitError ?? "-")")
         lines.append("selected: \(model.selectedWorktreeID ?? "-") showActivity=\(model.showActivity) sort=\(model.sortOrder.rawValue) flaggedOnly=\(model.flaggedOnly)")
+        lines.append("settings updates: requested=\(model.settingsUpdateRequests) applied=\(model.settingsUpdatesApplied)")
         for repo in model.repositories {
             lines.append("repo \(repo.displayName) [\(repo.rootPath)] error=\(repo.error ?? "-")")
             for worktree in repo.worktrees {
