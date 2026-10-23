@@ -32,6 +32,7 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.borderless)
                 Spacer()
+                AttentionNeededButton()
                 AttentionBadgeButton(sessions: model.orderedSessions, arrowEdge: .bottom, debugID: "sidebar")
             }
             .padding(.horizontal, 12)
@@ -69,7 +70,8 @@ private struct RepositorySection: View {
         Section(isExpanded: Binding(get: { !model.isCollapsed(repo) }, set: { model.setCollapsed(!$0, for: repo.id) })) {
             ForEach(visible) { worktree in
                 WorktreeRow(info: worktree, session: model.sessions[worktree.path], now: model.now,
-                            recencyWindow: model.settings.recencyWindowSeconds)
+                            recencyWindow: model.settings.recencyWindowSeconds,
+                            presence: model.agentHub.presence(for: worktree.path))
                     .tag(worktree.path)
                     .contextMenu {
                         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([worktree.url]) }
@@ -139,6 +141,7 @@ struct WorktreeRow: View {
     let session: WorktreeSession?
     let now: Date
     let recencyWindow: Double
+    var presence: AgentPresence? = nil
 
     private var isRecentlyActive: Bool {
         guard let date = session?.lastActivityDate else { return false }
@@ -153,10 +156,14 @@ struct WorktreeRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(session?.displayName ?? info.branch ?? info.name)
                     .lineLimit(1)
-                Text(info.isMain ? "main worktree" : info.name)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if let presence {
+                    AgentPresenceBadge(presence: presence)
+                } else {
+                    Text(info.isMain ? "main worktree" : info.name)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 4)
             if let session {

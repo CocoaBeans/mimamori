@@ -28,7 +28,10 @@ final class WorktreeSession: Identifiable {
     private(set) var lastRefreshDuration: TimeInterval?
     private(set) var lastActivityDate: Date?
     private(set) var watcherActive = false
+    private(set) var attributions: [String: ChangeAttribution] = [:]
     var selectedPath: String?
+    /// Asked for every file event; answers with the agent tool call that caused it, when known.
+    var attributionProvider: (@MainActor (String, Date) -> ChangeAttribution?)?
 
     var settings: AppSettings
     let onActivity: @MainActor ([ActivityEntry]) -> Void
@@ -320,7 +323,7 @@ final class WorktreeSession: Identifiable {
         lastRefreshDuration = Date().timeIntervalSince(started)
     }
 
-    private func apply(_ fresh: WorktreeState, events: [ActivityEntry]) {
+    private func apply(_ fresh: WorktreeState, events incoming: [ActivityEntry]) {
         state = fresh
         changes = fresh.changes
         var byPath: [String: FileChange] = [:]
@@ -328,13 +331,21 @@ final class WorktreeSession: Identifiable {
         changesByPath = byPath
 
         let now = Date()
-        for event in events {
-            guard let path = event.path else { continue }
-            switch event.kind {
-            case .created, .modified, .deleted, .renamed: lastChanged[path] = now
+        var events = incoming
+        for index in events.indices {
+            guard let path = events[index].path else { continue }
+            switch events[index].kind {
+            case .created, .modified, .deleted, .renamed:
+                lastChanged[path] = now
+                if let attribution = attributionProvider?(path, now) {
+                    attributions[path] = attribution
+                    let suffix = "by \(attribution.label)"
+                    events[index].detail = events[index].detail.map { "\($0) · \(suffix)" } ?? suffix
+                }
             default: break
             }
         }
+        attributions = attributions.filter { byPath[$0.key] != nil }
         if lastChanged.count > 5000 {
             let cutoff = now.addingTimeInterval(-settings.recencyWindowSeconds * 4)
             lastChanged = lastChanged.filter { $0.value > cutoff }

@@ -16,6 +16,12 @@ struct AppSettings: Codable, Hashable, Sendable {
     var wrapDiffLines: Bool = true
     var diffFontSize: Double = 12
     var inspector = InspectorConfiguration()
+    var agentScanEnabled: Bool = true
+    var agentScanIntervalSeconds: Double = 3
+    var agentToolCallsInFeed: AgentToolCallFeedMode = .mutating
+    var notifyOnAgentPermission: Bool = true
+    var notifyOnAgentTurnFinished: Bool = false
+    var customAgentNames: [String] = []
 
     init() {}
 
@@ -37,6 +43,24 @@ struct AppSettings: Codable, Hashable, Sendable {
         wrapDiffLines = try c.decodeIfPresent(Bool.self, forKey: .wrapDiffLines) ?? defaults.wrapDiffLines
         diffFontSize = try c.decodeIfPresent(Double.self, forKey: .diffFontSize) ?? defaults.diffFontSize
         inspector = try c.decodeIfPresent(InspectorConfiguration.self, forKey: .inspector) ?? defaults.inspector
+        agentScanEnabled = try c.decodeIfPresent(Bool.self, forKey: .agentScanEnabled) ?? defaults.agentScanEnabled
+        agentScanIntervalSeconds = try c.decodeIfPresent(Double.self, forKey: .agentScanIntervalSeconds) ?? defaults.agentScanIntervalSeconds
+        agentToolCallsInFeed = try c.decodeIfPresent(AgentToolCallFeedMode.self, forKey: .agentToolCallsInFeed) ?? defaults.agentToolCallsInFeed
+        notifyOnAgentPermission = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentPermission) ?? defaults.notifyOnAgentPermission
+        notifyOnAgentTurnFinished = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentTurnFinished) ?? defaults.notifyOnAgentTurnFinished
+        customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
+    }
+}
+
+enum AgentToolCallFeedMode: String, Codable, CaseIterable, Sendable {
+    case none, mutating, all
+
+    var title: String {
+        switch self {
+        case .none: "None"
+        case .mutating: "Edits and commands"
+        case .all: "Every tool call"
+        }
     }
 }
 

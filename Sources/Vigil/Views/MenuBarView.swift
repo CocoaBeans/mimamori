@@ -7,7 +7,10 @@ struct MenuBarLabel: View {
     var body: some View {
         let flagged = model.totalFlagged
         let changed = model.totalChangedFiles
-        if flagged > 0 {
+        let waiting = model.worktreesNeedingAttention.count
+        if waiting > 0 {
+            Label("\(waiting)", systemImage: "hand.raised.fill")
+        } else if flagged > 0 {
             Label("\(flagged)", systemImage: "eye.trianglebadge.exclamationmark")
         } else if changed > 0 {
             Label("\(changed)", systemImage: "eye")
@@ -27,6 +30,9 @@ struct MenuBarMenu: View {
             Text("No repositories watched")
         } else {
             Text("\(model.totalChangedFiles) changed · \(model.totalFlagged) flagged")
+            if !model.worktreesNeedingAttention.isEmpty {
+                Text("\(model.worktreesNeedingAttention.count) waiting for you")
+            }
             Divider()
             ForEach(repositories) { repo in
                 let sessions = model.visibleSessions(for: repo)
@@ -76,6 +82,9 @@ struct MenuBarMenu: View {
 
     private func worktreeTitle(for session: WorktreeSession) -> String {
         var title = session.displayName
+        if let presence = model.agentHub.presence(for: session.id) {
+            title += presence.needsAttention ? " ✋" : (presence.source == .hooks ? " ✨" : " ·")
+        }
         if session.changes.isEmpty {
             title += " · clean"
         } else {

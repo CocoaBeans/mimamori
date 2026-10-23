@@ -77,6 +77,15 @@ enum DebugHooks {
                 }
             }
         }
+        let hub = model.agentHub
+        lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled())")
+        for (worktree, list) in hub.processes.sorted(by: { $0.key < $1.key }) where !list.isEmpty {
+            let processes = list.map { "\($0.kind.id)#\($0.pid) cpu=\(String(format: "%.0f%%", $0.cpuLoad * 100))" }.joined(separator: ", ")
+            lines.append("  processes \((worktree as NSString).lastPathComponent): \(processes)")
+        }
+        for (worktree, status) in hub.statuses.sorted(by: { $0.key < $1.key }) {
+            lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count)")
+        }
         lines.append("activity (\(model.activity.count)):")
         for entry in model.activity.prefix(40) {
             lines.append("  \(Format.time.string(from: entry.date)) \(entry.kind.rawValue) \(entry.title) \(entry.detail ?? "")")

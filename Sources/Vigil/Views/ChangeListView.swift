@@ -79,7 +79,8 @@ struct ChangeListView: View {
                 List(selection: $session.selectedPath) {
                     ForEach(rows) { row in
                         ChangeRow(change: row.change, recency: row.recency, lastChanged: row.lastChanged,
-                                  now: model.now, worktreePath: session.id)
+                                  now: model.now, worktreePath: session.id,
+                                  attribution: session.attributions[row.change.path])
                             .tag(row.change.path)
                             .listRowBackground(rowBackground(recency: row.recency, selected: session.selectedPath == row.change.path))
                     }
@@ -145,6 +146,7 @@ struct ChangeRow: View {
     let lastChanged: Date?
     let now: Date
     let worktreePath: String
+    var attribution: ChangeAttribution? = nil
 
     private var visibleFlags: [AttentionFlag] {
         change.flags.filter { $0.severity >= .warning }.sorted { $0.severity > $1.severity }
@@ -183,6 +185,12 @@ struct ChangeRow: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                if let attribution {
+                    Label(attribution.label, systemImage: "sparkles")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 6)
             VStack(alignment: .trailing, spacing: 3) {
@@ -220,6 +228,7 @@ struct ChangeRow: View {
 }
 
 struct WorktreeHeaderView: View {
+    @Environment(AppModel.self) private var model
     let session: WorktreeSession
 
     var body: some View {
@@ -270,6 +279,9 @@ struct WorktreeHeaderView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+            }
+            if let presence = model.agentHub.presence(for: session.id) {
+                AgentStatusLine(presence: presence, now: model.now)
             }
             HStack(spacing: 8) {
                 BaselinePicker(session: session)

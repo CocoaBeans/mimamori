@@ -16,7 +16,8 @@ struct DiffView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
-                    DiffHeaderView(change: change, diff: diff, worktreePath: session.id) { lineNumber in
+                    DiffHeaderView(change: change, diff: diff, worktreePath: session.id,
+                           attribution: session.attributions[change.path]) { lineNumber in
                         jump(toNewLine: lineNumber)
                     }
                     Divider()
@@ -102,6 +103,7 @@ struct DiffHeaderView: View {
     let change: FileChange
     let diff: FileDiff?
     let worktreePath: String
+    var attribution: ChangeAttribution? = nil
     let onJump: (Int) -> Void
 
     private var wrapBinding: Binding<Bool> {
@@ -168,6 +170,14 @@ struct DiffHeaderView: View {
                 }
                 if change.kind == .deleted {
                     Tag("deleted")
+                }
+                if let attribution {
+                    Label(attribution.label + (attribution.detail.map { " · \($0)" } ?? ""), systemImage: "sparkles")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help("Changed at \(Format.time.string(from: attribution.at)) by this tool call")
                 }
                 if let old = change.oldPath {
                     Text("renamed from \(old)")

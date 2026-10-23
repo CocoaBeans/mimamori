@@ -23,6 +23,21 @@ final class Notifier {
         return authorized
     }
 
+    private var lastPostByKey: [String: Date] = [:]
+
+    /// A one-off notification, rate-limited per key.
+    func notify(title: String, body: String, key: String, minimumInterval: TimeInterval = 5) {
+        guard isAvailable, authorized else { return }
+        if let last = lastPostByKey[key], Date().timeIntervalSince(last) < minimumInterval { return }
+        lastPostByKey[key] = Date()
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        Task { try? await UNUserNotificationCenter.current().add(request) }
+    }
+
     func notify(entries: [ActivityEntry], worktreeName: String, minimumSeverity: Severity) {
         guard isAvailable, authorized else { return }
         let flagged = entries.filter { $0.kind == .flagged && ($0.severity ?? .info) >= minimumSeverity }

@@ -83,6 +83,10 @@ struct ActivityRow: View {
         case .started, .snapshot: return .accentColor
         case .flagged: return .orange
         case .watching: return .secondary
+        case .agentSession: return .accentColor
+        case .agentTurn: return .teal
+        case .agentTool: return .secondary
+        case .agentAttention: return .orange
         }
     }
 

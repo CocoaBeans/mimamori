@@ -4,6 +4,7 @@ public enum ActivityKind: String, Codable, Sendable, Hashable {
     case created, modified, deleted, renamed, reverted
     case committed, headMoved, branchChanged
     case started, snapshot, flagged, watching
+    case agentSession, agentTurn, agentTool, agentAttention
 
     public var systemImage: String {
         switch self {
@@ -19,8 +20,36 @@ public enum ActivityKind: String, Codable, Sendable, Hashable {
         case .snapshot: "camera"
         case .flagged: "exclamationmark.triangle"
         case .watching: "eye"
+        case .agentSession: "sparkles"
+        case .agentTurn: "checkmark.bubble"
+        case .agentTool: "wrench.and.screwdriver"
+        case .agentAttention: "hand.raised"
         }
     }
+
+    public var isAgentEvent: Bool {
+        switch self {
+        case .agentSession, .agentTurn, .agentTool, .agentAttention: true
+        default: false
+        }
+    }
+}
+
+/// Which agent tool call produced a file change, when hooks told us.
+public struct ChangeAttribution: Sendable, Hashable, Codable {
+    public var agent: String
+    public var tool: String
+    public var detail: String?
+    public var at: Date
+
+    public init(agent: String, tool: String, detail: String? = nil, at: Date) {
+        self.agent = agent
+        self.tool = tool
+        self.detail = detail
+        self.at = at
+    }
+
+    public var label: String { "\(agent) · \(tool)" }
 }
 
 /// One line in the activity feed.

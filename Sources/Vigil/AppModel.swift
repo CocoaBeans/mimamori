@@ -26,6 +26,7 @@ final class AppModel {
     private(set) var now = Date()
     private(set) var collapsedRepositories: Set<UUID>
     private(set) var hiddenWorktrees: Set<String>
+    let agentHub = AgentHub()
 
     var selectedWorktreeID: String?
     var showActivity: Bool
@@ -57,6 +58,8 @@ final class AppModel {
         self.collapsedRepositories = persisted.collapsedRepositories
         self.hiddenWorktrees = persisted.hiddenWorktrees
         startTicker()
+        agentHub.resolveWorktree = { [weak self] cwd in self?.worktree(containing: cwd) }
+        agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
         DebugHooks.start(model: self)
         Task { await bootstrap() }
     }
@@ -99,6 +102,7 @@ final class AppModel {
         sessions[path]?.stop()
         sessions.removeValue(forKey: path)
         if selectedWorktreeID == path { selectedWorktreeID = orderedSessions.first?.id }
+        agentHub.setWatchedWorktrees(Array(sessions.keys))
         persistSoon()
     }
 
@@ -131,6 +135,7 @@ final class AppModel {
 
     private func bootstrap() async {
         await locateGit()
+        agentHub.start(settings: settings)
         for repo in persisted.repositories {
             await loadRepository(id: repo.id, rootPath: repo.path)
         }
@@ -239,6 +244,7 @@ final class AppModel {
         if let selected = selectedWorktreeID, sessions[selected] == nil {
             selectedWorktreeID = orderedSessions.first?.id
         }
+        agentHub.setWatchedWorktrees(Array(sessions.keys))
         persistSoon()
     }
 
@@ -268,13 +274,33 @@ final class AppModel {
                             self?.persisted.worktreeSettings[session.id] = session.persistedSettings
                             self?.persistSoon()
                         })
+                    let worktreePath = info.path
+                    session.attributionProvider = { [weak self] path, date in
+                        self?.agentHub.attribution(for: worktreePath, path: path, at: date)
+                    }
                     sessions[info.path] = session
                     Task { await session.start(git: git) }
                 }
             }
+            agentHub.setWatchedWorktrees(Array(sessions.keys))
         } catch {
             repositories[index].error = error.localizedDescription
         }
+    }
+
+    /// The watched worktree that contains `cwd`, longest match first.
+    func worktree(containing cwd: String) -> String? {
+        let candidates = [cwd, URL(fileURLWithPath: cwd).resolvingSymlinksInPath().path]
+        var best: String? = nil
+        for key in sessions.keys {
+            let resolvedKey = URL(fileURLWithPath: key).resolvingSymlinksInPath().path
+            for candidate in candidates {
+                for root in [key, resolvedKey] where candidate == root || candidate.hasPrefix(root + "/") {
+                    if best == nil || key.count > best!.count { best = key }
+                }
+            }
+        }
+        return best
     }
 
     func rediscoverAll() {
@@ -341,6 +367,7 @@ final class AppModel {
         persisted.settings = newValue
         persistSoon()
         for session in sessions.values { session.updateSettings(newValue) }
+        agentHub.updateSettings(newValue)
         if old.gitPathOverride != newValue.gitPathOverride {
             Task { await locateGit() }
         }
@@ -359,6 +386,44 @@ final class AppModel {
     }
 
     func clearActivity() { activity.removeAll() }
+
+    var worktreesNeedingAttention: [String] { agentHub.worktreesNeedingAttention }
+
+    private func record(agentNotes notes: [AgentNote], agent: AgentKind, worktree: String) {
+        var entries: [ActivityEntry] = []
+        for note in notes {
+            let kind: ActivityKind
+            var severity: Severity? = nil
+            switch note.kind {
+            case .sessionStarted, .sessionEnded, .notification: kind = .agentSession
+            case .turnStarted, .turnFinished: kind = .agentTurn
+            case .toolCall:
+                switch settings.agentToolCallsInFeed {
+                case .none: continue
+                case .mutating where !note.isMutatingTool: continue
+                default: kind = .agentTool
+                }
+            case .needsPermission: kind = .agentAttention; severity = .warning
+            case .waiting: kind = .agentAttention
+            }
+            var relativePath: String? = nil
+            if let file = note.filePath, file.hasPrefix(worktree + "/") {
+                relativePath = String(file.dropFirst(worktree.count + 1))
+            }
+            entries.append(ActivityEntry(worktreePath: worktree, kind: kind, path: relativePath,
+                                         title: note.title, detail: note.detail, severity: severity))
+        }
+        record(entries)
+        let name = sessions[worktree]?.displayName ?? (worktree as NSString).lastPathComponent
+        for note in notes {
+            if note.kind == .needsPermission, settings.notifyOnAgentPermission {
+                notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "permission:" + worktree)
+            }
+            if note.kind == .turnFinished, settings.notifyOnAgentTurnFinished {
+                notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "turn:" + worktree)
+            }
+        }
+    }
 
     private func record(_ entries: [ActivityEntry]) {
         guard !entries.isEmpty else { return }

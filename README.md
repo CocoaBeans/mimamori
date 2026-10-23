@@ -28,7 +28,8 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 - **Shows diffs the way you read them.** Unified diff with line numbers, word-level emphasis on the parts of a line that actually changed, wrapping or horizontal scrolling, copy as a patch, and flags that jump to the offending line. ⌘F filters the file list.
 - **Records snapshots.** When the tree changes, Vigil writes a commit object of the whole working tree (untracked files included) under `refs/monitor/<worktree-id>/`. Branches, the index and the working tree are untouched. Snapshots keep the Start marker alive across restarts and let you compare against any earlier moment.
 - **Keeps an activity feed.** Created, modified, deleted and reverted files, commits, branch switches and new flags, newest first, for one worktree or all of them. Click an entry to jump to the file.
-- **Lives in the menu bar.** A glance shows total changed and flagged files; the menu lists every repository and worktree.
+- **Knows where the agents are.** Vigil scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in. With Claude Code hooks installed (Settings › Agents, one click, reversible) it also knows exactly what the agent is doing: when a turn starts and ends, each tool call, and when it is waiting for your permission or input. File changes are attributed to the tool call that made them, worktrees that need you are counted in the sidebar and the menu bar, and you can be notified when an agent needs permission.
+- **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you; the menu lists every repository and worktree.
 
 
 ## Requirements
@@ -73,12 +74,27 @@ This creates a throwaway repository, prints its path, and then edits, adds, dele
 
 - **Refresh pacing.** File events are debounced (default 400 ms) with a maximum delay (default 2.5 s) so continuous churn still refreshes. A quiet, staggered backstop poll runs every 45 s per worktree.
 
+## Agents and hooks
+
+Without any setup, Vigil detects agent processes by their working directory and shows them on the worktree they sit in. That tells you an agent is there and whether it is busy, nothing more.
+
+Hooks tell Vigil what the agent is doing. **Settings › Agents › Install Hooks** adds entries to `~/.claude/settings.json` for Claude Code's `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SubagentStop` and `SessionEnd` events. Each entry runs:
+
+```bash
+curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \
+  --unix-socket "$HOME/Library/Application Support/Vigil/vigil.sock" \
+  --data-binary @- http://vigil/event >/dev/null 2>&1 || true
+```
+
+A timestamped backup of the settings file is written first, hooks you already have are kept, and **Uninstall Hooks** removes only Vigil's entries. When Vigil is not running the command fails silently in under a second, so agents are never slowed down. Events are kept in memory only; nothing is written to disk and nothing leaves the machine. Other agents with a hook mechanism can post the same JSON shape (`hook_event_name`, `cwd`, `tool_name`, `tool_input`, …) to the socket.
+
 ## Privacy and footprint
 
-Vigil talks to nothing but your local `git`. It has no network code and no telemetry. On disk it writes:
+Vigil talks to nothing but your local `git`. It has no network code beyond a Unix-domain socket that only local processes can reach, and no telemetry. On disk it writes:
 
 - `~/Library/Application Support/Vigil/`: settings, the list of watched repositories, and the shadow index files.
 - `refs/monitor/…` inside watched repositories, for snapshots (see above).
+- `~/.claude/settings.json`, only when you click Install Hooks, with a backup beside it.
 
 ## Development
 
@@ -117,7 +133,7 @@ Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
 
 ## Ideas not built yet
 
-- Agent awareness: show which agent process is active in a worktree, and ingest tool events from agent hooks so each change is attributed to the tool call that made it.
+- A read-only transcript adapter for agents without hooks installed.
 - A "mark as reviewed" state so only changes you have not looked at stand out.
 - Side-by-side diffs and syntax highlighting.
 - A timeline scrubber across snapshots.

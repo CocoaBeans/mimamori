@@ -7,12 +7,13 @@ struct SettingsView: View {
             Tab("General", systemImage: "gear") { GeneralSettingsView() }
             Tab("Snapshots", systemImage: "camera") { SnapshotSettingsView() }
             Tab("Attention", systemImage: "exclamationmark.triangle") { AttentionSettingsView() }
+            Tab("Agents", systemImage: "sparkles") { AgentSettingsView() }
         }
-        .frame(width: 560, height: 520)
+        .frame(width: 560, height: 560)
     }
 }
 
-private struct SettingsBinding {
+struct SettingsBinding {
     @MainActor
     static func make(_ model: AppModel) -> Binding<AppSettings> {
         Binding(get: { model.settings }, set: { model.updateSettings($0) })
