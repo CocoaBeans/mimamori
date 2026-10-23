@@ -98,10 +98,21 @@ struct DiffView: View {
 }
 
 struct DiffHeaderView: View {
+    @Environment(AppModel.self) private var model
     let change: FileChange
     let diff: FileDiff?
     let worktreePath: String
     let onJump: (Int) -> Void
+
+    private var wrapBinding: Binding<Bool> {
+        Binding(
+            get: { model.settings.wrapDiffLines },
+            set: { value in
+                var copy = model.settings
+                copy.wrapDiffLines = value
+                model.updateSettings(copy)
+            })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -116,6 +127,13 @@ struct DiffHeaderView: View {
                     .layoutPriority(0)
                 Spacer(minLength: 8)
                 HStack(spacing: 6) {
+                    Toggle(isOn: wrapBinding) {
+                        Image(systemName: "arrow.turn.down.left")
+                    }
+                    .toggleStyle(.button)
+                    .help(model.settings.wrapDiffLines
+                          ? "Long lines wrap. Click to scroll them horizontally instead (⌥⌘W)."
+                          : "Long lines scroll horizontally. Click to wrap them (⌥⌘W).")
                     Button {
                         if let diff { Workspace.copy(diff.unifiedText) }
                     } label: {
@@ -319,28 +337,35 @@ struct DiffContentView: View {
         let visible = visible
         let highlights = Self.highlights(for: visible.hunks)
         let horizontal = !wrap && visible.lineCount <= Self.horizontalLimit
-        ScrollViewReader { proxy in
-            ScrollView(horizontal ? [.vertical, .horizontal] : .vertical) {
-                Group {
-                    if horizontal {
-                        VStack(alignment: .leading, spacing: 0) {
-                            rows(visible: visible, highlights: highlights, wrap: false)
-                        }
-                    } else {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            rows(visible: visible, highlights: highlights, wrap: true)
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView(horizontal ? [.vertical, .horizontal] : .vertical) {
+                    Group {
+                        if horizontal {
+                            VStack(alignment: .leading, spacing: 0) {
+                                rows(visible: visible, highlights: highlights, wrap: false)
+                            }
+                        } else {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                rows(visible: visible, highlights: highlights, wrap: true)
+                            }
                         }
                     }
+                    .padding(.vertical, 4)
+                    // A two-axis scroll view centers content smaller than itself; fill the
+                    // viewport so short diffs stay pinned to the top-leading corner.
+                    .frame(minWidth: horizontal ? geometry.size.width : nil,
+                           maxWidth: .infinity,
+                           minHeight: horizontal ? geometry.size.height : nil,
+                           alignment: .topLeading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
-            }
-            .onChange(of: targetLineID) { _, id in
-                guard let id else { return }
-                withAnimation { proxy.scrollTo(id, anchor: .center) }
-            }
-            .onAppear {
-                if let id = targetLineID { proxy.scrollTo(id, anchor: .center) }
+                .onChange(of: targetLineID) { _, id in
+                    guard let id else { return }
+                    withAnimation { proxy.scrollTo(id, anchor: .center) }
+                }
+                .onAppear {
+                    if let id = targetLineID { proxy.scrollTo(id, anchor: .center) }
+                }
             }
         }
     }
