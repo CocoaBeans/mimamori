@@ -12,14 +12,18 @@ struct DiffView: View {
     @State private var targetLineID: Int?
 
     var body: some View {
-        VStack(spacing: 0) {
-            DiffHeaderView(change: change, diff: diff, worktreePath: session.id) { lineNumber in
-                jump(toNewLine: lineNumber)
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    DiffHeaderView(change: change, diff: diff, worktreePath: session.id) { lineNumber in
+                        jump(toNewLine: lineNumber)
+                    }
+                    Divider()
+                }
+                .background(.bar)
             }
-            Divider()
-            content
-        }
-        .task(id: change.contentKey) {
+            .task(id: change.contentKey) {
             showAll = false
             targetLineID = nil
             await load()
@@ -36,8 +40,7 @@ struct DiffView: View {
                                    description: Text(binaryDescription))
         } else if let diff {
             if diff.hunks.isEmpty {
-                ContentUnavailableView("No Text Changes", systemImage: "doc",
-                                       description: Text(diff.isBinary ? "Binary content changed." : "Only metadata (such as file mode) changed."))
+                ContentUnavailableView("No Text Changes", systemImage: "doc", description: Text(emptyDiffDescription(diff)))
             } else {
                 DiffContentView(diff: diff, wrap: model.settings.wrapDiffLines,
                                 fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID)
@@ -49,6 +52,14 @@ struct DiffView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func emptyDiffDescription(_ diff: FileDiff) -> String {
+        if diff.isBinary { return "Binary content changed." }
+        if change.kind == .renamed || diff.isRename { return "The file was renamed; its contents are unchanged." }
+        if change.kind == .copied { return "The file was copied; its contents are unchanged." }
+        if change.modeChanged { return "Only the file mode changed (\(change.oldMode) to \(change.newMode))." }
+        return "Only metadata changed."
     }
 
     private var pointerDescription: String {
@@ -93,7 +104,8 @@ struct DiffHeaderView: View {
     let onJump: (Int) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
+            // Title row: only the path has to give way, everything else keeps its size.
             HStack(spacing: 8) {
                 StatusGlyph(kind: change.kind)
                 Text(change.path)
@@ -101,49 +113,67 @@ struct DiffHeaderView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
+                    .layoutPriority(0)
+                Spacer(minLength: 8)
+                HStack(spacing: 6) {
+                    Button {
+                        if let diff { Workspace.copy(diff.unifiedText) }
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .help("Copy the diff as a patch")
+                    .disabled(diff == nil || diff?.hunks.isEmpty == true)
+                    Button {
+                        Workspace.reveal(path: change.path, in: worktreePath)
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .help("Reveal in Finder")
+                    Button {
+                        Workspace.open(path: change.path, in: worktreePath)
+                    } label: {
+                        Image(systemName: "arrow.up.forward.app")
+                    }
+                    .help("Open with the default application")
+                    .disabled(change.kind == .deleted)
+                }
+                .buttonStyle(.borderless)
+                .fixedSize()
+            }
+            // Detail row: state tags, rename and mode notes, and the line counts.
+            HStack(spacing: 8) {
                 if change.isUntracked {
                     Tag("untracked")
                 }
                 if change.isStaged {
                     Tag("staged")
                 }
-                Spacer()
-                if !change.isBinary {
+                if change.kind == .deleted {
+                    Tag("deleted")
+                }
+                if let old = change.oldPath {
+                    Text("renamed from \(old)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .layoutPriority(0)
+                }
+                if change.modeChanged {
+                    Text("mode \(change.oldMode) → \(change.newMode)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                }
+                Spacer(minLength: 8)
+                if change.isBinary {
+                    Text("binary")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
                     DeltaText(additions: change.additions, deletions: change.deletions)
+                        .fixedSize()
                 }
-                Button {
-                    if let diff { Workspace.copy(diff.unifiedText) }
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .help("Copy the diff as a patch")
-                .disabled(diff == nil || diff?.hunks.isEmpty == true)
-                Button {
-                    Workspace.reveal(path: change.path, in: worktreePath)
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .help("Reveal in Finder")
-                Button {
-                    Workspace.open(path: change.path, in: worktreePath)
-                } label: {
-                    Image(systemName: "arrow.up.forward.app")
-                }
-                .help("Open with the default application")
-                .disabled(change.kind == .deleted)
-            }
-            .buttonStyle(.borderless)
-            if let old = change.oldPath {
-                Text("renamed from \(old)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            if change.modeChanged {
-                Text("mode \(change.oldMode) → \(change.newMode)")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
             }
             if !change.flags.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
@@ -174,6 +204,8 @@ struct DiffHeaderView: View {
         var body: some View {
             Text(text)
                 .font(.caption2.weight(.medium))
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .background(.quaternary, in: Capsule())
