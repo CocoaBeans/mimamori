@@ -35,8 +35,11 @@ final class AppModel {
     var selectedWorktreeID: String?
     /// The worktree whose session summary sheet is open.
     var summaryRequest: SummaryRequest?
-    /// Vigil's activity record starts here; summaries say so.
     let launchedAt = Date()
+    /// Where the activity record begins: the oldest entry kept on disk, or this launch.
+    private(set) var activityHistoryStart = Date()
+    /// The feed on disk, so it outlives restarts.
+    private let activityLog: ActivityLog
     /// Repository awaiting the user's confirmation in the sidebar's dialog.
     var repositoryPendingRemoval: RepositoryEntry?
     var showActivity: Bool
@@ -69,13 +72,18 @@ final class AppModel {
         self.selectedWorktreeID = persisted.ui.selectedWorktree
         self.collapsedRepositories = persisted.collapsedRepositories
         self.hiddenWorktrees = persisted.hiddenWorktrees
+        self.activityLog = ActivityLog(url: Persistence.activityURL,
+                                       retention: Double(persisted.settings.activityRetentionDays) * 86_400)
         startTicker()
         agentHub.resolveWorktree = { [weak self] cwd in self?.worktree(containing: cwd) }
         agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
         DebugHooks.start(model: self)
         // Review marks and other edits are saved after a short delay; do not lose them on quit.
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.persistNow() }
+            MainActor.assumeIsolated {
+                self?.persistNow()
+                self?.activityLog.flush()
+            }
         }
         Task { await bootstrap() }
     }
@@ -150,6 +158,7 @@ final class AppModel {
     // MARK: Bootstrap
 
     private func bootstrap() async {
+        await loadActivityHistory()
         await locateGit()
         agentHub.start(settings: settings)
         for repo in persisted.repositories {
@@ -262,6 +271,12 @@ final class AppModel {
         }
         repositoryWatchers[id]?.stop()
         repositoryWatchers.removeValue(forKey: id)
+        // Its history goes too, on disk as well as in the feed.
+        let removedPaths = Set(repo.worktrees.map(\.path))
+        if activity.contains(where: { removedPaths.contains($0.worktreePath) }) {
+            activity.removeAll { removedPaths.contains($0.worktreePath) }
+            activityLog.replaceAll(with: activity.reversed())
+        }
         persisted.repositories.removeAll { $0.id == id }
         collapsedRepositories.remove(id)
         for worktree in repo.worktrees { hiddenWorktrees.remove(worktree.path) }
@@ -394,6 +409,9 @@ final class AppModel {
         persistSoon()
         for session in sessions.values { session.updateSettings(newValue) }
         agentHub.updateSettings(newValue)
+        if old.activityRetentionDays != newValue.activityRetentionDays {
+            applyActivityRetention()
+        }
         if old.gitPathOverride != newValue.gitPathOverride {
             Task { await locateGit() }
         }
@@ -411,7 +429,29 @@ final class AppModel {
          })
     }
 
-    func clearActivity() { activity.removeAll() }
+    func clearActivity() {
+        activity.removeAll()
+        activityLog.replaceAll(with: [])
+        activityHistoryStart = Date()
+    }
+
+    /// Reads the feed kept from earlier runs. Entries recorded meanwhile are newer and stay on top.
+    private func loadActivityHistory() async {
+        let log = activityLog
+        let loaded = await Task.detached(priority: .utility) { log.load() }.value
+        activity += loaded.reversed()
+        activityHistoryStart = min(loaded.first?.date ?? launchedAt, launchedAt)
+    }
+
+    private func applyActivityRetention() {
+        let days = settings.activityRetentionDays
+        activityLog.retention = Double(days) * 86_400
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
+        guard activity.contains(where: { $0.date < cutoff }) else { return }
+        activity.removeAll { $0.date < cutoff }
+        activityLog.replaceAll(with: activity.reversed())
+        activityHistoryStart = max(activityHistoryStart, cutoff)
+    }
 
     // MARK: Session summary
 
@@ -437,7 +477,7 @@ final class AppModel {
         case .head, .branchPoint: nil
         }
         let entries = activity.filter { $0.worktreePath == session.id && $0.date >= (cutoff ?? .distantPast) }.reversed()
-        let since = max(cutoff ?? launchedAt, launchedAt)
+        let since = max(cutoff ?? activityHistoryStart, activityHistoryStart)
 
         var names: [String] = []
         if let presence = agentHub.presence(for: session.id) { names.append(presence.kind.displayName) }
@@ -544,7 +584,8 @@ final class AppModel {
     private func record(_ entries: [ActivityEntry]) {
         guard !entries.isEmpty else { return }
         activity.insert(contentsOf: entries.reversed(), at: 0)
-        if activity.count > 3000 { activity.removeLast(activity.count - 3000) }
+        if activity.count > activityLog.maxEntries { activity.removeLast(activity.count - activityLog.maxEntries) }
+        activityLog.append(entries)
         if settings.notificationsEnabled, let first = entries.first, let session = sessions[first.worktreePath] {
             notifier.notify(entries: entries, worktreeName: session.displayName, minimumSeverity: settings.notifyMinimumSeverity)
         }

@@ -18,6 +18,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var syntaxHighlighting: Bool = true
     var diffLayout: DiffLayout = .unified
     var summaryOptions = SessionSummaryOptions()
+    /// How long the activity feed is kept on disk.
+    var activityRetentionDays: Int = 7
     var inspector = InspectorConfiguration()
     var agentScanEnabled: Bool = true
     var agentScanIntervalSeconds: Double = 3
@@ -49,6 +51,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         syntaxHighlighting = try c.decodeIfPresent(Bool.self, forKey: .syntaxHighlighting) ?? defaults.syntaxHighlighting
         diffLayout = try c.decodeIfPresent(DiffLayout.self, forKey: .diffLayout) ?? defaults.diffLayout
         summaryOptions = try c.decodeIfPresent(SessionSummaryOptions.self, forKey: .summaryOptions) ?? defaults.summaryOptions
+        activityRetentionDays = try c.decodeIfPresent(Int.self, forKey: .activityRetentionDays) ?? defaults.activityRetentionDays
         inspector = try c.decodeIfPresent(InspectorConfiguration.self, forKey: .inspector) ?? defaults.inspector
         agentScanEnabled = try c.decodeIfPresent(Bool.self, forKey: .agentScanEnabled) ?? defaults.agentScanEnabled
         agentScanIntervalSeconds = try c.decodeIfPresent(Double.self, forKey: .agentScanIntervalSeconds) ?? defaults.agentScanIntervalSeconds
@@ -182,6 +185,7 @@ enum Persistence {
 
     static var stateURL: URL { supportDirectory.appendingPathComponent("state.json") }
     static var shadowIndexDirectory: URL { supportDirectory.appendingPathComponent("index", isDirectory: true) }
+    static var activityURL: URL { supportDirectory.appendingPathComponent("activity.jsonl") }
 
     static func load() -> PersistedState {
         guard let data = try? Data(contentsOf: stateURL) else { return PersistedState() }

@@ -57,6 +57,14 @@ struct GeneralSettingsView: View {
                 Stepper("Diff font size: \(Int(settings.wrappedValue.diffFontSize))",
                         value: settings.diffFontSize, in: 9...20, step: 1)
             }
+            Section {
+                Stepper("Keep activity for \(settings.wrappedValue.activityRetentionDays) day\(settings.wrappedValue.activityRetentionDays == 1 ? "" : "s")",
+                        value: settings.activityRetentionDays, in: 1...90)
+            } header: {
+                Text("Activity")
+            } footer: {
+                Text("The activity feed is saved in ~/Library/Application Support/Vigil/activity.jsonl, so it and session summaries survive a restart. Clearing the feed clears the file.")
+            }
             Section("Notifications") {
                 Toggle("Notify when a change is flagged", isOn: settings.notificationsEnabled)
                     .disabled(!model.isNotifierAvailable)

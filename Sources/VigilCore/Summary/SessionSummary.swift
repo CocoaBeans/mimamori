@@ -219,7 +219,7 @@ extension SessionSummary {
         if options.activity, !notable.isEmpty {
             writer.heading("Agent activity")
             if let activitySince {
-                writer.line("_What Vigil saw since \(writer.dateTime(activitySince))._")
+                writer.line("_What Vigil saw since \(writer.dateTime(activitySince)), while it was running._")
                 writer.blank()
             }
             let shown = notable.suffix(options.maxActivityEntries)

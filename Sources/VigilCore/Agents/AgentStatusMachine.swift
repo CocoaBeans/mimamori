@@ -203,7 +203,8 @@ public struct AgentStatusMachine: Sendable {
             var detail: String? = nil
             if let started = current.turnStartedAt {
                 let seconds = Int(now.timeIntervalSince(started))
-                detail = "\(current.toolCallsThisTurn) tool calls in \(seconds >= 60 ? "\(seconds / 60)m \(seconds % 60)s" : "\(seconds)s")"
+                let calls = current.toolCallsThisTurn == 1 ? "1 tool call" : "\(current.toolCallsThisTurn) tool calls"
+                detail = "\(calls) in \(seconds >= 60 ? "\(seconds / 60)m \(seconds % 60)s" : "\(seconds)s")"
             }
             notes.append(AgentNote(kind: .turnFinished, title: "\(agentName) finished a turn", detail: detail))
             current.turnStartedAt = nil

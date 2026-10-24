@@ -136,7 +136,7 @@ struct SessionSummarySheet: View {
 
     private func footerNote(_ summary: SessionSummary) -> String {
         let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).count
-        return "\(lines) lines · activity since \(Format.time.string(from: summary.activitySince ?? model.launchedAt))"
+        return "\(lines) lines · activity since \(Format.dateTime.string(from: summary.activitySince ?? model.launchedAt))"
     }
 
     private func copy() {
