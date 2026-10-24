@@ -49,6 +49,34 @@ public struct AgentToolCall: Identifiable, Sendable, Hashable, Codable {
     }
 
     public var isMutating: Bool { HookEvent.mutatingTools.contains(toolName) }
+    public var category: AgentToolCategory { AgentToolCategory(toolName: toolName) }
+}
+
+/// What kind of step a tool call is, across agents' differing tool names.
+public enum AgentToolCategory: String, Sendable, Hashable, CaseIterable {
+    case edit, command, read, search, web, subagent, question, other
+
+    public init(toolName: String) {
+        switch toolName {
+        case "Edit", "Write", "MultiEdit", "NotebookEdit",
+             "write_file", "patch", "apply_patch", "edit_file", "delete_file":
+            self = .edit
+        case "Bash", "BashOutput", "KillShell", "terminal", "execute_code", "process":
+            self = .command
+        case "Read", "NotebookRead", "read_file", "view_file":
+            self = .read
+        case "Grep", "Glob", "LS", "search_files", "list_files", "find_files":
+            self = .search
+        case "WebFetch", "WebSearch", "web_search", "web_extract":
+            self = .web
+        case "Task", "Agent", "delegate_task":
+            self = .subagent
+        case "AskUserQuestion", "clarify":
+            self = .question
+        default:
+            self = toolName.hasPrefix("browser") ? .web : .other
+        }
+    }
 }
 
 public struct AgentStatus: Sendable, Hashable, Codable {
@@ -60,6 +88,10 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var turnStartedAt: Date?
     public var toolCallsThisTurn: Int
     public var recentToolCalls: [AgentToolCall]
+    /// The prompt that started the current (or, once it ends, the last) turn.
+    public var task: String?
+    /// When the last turn began; unlike `turnStartedAt` it survives the turn's end.
+    public var lastTurnStartedAt: Date?
 
     public init(agent: AgentKind, activity: AgentActivity, since: Date, lastEventAt: Date, sessionID: String? = nil,
                 turnStartedAt: Date? = nil, toolCallsThisTurn: Int = 0, recentToolCalls: [AgentToolCall] = []) {
@@ -71,6 +103,12 @@ public struct AgentStatus: Sendable, Hashable, Codable {
         self.turnStartedAt = turnStartedAt
         self.toolCallsThisTurn = toolCallsThisTurn
         self.recentToolCalls = recentToolCalls
+    }
+
+    /// The current turn's tool calls, or the last turn's once it has ended, oldest first.
+    public var turnToolCalls: [AgentToolCall] {
+        guard let start = turnStartedAt ?? lastTurnStartedAt else { return Array(recentToolCalls.suffix(10)) }
+        return recentToolCalls.filter { $0.startedAt >= start }
     }
 
     /// The tool call running at `date`, or one that finished within `grace` seconds before it.
@@ -143,9 +181,12 @@ public struct AgentStatusMachine: Sendable {
             }
             if midTurn {
                 set(.working(tool: nil, detail: nil))
+                if current.task == nil, let message = event.message { current.task = message }
             } else {
                 set(.working(tool: nil, detail: nil))
                 current.turnStartedAt = now
+                current.lastTurnStartedAt = now
+                current.task = event.message
                 current.toolCallsThisTurn = 0
                 notes.append(AgentNote(kind: .turnStarted, title: "\(agentName) started a turn", detail: event.message))
             }

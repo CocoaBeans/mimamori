@@ -13,6 +13,13 @@ struct AgentPresence: Hashable {
     var isBusy: Bool
     var lastToolCall: AgentToolCall?
     var toolCallsThisTurn: Int
+    /// The prompt behind the current turn, or the last one once it ended.
+    var task: String? = nil
+    /// That turn's tool calls, oldest first.
+    var turnSteps: [AgentToolCall] = []
+    var turnStartedAt: Date? = nil
+    /// Agent processes running in the worktree, for finding the app they run in.
+    var processIDs: [Int32] = []
 
     var needsAttention: Bool { source == .hooks && activity.needsAttention }
 
@@ -63,6 +70,9 @@ final class AgentHub {
     @ObservationIgnored private var watchedWorktrees: [String] = []
     @ObservationIgnored private var settings = AppSettings()
     @ObservationIgnored private var publishTask: Task<Void, Never>?
+    /// Events from sessions not placed yet, replayed once a later event places them. A gateway
+    /// agent's prompt arrives before any tool call says where it is working.
+    @ObservationIgnored private var heldBySession: [String: [HookEvent]] = [:]
     @ObservationIgnored private var lastPublishedAt = Date.distantPast
 
     /// A busy agent sends several hook events a second, and every change to `statuses` repaints
@@ -162,6 +172,7 @@ final class AgentHub {
                                        pathMatch: pathMatch, changesFiles: event.isMutatingTool)
         guard let worktree = decision.worktree else {
             eventsUnmatched += 1
+            hold(event)
             return
         }
         // The session moved on: do not leave its old status behind.
@@ -169,16 +180,39 @@ final class AgentHub {
             statuses.removeValue(forKey: old)
             machines.removeValue(forKey: old)
         }
+        var machine = machines[worktree] ?? AgentStatusMachine()
+        let before = machine.status?.activity
+        var notes: [AgentNote] = []
+        if let session = event.sessionID, let held = heldBySession.removeValue(forKey: session) {
+            for earlier in held { notes += machine.apply(Self.anchored(earlier, in: worktree)) }
+        }
+        notes += machine.apply(Self.anchored(event, in: worktree))
+        machines[worktree] = machine
+        schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
+        if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
+    }
+
+    private func hold(_ event: HookEvent) {
+        guard let session = event.sessionID else { return }
+        var held = heldBySession[session, default: []]
+        held.append(event)
+        if held.count > 20 { held.removeFirst(held.count - 20) }
+        heldBySession[session] = held
+        // Sessions that never get placed (an agent in an unwatched folder) must not pile up.
+        if heldBySession.count > 50, let oldest = heldBySession.min(by: {
+            ($0.value.last?.receivedAt ?? .distantPast) < ($1.value.last?.receivedAt ?? .distantPast)
+        })?.key {
+            heldBySession.removeValue(forKey: oldest)
+        }
+    }
+
+    /// Relative tool paths are relative to the worktree the event was placed in.
+    private static func anchored(_ event: HookEvent, in worktree: String) -> HookEvent {
         var event = event
         if let file = event.filePath, !file.hasPrefix("/") {
             event.filePath = (worktree as NSString).appendingPathComponent(file)
         }
-        var machine = machines[worktree] ?? AgentStatusMachine()
-        let before = machine.status?.activity
-        let notes = machine.apply(event)
-        machines[worktree] = machine
-        schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
-        if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
+        return event
     }
 
     /// Working on one tool or another is the same state; anything else is a change worth showing now.
@@ -251,13 +285,16 @@ final class AgentHub {
         if let status = statuses[worktree], status.activity != .idle || !running.isEmpty {
             return AgentPresence(kind: status.agent, source: .hooks, activity: status.activity, since: status.since,
                                  processCount: running.count, isBusy: running.contains(where: \.isBusy),
-                                 lastToolCall: status.recentToolCalls.last, toolCallsThisTurn: status.toolCallsThisTurn)
+                                 lastToolCall: status.recentToolCalls.last, toolCallsThisTurn: status.toolCallsThisTurn,
+                                 task: status.task, turnSteps: status.turnToolCalls,
+                                 turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
+                                 processIDs: running.map(\.pid))
         }
         guard let first = running.first else { return nil }
         let earliest = running.map(\.startedAt).min() ?? first.startedAt
         return AgentPresence(kind: first.kind, source: .process, activity: .idle, since: earliest,
                              processCount: running.count, isBusy: running.contains(where: \.isBusy),
-                             lastToolCall: nil, toolCallsThisTurn: 0)
+                             lastToolCall: nil, toolCallsThisTurn: 0, processIDs: running.map(\.pid))
     }
 
     var worktreesNeedingAttention: [String] {

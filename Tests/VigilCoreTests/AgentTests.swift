@@ -442,3 +442,63 @@ struct SessionPlacementTests {
         #expect(placement.place(session: nil, cwdMatch: nil, pathMatch: nil, changesFiles: true).worktree == nil)
     }
 }
+
+@Suite("Agent turns")
+struct AgentTurnTests {
+    private func event(_ name: HookEvent.Name, tool: String? = nil, id: String? = nil, path: String? = nil,
+                       message: String? = nil, agent: AgentKind = .claudeCode, at seconds: TimeInterval) -> HookEvent {
+        HookEvent(name: name, rawName: name.rawValue, agent: agent, sessionID: "s", cwd: "/repo", toolName: tool, toolUseID: id,
+                  filePath: path, summary: path, message: message, receivedAt: Date(timeIntervalSince1970: 1000 + seconds))
+    }
+
+    @Test func remembersTheTaskAndTheTurnsSteps() {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.userPromptSubmit, message: "first task", at: 0))
+        _ = machine.apply(event(.preToolUse, tool: "Read", id: "r1", path: "/repo/a.swift", at: 1))
+        _ = machine.apply(event(.stop, at: 2))
+        _ = machine.apply(event(.userPromptSubmit, message: "add a discount", at: 10))
+        _ = machine.apply(event(.preToolUse, tool: "Edit", id: "e1", path: "/repo/Cart.swift", at: 11))
+        _ = machine.apply(event(.postToolUse, tool: "Edit", id: "e1", at: 12))
+        _ = machine.apply(event(.preToolUse, tool: "Bash", id: "b1", at: 13))
+        var status = machine.status!
+        #expect(status.task == "add a discount")
+        #expect(status.turnToolCalls.map(\.toolName) == ["Edit", "Bash"])
+
+        // Once the turn ends its task and steps stay visible as the last turn's.
+        _ = machine.apply(event(.stop, at: 20))
+        status = machine.status!
+        #expect(status.turnStartedAt == nil)
+        #expect(status.task == "add a discount")
+        #expect(status.turnToolCalls.map(\.toolName) == ["Edit", "Bash"])
+    }
+
+    @Test func repeatedModelCallsKeepTheTask() {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.userPromptSubmit, message: "theme the checkout", agent: .hermes, at: 0))
+        _ = machine.apply(event(.preToolUse, tool: "terminal", id: "t1", agent: .hermes, at: 1))
+        // Hermes fires its prompt hook before every model call; answering a question has no message.
+        _ = machine.apply(event(.userPromptSubmit, message: "theme the checkout", agent: .hermes, at: 2))
+        _ = machine.apply(event(.userPromptSubmit, agent: .hermes, at: 3))
+        #expect(machine.status?.task == "theme the checkout")
+        #expect(machine.status?.turnToolCalls.count == 1)
+    }
+
+    @Test func toolCategoriesSpanAgents() {
+        #expect(AgentToolCategory(toolName: "Edit") == .edit)
+        #expect(AgentToolCategory(toolName: "write_file") == .edit)
+        #expect(AgentToolCategory(toolName: "Bash") == .command)
+        #expect(AgentToolCategory(toolName: "terminal") == .command)
+        #expect(AgentToolCategory(toolName: "Read") == .read)
+        #expect(AgentToolCategory(toolName: "Grep") == .search)
+        #expect(AgentToolCategory(toolName: "WebFetch") == .web)
+        #expect(AgentToolCategory(toolName: "browser_navigate") == .web)
+        #expect(AgentToolCategory(toolName: "Task") == .subagent)
+        #expect(AgentToolCategory(toolName: "AskUserQuestion") == .question)
+        #expect(AgentToolCategory(toolName: "mcp__notion__search") == .other)
+    }
+
+    @Test func findsTheParentProcess() {
+        #expect(ProcessInspector.parentPID(of: getpid()) == getppid())
+        #expect(ProcessInspector.parentPID(of: -1) == nil)
+    }
+}

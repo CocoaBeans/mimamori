@@ -29,7 +29,7 @@ struct VigilApp: App {
             AgentsWindowView()
                 .environment(model)
         }
-        .defaultSize(width: 460, height: 460)
+        .defaultSize(width: 520, height: 620)
         .windowResizability(.contentMinSize)
         .keyboardShortcut("a", modifiers: [.command, .shift])
         .windowLevel(model.settings.agentsWindowFloats ? .floating : .normal)

@@ -28,6 +28,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var notifyOnAgentTurnFinished: Bool = false
     var customAgentNames: [String] = []
     var agentsWindowFloats: Bool = false
+    /// Rows show the task, recent steps and files; off for one-line-per-agent rows.
+    var agentsWindowDetailed: Bool = true
 
     init() {}
 
@@ -60,6 +62,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         notifyOnAgentTurnFinished = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentTurnFinished) ?? defaults.notifyOnAgentTurnFinished
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
         agentsWindowFloats = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowFloats) ?? defaults.agentsWindowFloats
+        agentsWindowDetailed = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowDetailed) ?? defaults.agentsWindowDetailed
     }
 }
 

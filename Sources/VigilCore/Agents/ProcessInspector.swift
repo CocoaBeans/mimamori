@@ -30,6 +30,14 @@ public enum ProcessInspector {
         }
     }
 
+    /// The process that started this one.
+    public static func parentPID(of pid: Int32) -> Int32? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return Int32(info.pbi_ppid)
+    }
+
     public static func startDate(of pid: Int32) -> Date? {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
