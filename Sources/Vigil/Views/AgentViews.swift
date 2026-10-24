@@ -1,6 +1,9 @@
 import SwiftUI
 import VigilCore
 
+// Agent icons stay still on purpose. Any repeating symbol effect (a pulse, or a bounce per
+// tool call) redraws the window every frame while an agent works, which cost a quarter of a
+// CPU core; the tint and the status text already change as the agent does.
 extension AgentPresence {
     var tint: Color {
         switch (source, activity) {
@@ -69,18 +72,12 @@ struct AgentPresenceBadge: View {
             Image(systemName: presence.systemImage)
                 .font(.caption2)
                 .foregroundStyle(presence.tint)
-                .symbolEffect(.pulse, options: .repeating, isActive: isWorking)
             Text(summary)
                 .font(.caption)
                 .foregroundStyle(presence.needsAttention ? presence.tint : .secondary)
                 .lineLimit(1)
         }
         .help(presence.kind.displayName + " · " + presence.statusText)
-    }
-
-    private var isWorking: Bool {
-        if case .working = presence.activity, presence.source == .hooks { return true }
-        return presence.source == .process && presence.isBusy
     }
 
     private var summary: String {
@@ -132,11 +129,6 @@ struct AgentStatusLine: View {
 struct AgentStatusBanner: View {
     let presence: AgentPresence
     let now: Date
-
-    private var isWorking: Bool {
-        if case .working = presence.activity, presence.source == .hooks { return true }
-        return presence.source == .process && presence.isBusy
-    }
 
     private var headline: String {
         switch (presence.source, presence.activity) {
@@ -190,7 +182,6 @@ struct AgentStatusBanner: View {
             Image(systemName: presence.systemImage)
                 .font(.title2)
                 .foregroundStyle(presence.tint)
-                .symbolEffect(.pulse, options: .repeating, isActive: isWorking)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 // Shorten the words before truncating them, so a narrow column still reads.

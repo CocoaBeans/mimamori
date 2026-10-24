@@ -53,14 +53,22 @@ final class AgentHub {
     var resolveWorktree: @MainActor (String) -> String? = { _ in nil }
     var onNotes: @MainActor (_ worktree: String, _ agent: AgentKind, _ notes: [AgentNote]) -> Void = { _, _, _ in }
 
-    private var machines: [String: AgentStatusMachine] = [:]
+    // Bookkeeping that views never read, kept out of observation.
+    @ObservationIgnored private var machines: [String: AgentStatusMachine] = [:]
     /// Which worktree each agent session works in, for events that carry no usable directory.
-    private var placement = SessionPlacement()
-    private var server: HookSocketServer?
-    private let scanner = AgentScanner()
-    private var scanTask: Task<Void, Never>?
-    private var watchedWorktrees: [String] = []
-    private var settings = AppSettings()
+    @ObservationIgnored private var placement = SessionPlacement()
+    @ObservationIgnored private var server: HookSocketServer?
+    @ObservationIgnored private let scanner = AgentScanner()
+    @ObservationIgnored private var scanTask: Task<Void, Never>?
+    @ObservationIgnored private var watchedWorktrees: [String] = []
+    @ObservationIgnored private var settings = AppSettings()
+    @ObservationIgnored private var publishTask: Task<Void, Never>?
+    @ObservationIgnored private var lastPublishedAt = Date.distantPast
+
+    /// A busy agent sends several hook events a second, and every change to `statuses` repaints
+    /// each window that shows an agent. A change of state (to waiting on you, ready, ended)
+    /// shows at once; a stream of "working · <tool>" updates is shown at most this often.
+    private static let publishInterval: TimeInterval = 1.0
 
     // MARK: Lifecycle
 
@@ -138,7 +146,8 @@ final class AgentHub {
     private func handle(_ event: HookEvent) {
         eventsReceived += 1
         lastEventAt = event.receivedAt
-        isListening = server?.isListening ?? false
+        let listening = server?.isListening ?? false
+        if listening != isListening { isListening = listening }
         // Gateway and desktop agents run with a working directory of their own (Hermes's gateway
         // sits in ~/.hermes), so the paths a tool touches stand in; see SessionPlacement for how
         // a read weighs against an edit.
@@ -156,7 +165,7 @@ final class AgentHub {
             return
         }
         // The session moved on: do not leave its old status behind.
-        if let old = decision.movedFrom, let session = event.sessionID, statuses[old]?.sessionID == session {
+        if let old = decision.movedFrom, let session = event.sessionID, machines[old]?.status?.sessionID == session {
             statuses.removeValue(forKey: old)
             machines.removeValue(forKey: old)
         }
@@ -165,23 +174,63 @@ final class AgentHub {
             event.filePath = (worktree as NSString).appendingPathComponent(file)
         }
         var machine = machines[worktree] ?? AgentStatusMachine()
+        let before = machine.status?.activity
         let notes = machine.apply(event)
         machines[worktree] = machine
-        if let status = machine.status { statuses[worktree] = status }
+        schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
         if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
+    }
+
+    /// Working on one tool or another is the same state; anything else is a change worth showing now.
+    private static func sameState(_ a: AgentActivity?, _ b: AgentActivity?) -> Bool {
+        switch (a, b) {
+        case (.working?, .working?): true
+        default: a == b
+        }
+    }
+
+    private func schedulePublish(urgent: Bool) {
+        let wait = Self.publishInterval - Date().timeIntervalSince(lastPublishedAt)
+        if urgent || wait <= 0 {
+            publishTask?.cancel()
+            publishTask = nil
+            publishStatuses()
+            return
+        }
+        guard publishTask == nil else { return }
+        publishTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard let self, !Task.isCancelled else { return }
+            self.publishTask = nil
+            self.publishStatuses()
+        }
+    }
+
+    private func publishStatuses() {
+        lastPublishedAt = Date()
+        let fresh = machines.compactMapValues(\.status)
+        if fresh != statuses { statuses = fresh }
+    }
+
+    /// What views show of agent processes. CPU readings differ on every scan; only a change
+    /// in which processes run, or whether they are busy, is worth a repaint.
+    private static func visibleSummary(_ found: [String: [AgentProcess]]) -> [String: [String]] {
+        found.filter { !$0.value.isEmpty }.mapValues { list in
+            list.map { "\($0.pid)|\($0.kind.id)|\($0.isBusy)" }.sorted()
+        }
     }
 
     private func apply(processes found: [String: [AgentProcess]]) {
         let previous = processes
-        processes = found
+        if Self.visibleSummary(found) != Self.visibleSummary(previous) { processes = found }
         // Announce arrivals and departures only where hooks are not already reporting.
-        for (worktree, list) in found where statuses[worktree] == nil {
+        for (worktree, list) in found where machines[worktree]?.status == nil {
             let before = Set(previous[worktree]?.map(\.pid) ?? [])
             for process in list where !before.contains(process.pid) {
                 onNotes(worktree, process.kind, [AgentNote(kind: .sessionStarted, title: "\(process.kind.displayName) is running here")])
             }
         }
-        for (worktree, list) in previous where statuses[worktree] == nil {
+        for (worktree, list) in previous where machines[worktree]?.status == nil {
             let now = Set(found[worktree]?.map(\.pid) ?? [])
             for process in list where !now.contains(process.pid) {
                 onNotes(worktree, process.kind, [AgentNote(kind: .sessionEnded, title: "\(process.kind.displayName) exited")])
@@ -221,7 +270,8 @@ final class AgentHub {
 
     /// The tool call responsible for a change to `path` in `worktree` around `date`, if hooks know.
     func attribution(for worktree: String, path: String, at date: Date) -> ChangeAttribution? {
-        guard let status = statuses[worktree] else { return nil }
+        // Straight from the machine: published statuses may lag by a moment.
+        guard let status = machines[worktree]?.status else { return nil }
         let absolute = (worktree as NSString).appendingPathComponent(path)
         let window = status.recentToolCalls.filter { call in
             call.startedAt <= date.addingTimeInterval(1) && (call.finishedAt ?? .distantFuture) >= date.addingTimeInterval(-5)

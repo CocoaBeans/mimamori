@@ -126,7 +126,6 @@ struct AgentDashboardRow: View {
             Image(systemName: presence.systemImage)
                 .font(.title3)
                 .foregroundStyle(presence.tint)
-                .symbolEffect(.pulse, options: .repeating, isActive: presence.isWorking)
                 .frame(width: 24)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 3) {

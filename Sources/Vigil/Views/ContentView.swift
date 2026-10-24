@@ -42,9 +42,7 @@ struct ContentView: View {
     private var detailColumn: some View {
         if let session = model.selectedSession {
             VStack(spacing: 0) {
-                if let presence = model.agentHub.presence(for: session.id) {
-                    AgentStatusBanner(presence: presence, now: model.now)
-                }
+                AgentBannerSlot(worktree: session.id)
                 if let path = session.selectedPath, let change = session.change(for: path) {
                     DiffView(session: session, change: change)
                 } else {
@@ -175,6 +173,19 @@ struct WelcomeView: View {
         .dropDestination(for: URL.self) { urls, _ in
             model.addRepositories(at: urls)
             return true
+        }
+    }
+}
+
+/// The agent banner for a worktree. Reading the agent hub here, not in the window's body,
+/// keeps a busy agent's updates from re-evaluating the whole main window.
+private struct AgentBannerSlot: View {
+    @Environment(AppModel.self) private var model
+    let worktree: String
+
+    var body: some View {
+        if let presence = model.agentHub.presence(for: worktree) {
+            AgentStatusBanner(presence: presence, now: model.now)
         }
     }
 }
