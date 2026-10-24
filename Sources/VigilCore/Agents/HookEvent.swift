@@ -30,11 +30,14 @@ public struct HookEvent: Sendable, Hashable {
     /// Short human-readable description of the tool input (a command, a pattern, a path).
     public var summary: String?
     public var message: String?
+    /// Claude Code's kind of notification: `permission_prompt`, `idle_prompt`, `elicitation_dialog`,
+    /// `auth_success`. Hermes input requests are mapped to `question`.
+    public var notificationType: String?
     public var receivedAt: Date
 
     public init(name: Name, rawName: String, agent: AgentKind = .claudeCode, sessionID: String? = nil, cwd: String? = nil,
                 transcriptPath: String? = nil, toolName: String? = nil, toolUseID: String? = nil, filePath: String? = nil,
-                summary: String? = nil, message: String? = nil, receivedAt: Date = Date()) {
+                summary: String? = nil, message: String? = nil, notificationType: String? = nil, receivedAt: Date = Date()) {
         self.name = name
         self.rawName = rawName
         self.agent = agent
@@ -46,6 +49,7 @@ public struct HookEvent: Sendable, Hashable {
         self.filePath = filePath
         self.summary = summary
         self.message = message
+        self.notificationType = notificationType
         self.receivedAt = receivedAt
     }
 
@@ -68,6 +72,11 @@ public struct HookEvent: Sendable, Hashable {
         guard let toolName else { return false }
         return Self.mutatingTools.contains(toolName) || toolName.hasPrefix("mcp__") && toolName.lowercased().contains("write")
     }
+
+    /// Tools that stop and ask you something; the agent is blocked until you answer.
+    public var isQuestionTool: Bool { toolName.map(Self.questionTools.contains) ?? false }
+
+    static let questionTools: Set<String> = ["AskUserQuestion"]
 
     static let mutatingTools: Set<String> = [
         // Claude Code
@@ -103,6 +112,9 @@ public enum HookEventParser {
                     filePath = cwd.map { ($0 as NSString).appendingPathComponent(path) } ?? path
                 }
                 summary = path
+            } else if let questions = toolInput["questions"] as? [[String: Any]],
+                      let question = questions.first?["question"] as? String {
+                summary = firstLine(question)  // AskUserQuestion
             } else if let command = toolInput["command"] as? String {
                 summary = firstLine(command)
             } else if let pattern = toolInput["pattern"] as? String {
@@ -134,6 +146,7 @@ public enum HookEventParser {
             filePath: filePath,
             summary: summary.map { String($0.prefix(120)) },
             message: message.map { String($0.prefix(200)) },
+            notificationType: object["notification_type"] as? String,
             receivedAt: receivedAt)
     }
 

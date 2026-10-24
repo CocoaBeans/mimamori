@@ -463,7 +463,7 @@ final class AppModel {
         record(entries)
         let name = sessions[worktree]?.displayName ?? (worktree as NSString).lastPathComponent
         for note in notes {
-            if note.kind == .needsPermission, settings.notifyOnAgentPermission {
+            if note.kind == .needsPermission || note.kind == .waiting, settings.notifyOnAgentPermission {
                 notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "permission:" + worktree)
             }
             if note.kind == .turnFinished, settings.notifyOnAgentTurnFinished {

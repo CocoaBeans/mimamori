@@ -4,13 +4,18 @@ import Foundation
 public enum AgentActivity: Sendable, Hashable, Codable {
     case working(tool: String?, detail: String?)
     case needsPermission(tool: String, detail: String?)
-    case waitingForInput
+    /// Blocked on a question for you: a clarifying question or a dialog asking for input.
+    case askedQuestion(detail: String?)
+    /// Finished its turn and ready for your next prompt. Nothing is blocked on you.
+    case ready
+    /// The session ended.
     case idle
 
+    /// Blocked until you act: only permission requests and real questions.
     public var needsAttention: Bool {
         switch self {
-        case .needsPermission, .waitingForInput: true
-        case .working, .idle: false
+        case .needsPermission, .askedQuestion: true
+        case .working, .ready, .idle: false
         }
     }
 
@@ -18,7 +23,8 @@ public enum AgentActivity: Sendable, Hashable, Codable {
         switch self {
         case .working(let tool, _): tool.map { "working · \($0)" } ?? "working"
         case .needsPermission(let tool, _): "needs permission for \(tool)"
-        case .waitingForInput: "waiting for your input"
+        case .askedQuestion: "has a question for you"
+        case .ready: "ready for your next prompt"
         case .idle: "idle"
         }
     }
@@ -118,7 +124,7 @@ public struct AgentStatusMachine: Sendable {
 
         switch event.name {
         case .sessionStart:
-            set(.waitingForInput)
+            set(.ready)
             current.turnStartedAt = nil
             current.toolCallsThisTurn = 0
             notes.append(AgentNote(kind: .sessionStarted, title: "\(agentName) session started", detail: event.message))
@@ -128,8 +134,14 @@ public struct AgentStatusMachine: Sendable {
             notes.append(AgentNote(kind: .sessionEnded, title: "\(agentName) session ended", detail: event.message))
 
         case .userPromptSubmit:
-            // Hermes fires its equivalent before every model call; only a fresh turn resets the counters.
-            if case .working = current.activity, current.turnStartedAt != nil {
+            // Hermes fires its equivalent before every model call, and again when you answer its
+            // question; only a fresh turn resets the counters.
+            let midTurn: Bool
+            switch current.activity {
+            case .working, .askedQuestion, .needsPermission: midTurn = current.turnStartedAt != nil
+            case .ready, .idle: midTurn = false
+            }
+            if midTurn {
                 set(.working(tool: nil, detail: nil))
             } else {
                 set(.working(tool: nil, detail: nil))
@@ -140,14 +152,20 @@ public struct AgentStatusMachine: Sendable {
 
         case .preToolUse:
             let tool = event.toolName ?? "tool"
-            set(.working(tool: tool, detail: event.summary))
             current.toolCallsThisTurn += 1
             let call = AgentToolCall(id: event.toolUseID ?? UUID().uuidString, toolName: tool, summary: event.summary,
                                      filePath: event.filePath, startedAt: now)
             current.recentToolCalls.append(call)
             if current.recentToolCalls.count > maxToolCalls { current.recentToolCalls.removeFirst(current.recentToolCalls.count - maxToolCalls) }
-            notes.append(AgentNote(kind: .toolCall, title: "\(agentName): \(tool)", detail: event.summary,
-                                   filePath: event.filePath, isMutatingTool: event.isMutatingTool))
+            if event.isQuestionTool {
+                // The tool waits for your answer; PostToolUse arrives once you give it.
+                set(.askedQuestion(detail: event.summary))
+                notes.append(AgentNote(kind: .waiting, title: "\(agentName) has a question for you", detail: event.summary))
+            } else {
+                set(.working(tool: tool, detail: event.summary))
+                notes.append(AgentNote(kind: .toolCall, title: "\(agentName): \(tool)", detail: event.summary,
+                                       filePath: event.filePath, isMutatingTool: event.isMutatingTool))
+            }
 
         case .postToolUse:
             if let id = event.toolUseID, let index = current.recentToolCalls.lastIndex(where: { $0.id == id }) {
@@ -164,20 +182,24 @@ public struct AgentStatusMachine: Sendable {
                                    filePath: event.filePath))
 
         case .notification:
-            let text = (event.message ?? "").lowercased()
-            if text.contains("permission") {
+            switch NotificationKind(event) {
+            case .permission:
                 let tool = event.toolName ?? "a tool"
                 set(.needsPermission(tool: tool, detail: event.summary ?? event.message))
                 notes.append(AgentNote(kind: .needsPermission, title: "\(agentName) needs permission", detail: event.message))
-            } else if text.contains("waiting") || text.contains("idle") {
-                set(.waitingForInput)
-                notes.append(AgentNote(kind: .waiting, title: "\(agentName) is waiting for you", detail: event.message))
-            } else {
+            case .question:
+                set(.askedQuestion(detail: event.message))
+                notes.append(AgentNote(kind: .waiting, title: "\(agentName) has a question for you", detail: event.message))
+            case .idleReminder:
+                // "Claude is waiting for your input": a nudge some time after the turn ended,
+                // not a question. Nothing new to say beyond the turn having finished.
+                set(.ready)
+            case .other:
                 notes.append(AgentNote(kind: .notification, title: "\(agentName): \(event.message ?? "notification")"))
             }
 
         case .stop:
-            set(.waitingForInput)
+            set(.ready)
             var detail: String? = nil
             if let started = current.turnStartedAt {
                 let seconds = Int(now.timeIntervalSince(started))
@@ -195,6 +217,29 @@ public struct AgentStatusMachine: Sendable {
 
         status = current
         return notes
+    }
+
+    private enum NotificationKind {
+        case permission, question, idleReminder, other
+
+        init(_ event: HookEvent) {
+            switch event.notificationType {
+            case "permission_prompt": self = .permission
+            case "idle_prompt": self = .idleReminder
+            case "elicitation_dialog", "question": self = .question
+            case .some: self = .other
+            case nil:
+                // Older Claude Code versions send only the message.
+                let text = (event.message ?? "").lowercased()
+                if text.contains("permission") {
+                    self = .permission
+                } else if text.contains("waiting for your input") || text.contains("idle") {
+                    self = .idleReminder
+                } else {
+                    self = .other
+                }
+            }
+        }
     }
 
     /// Forget a status whose agent has been silent and has no process alive.

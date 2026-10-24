@@ -6,7 +6,8 @@ extension AgentPresence {
         switch (source, activity) {
         case (.hooks, .working): .blue
         case (.hooks, .needsPermission): .orange
-        case (.hooks, .waitingForInput): .green
+        case (.hooks, .askedQuestion): .orange
+        case (.hooks, .ready): .green
         case (.hooks, .idle): .secondary
         case (.process, _): isBusy ? .blue : .secondary
         }
@@ -15,7 +16,8 @@ extension AgentPresence {
     var systemImage: String {
         switch (source, activity) {
         case (.hooks, .needsPermission): "hand.raised.fill"
-        case (.hooks, .waitingForInput): "bubble.left.fill"
+        case (.hooks, .askedQuestion): "questionmark.bubble.fill"
+        case (.hooks, .ready): "checkmark.bubble"
         case (.hooks, .working): "sparkles"
         case (.hooks, .idle): "sparkles"
         case (.process, _): "sparkles"
@@ -50,7 +52,8 @@ struct AgentPresenceBadge: View {
         switch (presence.source, presence.activity) {
         case (.hooks, .working(let tool, _)): tool.map { "\(presence.kind.displayName) · \($0)" } ?? "\(presence.kind.displayName) · working"
         case (.hooks, .needsPermission): "\(presence.kind.displayName) · needs permission"
-        case (.hooks, .waitingForInput): "\(presence.kind.displayName) · waiting for you"
+        case (.hooks, .askedQuestion): "\(presence.kind.displayName) · has a question"
+        case (.hooks, .ready): "\(presence.kind.displayName) · ready"
         case (.hooks, .idle): "\(presence.kind.displayName) · ended"
         case (.process, _): "\(presence.kind.displayName) · \(presence.isBusy ? "busy" : "running")"
         }
@@ -104,9 +107,22 @@ struct AgentStatusBanner: View {
         switch (presence.source, presence.activity) {
         case (.hooks, .working(let tool, _)): tool.map { "Working · \($0)" } ?? "Working"
         case (.hooks, .needsPermission(let tool, _)): "Needs your permission · \(tool)"
-        case (.hooks, .waitingForInput): "Waiting for your input"
+        case (.hooks, .askedQuestion): "Has a question for you"
+        case (.hooks, .ready): "Ready for your next prompt"
         case (.hooks, .idle): "Session ended"
         case (.process, _): presence.isBusy ? "Running" : "Running, idle"
+        }
+    }
+
+    /// The headline for a narrow column.
+    private var shortHeadline: String {
+        switch (presence.source, presence.activity) {
+        case (.hooks, .working(let tool, _)): tool ?? "Working"
+        case (.hooks, .needsPermission): "Needs permission"
+        case (.hooks, .askedQuestion): "Has a question"
+        case (.hooks, .ready): "Ready"
+        case (.hooks, .idle): "Ended"
+        case (.process, _): presence.isBusy ? "Running" : "Idle"
         }
     }
 
@@ -117,7 +133,8 @@ struct AgentStatusBanner: View {
         case (.process, _): return "running for \(span)"
         case (.hooks, .working): return "working for \(span)"
         case (.hooks, .needsPermission): return "waiting \(span)"
-        case (.hooks, .waitingForInput): return "idle for \(span)"
+        case (.hooks, .askedQuestion): return "waiting \(span)"
+        case (.hooks, .ready): return "idle for \(span)"
         case (.hooks, .idle): return "ended \(Format.relative(presence.since, to: now))"
         }
     }
@@ -133,8 +150,23 @@ struct AgentStatusBanner: View {
         switch presence.activity {
         case .working(_, let detail): detail
         case .needsPermission(_, let detail): detail
+        case .askedQuestion(let detail): detail
         default: presence.source == .process ? "No hooks installed; showing process presence only" : nil
         }
+    }
+
+    private func headlineRow(_ text: String, named: Bool) -> some View {
+        HStack(spacing: 6) {
+            if named {
+                Text(presence.kind.displayName)
+                    .font(.headline)
+            }
+            Text(text)
+                .font(.headline)
+                .fontWeight(named ? .regular : .semibold)
+                .foregroundStyle(presence.needsAttention ? presence.tint : .primary)
+        }
+        .lineLimit(1)
     }
 
     var body: some View {
@@ -145,15 +177,12 @@ struct AgentStatusBanner: View {
                 .symbolEffect(.pulse, options: .repeating, isActive: isWorking)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(presence.kind.displayName)
-                        .font(.headline)
-                    Text(headline)
-                        .font(.headline)
-                        .fontWeight(.regular)
-                        .foregroundStyle(presence.needsAttention ? presence.tint : .primary)
+                // Shorten the words before truncating them, so a narrow column still reads.
+                ViewThatFits(in: .horizontal) {
+                    headlineRow(headline, named: true)
+                    headlineRow(shortHeadline, named: true)
+                    headlineRow(shortHeadline, named: false)
                 }
-                .lineLimit(1)
                 if let detail {
                     Text(detail)
                         .font(.callout)
@@ -222,12 +251,19 @@ struct AgentSettingsView: View {
     @State private var confirmHermesInstall = false
     @State private var confirmHermesUninstall = false
     @State private var hermesMessage: String?
+    @State private var hermesUnapproved = HermesHookInstaller.unapprovedEvents()
+
+    private static let hermesApproveCommand = "hermes --accept-hooks"
+
+    private var hermesAwaitingApproval: Bool { hermesState == .installed && !hermesUnapproved.isEmpty }
 
     private var hermesStatusText: String {
         switch hermesState {
         case .notPresent: "Hermes not found"
         case .notInstalled: "Not installed"
-        case .installed: "Installed"
+        case .installed:
+            hermesUnapproved.isEmpty ? "Installed and approved"
+                : "Installed, \(hermesUnapproved.count) of \(HermesHookParser.subscribedEvents.count) waiting for approval in Hermes"
         case .manualMergeNeeded: "Manual merge needed"
         }
     }
@@ -265,12 +301,33 @@ struct AgentSettingsView: View {
             } header: {
                 Text("Hooks")
             } footer: {
-                Text("Hooks let Claude Code tell Vigil exactly what it is doing: when a turn starts and ends, every tool call, and when it is waiting for your permission or input. Installing adds entries to ~/.claude/settings.json that post each event to Vigil's local socket with curl; a backup is saved first and your other hooks are left untouched. If Vigil is not running the command fails silently in under a second.")
+                Text("Hooks let Claude Code tell Vigil exactly what it is doing: when a turn starts and ends, every tool call, and when it needs your permission or asks you a question. Installing adds entries to ~/.claude/settings.json that post each event to Vigil's local socket with curl; a backup is saved first and your other hooks are left untouched. If Vigil is not running the command fails silently in under a second.")
             }
             if hermesState != .notPresent {
                 Section {
                     LabeledContent("Hermes hooks") {
-                        Text(hermesStatusText).foregroundStyle(hermesState == .installed ? .green : .secondary)
+                        Text(hermesStatusText)
+                            .foregroundStyle(hermesAwaitingApproval ? .orange : hermesState == .installed ? .green : .secondary)
+                    }
+                    if hermesAwaitingApproval {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Hermes runs a hook only after you approve it, and its gateway cannot ask, so until then it skips Vigil's hooks without a word. Run this once in Terminal, quit with /exit, then open a new Hermes session:")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            HStack {
+                                Text(Self.hermesApproveCommand)
+                                    .font(.callout.monospaced())
+                                    .textSelection(.enabled)
+                                Spacer()
+                                Button("Copy") { Workspace.copy(Self.hermesApproveCommand) }
+                                Button("Check Again") { refreshHermes() }
+                            }
+                            Text("Or run plain hermes and approve each hook when it asks. --accept-hooks approves every hook in config.yaml, so look there first if you have hooks of your own.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     HStack {
                         Button("Install Hermes Hooks…") { confirmHermesInstall = true }
@@ -289,8 +346,9 @@ struct AgentSettingsView: View {
                 } footer: {
                     Text(hermesState == .manualMergeNeeded
                          ? "Your config.yaml already has a hooks: block, so Vigil will not edit it. Install writes the script to ~/.hermes/agent-hooks/vigil.sh; then paste the copied YAML entries under your existing hooks: key."
-                         : "Install writes a small script to ~/.hermes/agent-hooks/vigil.sh and appends a delimited hooks: block to ~/.hermes/config.yaml (backup first). Hermes asks once per event for consent the first time each hook runs, unless hooks_auto_accept is on.")
+                         : "Install writes a small script to ~/.hermes/agent-hooks/vigil.sh and appends a delimited hooks: block to ~/.hermes/config.yaml (backup first). Hermes then needs you to approve the hooks once from a terminal; sessions opened after that report to Vigil.")
                 }
+                .onAppear { refreshHermes() }
             }
             Section {
                 Toggle("Detect agent processes", isOn: settings.agentScanEnabled)
@@ -313,7 +371,7 @@ struct AgentSettingsView: View {
                 }
             }
             Section("Notifications") {
-                Toggle("When an agent needs permission", isOn: settings.notifyOnAgentPermission)
+                Toggle("When an agent needs permission or asks a question", isOn: settings.notifyOnAgentPermission)
                 Toggle("When an agent finishes a turn", isOn: settings.notifyOnAgentTurnFinished)
                 if !model.isNotifierAvailable {
                     Text("Notifications work when Vigil runs from an app bundle.").font(.callout).foregroundStyle(.secondary)
@@ -350,21 +408,26 @@ struct AgentSettingsView: View {
     private func installHermes() {
         do {
             if let backup = try HermesHookInstaller.install(socketPath: model.agentHub.socketPath) {
-                hermesMessage = "Installed. Backup: \(backup.lastPathComponent). Hermes will ask for consent once per event."
+                hermesMessage = "Installed. Backup: \(backup.lastPathComponent). Approve the hooks in Hermes next (see above)."
             } else {
                 Workspace.copy(HermesHookInstaller.snippet)
                 hermesMessage = "Script written. Your config.yaml already has a hooks: key, so the YAML entries were copied to the clipboard; paste them under it."
             }
-            hermesState = HermesHookInstaller.state()
+            refreshHermes()
         } catch {
             hermesMessage = "Install failed: \(error.localizedDescription)"
         }
     }
 
+    private func refreshHermes() {
+        hermesState = HermesHookInstaller.state()
+        hermesUnapproved = HermesHookInstaller.unapprovedEvents()
+    }
+
     private func uninstallHermes() {
         do {
             let backup = try HermesHookInstaller.uninstall()
-            hermesState = HermesHookInstaller.state()
+            refreshHermes()
             hermesMessage = backup.map { "Removed. Backup: \($0.lastPathComponent)" } ?? "Script removed. No Vigil block was found in config.yaml."
         } catch {
             hermesMessage = "Uninstall failed: \(error.localizedDescription)"

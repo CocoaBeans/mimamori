@@ -12,6 +12,13 @@ enum HermesHookInstaller {
     /// The path as it appears in config.yaml.
     static var scriptPathForConfig: String { "~/.hermes/" + HermesHooksConfig.scriptRelativePath }
 
+    static var allowlistURL: URL { hermesHome.appendingPathComponent(HermesHooksConfig.allowlistFileName) }
+
+    /// Vigil's hook events Hermes has not been allowed to run yet.
+    static func unapprovedEvents() -> [String] {
+        HermesHooksConfig.unapprovedEvents(allowlistJSON: try? Data(contentsOf: allowlistURL), scriptPath: scriptPathForConfig)
+    }
+
     static var isHermesPresent: Bool { FileManager.default.fileExists(atPath: hermesHome.path) }
 
     enum State: Equatable {

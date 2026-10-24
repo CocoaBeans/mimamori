@@ -23,8 +23,10 @@ struct AgentPresence: Hashable {
             return "working"
         case (.hooks, .needsPermission(let tool, let detail)):
             return detail.map { "needs permission · \(tool) \($0)" } ?? "needs permission · \(tool)"
-        case (.hooks, .waitingForInput):
-            return "waiting for your input"
+        case (.hooks, .askedQuestion(let detail)):
+            return detail.map { "asks: \($0)" } ?? "has a question for you"
+        case (.hooks, .ready):
+            return "ready for your next prompt"
         case (.hooks, .idle):
             return "session ended"
         case (.process, _):

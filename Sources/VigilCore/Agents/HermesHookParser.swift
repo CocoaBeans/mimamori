@@ -40,7 +40,9 @@ public enum HermesHookParser {
             object["prompt"] = prompt
         }
         if rawName == "on_human_input_request" {
-            object["message"] = (extra["prompt"] as? String).map { "Hermes is waiting for your input: \($0)" } ?? "Hermes is waiting for your input"
+            // A real question for you, unlike Claude Code's idle reminder.
+            object["notification_type"] = "question"
+            object["message"] = (extra["prompt"] as? String) ?? "Hermes is asking for your input"
         }
         // Hermes reports the *process* working directory, which for gateway and desktop sessions
         // is ~/.hermes rather than the project. Prefer a working directory named by the tool call

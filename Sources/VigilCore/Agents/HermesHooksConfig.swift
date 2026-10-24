@@ -10,6 +10,22 @@ public enum HermesHooksConfig {
     public static let scriptRelativePath = "agent-hooks/vigil.sh"
     public static let beginMarker = "# --- Vigil hooks (added by Vigil; remove this block to uninstall) ---"
     public static let endMarker = "# --- end Vigil hooks ---"
+    /// Where Hermes records the hooks you approved. It runs no hook that is missing from it.
+    public static let allowlistFileName = "shell-hooks-allowlist.json"
+
+    /// Subscribed events whose Vigil hook is not in Hermes's allowlist yet (`{"approvals": [{event, command}]}`).
+    /// Hermes's gateway has no terminal to ask from, so it skips these until you approve them.
+    public static func unapprovedEvents(allowlistJSON: Data?, scriptPath: String) -> [String] {
+        var approved = Set<String>()
+        if let allowlistJSON,
+           let object = try? JSONSerialization.jsonObject(with: allowlistJSON) as? [String: Any],
+           let approvals = object["approvals"] as? [[String: Any]] {
+            for entry in approvals where entry["command"] as? String == scriptPath {
+                if let event = entry["event"] as? String { approved.insert(event) }
+            }
+        }
+        return HermesHookParser.subscribedEvents.filter { !approved.contains($0) }
+    }
 
     /// The script Hermes runs for every subscribed event. Exits 0 whatever happens, so it can
     /// never block a tool call, and prints nothing, which Hermes treats as a no-op response.

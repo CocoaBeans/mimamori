@@ -122,7 +122,8 @@ struct HermesHookTests {
 
         let human = try #require(parse(#"{"hook_event_name":"on_human_input_request","cwd":"/repo","extra":{"prompt":"Which branch?"}}"#))
         #expect(human.name == .notification)
-        #expect(human.message?.contains("waiting for your input") == true)
+        #expect(human.notificationType == "question")
+        #expect(human.message == "Which branch?")
 
         let verify = try #require(parse(#"{"hook_event_name":"pre_verify","cwd":"/repo","extra":{}}"#))
         #expect(verify.name == .stop)
@@ -154,22 +155,40 @@ struct HermesHookTests {
         #expect(machine.status?.toolCallsThisTurn == 1)
         let stop = machine.apply(HookEvent(name: .stop, rawName: "pre_verify", agent: .hermes, cwd: "/repo", receivedAt: Date(timeIntervalSince1970: 1010)))
         #expect(stop.first?.kind == .turnFinished)
-        #expect(machine.status?.activity == .waitingForInput)
+        #expect(machine.status?.activity == .ready)
+    }
+
+    @Test func answeringHermesContinuesTheTurn() {
+        var machine = AgentStatusMachine()
+        func at(_ t: TimeInterval) -> Date { Date(timeIntervalSince1970: 1000 + t) }
+        _ = machine.apply(HookEvent(name: .userPromptSubmit, rawName: "pre_llm_call", agent: .hermes, cwd: "/repo", receivedAt: at(0)))
+        _ = machine.apply(HookEvent(name: .preToolUse, rawName: "pre_tool_call", agent: .hermes, cwd: "/repo", toolName: "terminal", toolUseID: "c1", receivedAt: at(1)))
+        let asked = machine.apply(HookEvent(name: .notification, rawName: "on_human_input_request", agent: .hermes, cwd: "/repo",
+                                            message: "Which branch?", notificationType: "question", receivedAt: at(2)))
+        #expect(machine.status?.activity == .askedQuestion(detail: "Which branch?"))
+        #expect(machine.status?.activity.needsAttention == true)
+        #expect(asked.first?.kind == .waiting)
+        let answered = machine.apply(HookEvent(name: .userPromptSubmit, rawName: "on_human_input_resolved", agent: .hermes, cwd: "/repo", receivedAt: at(5)))
+        #expect(answered.isEmpty)
+        #expect(machine.status?.toolCallsThisTurn == 1)
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
     }
 }
 
 @Suite("Agent status machine")
 struct AgentStatusMachineTests {
     private func event(_ name: HookEvent.Name, tool: String? = nil, id: String? = nil, path: String? = nil,
-                       message: String? = nil, at seconds: TimeInterval) -> HookEvent {
+                       message: String? = nil, type: String? = nil, at seconds: TimeInterval) -> HookEvent {
         HookEvent(name: name, rawName: name.rawValue, sessionID: "s1", cwd: "/repo", toolName: tool, toolUseID: id,
-                  filePath: path, summary: path, message: message, receivedAt: Date(timeIntervalSince1970: 1000 + seconds))
+                  filePath: path, summary: path, message: message, notificationType: type,
+                  receivedAt: Date(timeIntervalSince1970: 1000 + seconds))
     }
 
     @Test func followsATurn() {
         var machine = AgentStatusMachine()
         _ = machine.apply(event(.sessionStart, at: 0))
-        #expect(machine.status?.activity == .waitingForInput)
+        #expect(machine.status?.activity == .ready)
+        #expect(machine.status?.activity.needsAttention == false)
         _ = machine.apply(event(.userPromptSubmit, message: "fix the tests", at: 1))
         #expect(machine.status?.activity == .working(tool: nil, detail: nil))
         let notes = machine.apply(event(.preToolUse, tool: "Edit", id: "t1", path: "/repo/a.swift", at: 2))
@@ -181,7 +200,9 @@ struct AgentStatusMachineTests {
         _ = machine.apply(event(.permissionRequest, tool: "Bash", at: 6))
         #expect(machine.status?.activity.needsAttention == true)
         let stop = machine.apply(event(.stop, at: 30))
-        #expect(machine.status?.activity == .waitingForInput)
+        // A finished turn is ready for the next prompt, not something waiting on you.
+        #expect(machine.status?.activity == .ready)
+        #expect(machine.status?.activity.needsAttention == false)
         #expect(stop.first?.kind == .turnFinished)
         #expect(stop.first?.detail?.contains("2 tool calls") == true)
         _ = machine.apply(event(.sessionEnd, at: 31))
@@ -201,10 +222,37 @@ struct AgentStatusMachineTests {
 
     @Test func notificationsClassifyState() {
         var machine = AgentStatusMachine()
-        _ = machine.apply(event(.notification, message: "Claude is waiting for your input", at: 0))
-        #expect(machine.status?.activity == .waitingForInput)
-        _ = machine.apply(event(.notification, tool: "Bash", message: "Claude needs your permission to use Bash", at: 1))
+        // Claude's idle reminder is not a question: still ready, and nothing for the feed.
+        let idle = machine.apply(event(.notification, message: "Claude is waiting for your input", type: "idle_prompt", at: 0))
+        #expect(machine.status?.activity == .ready)
+        #expect(idle.isEmpty)
+        _ = machine.apply(event(.notification, tool: "Bash", message: "Claude needs your permission to use Bash", type: "permission_prompt", at: 1))
         if case .needsPermission(let tool, _) = machine.status!.activity { #expect(tool == "Bash") } else { Issue.record("expected needsPermission") }
+        let dialog = machine.apply(event(.notification, message: "Claude Code needs your input", type: "elicitation_dialog", at: 2))
+        #expect(machine.status?.activity == .askedQuestion(detail: "Claude Code needs your input"))
+        #expect(dialog.first?.kind == .waiting)
+        let other = machine.apply(event(.notification, message: "Signed in", type: "auth_success", at: 3))
+        #expect(other.first?.kind == .notification)
+    }
+
+    @Test func notificationsWithoutATypeFallBackToTheMessage() {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.notification, message: "Claude is waiting for your input", at: 0))
+        #expect(machine.status?.activity == .ready)
+        _ = machine.apply(event(.notification, message: "Claude needs your permission to use Write", at: 1))
+        #expect(machine.status?.activity.needsAttention == true)
+    }
+
+    @Test func askUserQuestionWaitsForTheAnswer() throws {
+        let pre = try #require(HookEventParser.parse(Data(#"{"hook_event_name":"PreToolUse","cwd":"/repo","tool_name":"AskUserQuestion","tool_use_id":"q1","tool_input":{"questions":[{"question":"Which database should we use?","header":"DB","options":[]}]}}"#.utf8)))
+        #expect(pre.summary == "Which database should we use?")
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.userPromptSubmit, at: 0))
+        let notes = machine.apply(pre)
+        #expect(machine.status?.activity == .askedQuestion(detail: "Which database should we use?"))
+        #expect(notes.first?.kind == .waiting)
+        _ = machine.apply(event(.postToolUse, tool: "AskUserQuestion", id: "q1", at: 9))
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
     }
 }
 
@@ -283,6 +331,24 @@ struct HermesHooksConfigTests {
         #expect(HermesHooksConfig.install(into: existing, scriptPath: script) == nil)
         #expect(HermesHooksConfig.uninstall(from: existing) == existing)
         #expect(HermesHooksConfig.yamlEntries(scriptPath: script).contains("  on_session_start:\n"))
+    }
+
+    @Test func readsWhichHooksHermesApproved() {
+        let all = HermesHookParser.subscribedEvents
+        #expect(HermesHooksConfig.unapprovedEvents(allowlistJSON: nil, scriptPath: script) == all)
+        let json = """
+        {"approvals": [
+          {"event": "pre_tool_call", "command": "\(script)", "approved_at": "2026-10-23T19:00:00Z"},
+          {"event": "post_tool_call", "command": "\(script)"},
+          {"event": "on_session_start", "command": "~/other.sh"}
+        ]}
+        """
+        let missing = HermesHooksConfig.unapprovedEvents(allowlistJSON: Data(json.utf8), scriptPath: script)
+        #expect(missing.count == all.count - 2)
+        #expect(!missing.contains("pre_tool_call"))
+        #expect(missing.contains("on_session_start"))
+        // A broken file approves nothing.
+        #expect(HermesHooksConfig.unapprovedEvents(allowlistJSON: Data("{".utf8), scriptPath: script) == all)
     }
 
     @Test func scriptIsSafe() {
