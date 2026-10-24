@@ -12,6 +12,7 @@ import VigilCore
 ///     VIGIL_WINDOW=1000x640                  resize the main window after launch
 ///     VIGIL_SUPPORT_DIR=/path                keep state, shadow indexes and the socket here instead
 ///     VIGIL_SCREENSHOT_WINDOW=Agents         capture the window with this title instead of the largest
+///     VIGIL_DEBUG_FLAGS=summary              open the session summary (and write it to <dump>.summary.md)
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -33,6 +34,7 @@ enum DebugHooks {
         let windowSize = value("VIGIL_WINDOW")
         let windowTitle = value("VIGIL_SCREENSHOT_WINDOW")
         var toggledReview = false
+        var openedSummary = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
             if let windowSize {
@@ -56,6 +58,16 @@ enum DebugHooks {
                     if !ready.isEmpty {
                         session.setReviewed(true, paths: Array(ready))
                         toReview.subtract(ready)
+                    }
+                }
+                // "summary": open the session summary for the selected worktree once.
+                if model.debugFlags.contains("summary"), !openedSummary, let session = model.selectedSession, session.state != nil {
+                    model.showSummary(for: session.id)
+                    openedSummary = true
+                    if let dump {
+                        let summary = await model.sessionSummary(for: session, includeDiffs: model.settings.summaryOptions.diffs)
+                        try? summary.markdown(options: model.settings.summaryOptions)
+                            .write(toFile: dump + ".summary.md", atomically: true, encoding: .utf8)
                     }
                 }
                 // "toggle-review": press ⌘↩ once on the selected file, after the marks above.
@@ -146,10 +158,11 @@ enum DebugHooks {
         window.effectiveAppearance.performAsCurrentDrawingAppearance { view.cacheDisplay(in: bounds, to: rep) }
         guard let data = rep.representation(using: .png, properties: [:]) else { return }
         try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
-        // Popovers and panels are separate windows; save each visible one as well.
+        // Popovers, panels and sheets are separate windows; save each visible one as well.
         var extra = 0
         for other in NSApp.windows where other !== window && other.isVisible && other.contentView != nil
-            && other.frame.width > 40 && other.frame.height > 40 && !other.styleMask.contains(.titled) {
+            && (other === window.attachedSheet || !other.styleMask.contains(.titled))
+            && other.frame.width > 40 && other.frame.height > 40 {
             guard let otherView = other.contentView?.superview ?? other.contentView,
                   let otherRep = otherView.bitmapImageRepForCachingDisplay(in: otherView.bounds) else { continue }
             var otherRestorers: [() -> Void] = []

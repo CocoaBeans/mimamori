@@ -48,6 +48,10 @@ struct AgentsWindowView: View {
                             .onTapGesture { show(row) }
                             .contextMenu {
                                 Button("Show in Vigil") { show(row) }
+                                Button("Session Summary…") {
+                                    show(row)
+                                    model.showSummary(for: row.session.id)
+                                }
                                 Button("Reveal in Finder") {
                                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: row.session.id)])
                                 }

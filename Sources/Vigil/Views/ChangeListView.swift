@@ -461,8 +461,9 @@ struct ListControls: View {
     }
 }
 
-/// Mark Start and Refresh, next to the filter.
+/// Mark Start, the session summary and Refresh, next to the filter.
 struct SessionControls: View {
+    @Environment(AppModel.self) private var model
     let session: WorktreeSession
 
     var body: some View {
@@ -473,6 +474,12 @@ struct SessionControls: View {
                 Image(systemName: session.startSnapshot == nil ? "flag" : "flag.fill")
             }
             .help("Mark Start: snapshot the working tree now and compare against it (⇧⌘S)")
+            Button {
+                model.showSummary(for: session.id)
+            } label: {
+                Image(systemName: "doc.text")
+            }
+            .help("Session summary: what changed, what needs a look and what the agent did, as Markdown (⇧⌘E)")
             Button {
                 session.requestRefresh(force: true)
             } label: {

@@ -116,6 +116,12 @@ public actor WorktreeInspector {
         return await git.commits(from: oldHead, to: newHead, in: worktree).map { CommitSummary(oid: $0.oid, subject: $0.subject) }
     }
 
+    /// Commits on HEAD since the baseline, newest first; none when the baseline is HEAD itself.
+    public func commits(since state: WorktreeState, limit: Int = 200) async -> [CommitSummary] {
+        guard let base = state.baseline.treeish, let head = state.branch.headOID, base != head else { return [] }
+        return await git.commits(from: base, to: head, in: worktree, limit: limit).map { CommitSummary(oid: $0.oid, subject: $0.subject) }
+    }
+
     /// True when every path is ignored by git, so a refresh can be skipped.
     public func allIgnored(_ relativePaths: [String]) async -> Bool {
         guard !relativePaths.isEmpty else { return false }

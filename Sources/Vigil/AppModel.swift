@@ -3,6 +3,10 @@ import Foundation
 import Observation
 import VigilCore
 
+struct SummaryRequest: Identifiable, Hashable {
+    let id: String
+}
+
 struct RepositoryEntry: Identifiable, Hashable {
     let id: UUID
     var rootPath: String
@@ -29,6 +33,10 @@ final class AppModel {
     let agentHub = AgentHub()
 
     var selectedWorktreeID: String?
+    /// The worktree whose session summary sheet is open.
+    var summaryRequest: SummaryRequest?
+    /// Vigil's activity record starts here; summaries say so.
+    let launchedAt = Date()
     /// Repository awaiting the user's confirmation in the sidebar's dialog.
     var repositoryPendingRemoval: RepositoryEntry?
     var showActivity: Bool
@@ -404,6 +412,67 @@ final class AppModel {
     }
 
     func clearActivity() { activity.removeAll() }
+
+    // MARK: Session summary
+
+    func showSummary(for worktree: String) {
+        select(worktree: worktree)
+        summaryRequest = SummaryRequest(id: worktree)
+    }
+
+    /// Gathers what a summary reports about a worktree's session. Fetching every file's diff
+    /// can take a moment, so it happens only when asked for.
+    func sessionSummary(for session: WorktreeSession, includeDiffs: Bool) async -> SessionSummary {
+        let state = session.state
+        let files = session.changes.map {
+            SessionSummary.File(change: $0, review: session.reviewStatus(of: $0), attribution: session.attributions[$0.path])
+        }
+        let commits = await session.commitsSinceBaseline()
+
+        // The session starts at the start marker or snapshot it is compared with; otherwise the
+        // record only goes back as far as Vigil does.
+        let cutoff: Date? = switch session.baseline {
+        case .start: session.startSnapshot?.date
+        case .snapshot(let ref): session.snapshots.first { $0.id == ref }?.date
+        case .head, .branchPoint: nil
+        }
+        let entries = activity.filter { $0.worktreePath == session.id && $0.date >= (cutoff ?? .distantPast) }.reversed()
+        let since = max(cutoff ?? launchedAt, launchedAt)
+
+        var names: [String] = []
+        if let presence = agentHub.presence(for: session.id) { names.append(presence.kind.displayName) }
+        for kind in AgentKind.known where !names.contains(kind.displayName)
+            && entries.contains(where: { $0.kind.isAgentEvent && $0.title.hasPrefix(kind.displayName) }) {
+            names.append(kind.displayName)
+        }
+        let presence = agentHub.presence(for: session.id)
+        let toolCallNoun: String? = switch settings.agentToolCallsInFeed {
+        case .none: nil
+        case .mutating: "edits and commands"
+        case .all: "tool calls"
+        }
+        let agent = names.isEmpty ? nil : SessionSummary.Agent(
+            names: names,
+            state: presence.flatMap { $0.source == .hooks ? $0.statusText : nil },
+            toolCallNoun: toolCallNoun)
+
+        var diffs: [String: String] = [:]
+        if includeDiffs {
+            for change in session.changes.prefix(80) where !change.isBinary && !change.isSubmodule {
+                if let diff = try? await session.diff(for: change), !diff.hunks.isEmpty {
+                    diffs[change.path] = diff.unifiedText
+                }
+            }
+        }
+
+        return SessionSummary(
+            title: state?.branch.displayName ?? session.displayName,
+            repository: repository(for: session)?.displayName ?? "",
+            worktreePath: session.id,
+            baselineLabel: state?.baseline.label ?? session.baseline.title,
+            files: files, commits: commits, activity: Array(entries), activitySince: since,
+            agent: agent, diffs: diffs, excludedLargeFiles: state?.excludedLargeFiles ?? [])
+    }
 
     /// Marks the selected file reviewed and moves on to the next listed file still to review;
     /// on a file already reviewed, clears the mark instead.

@@ -471,6 +471,11 @@ final class WorktreeSession: Identifiable {
         return try await inspector.diff(for: change, base: base)
     }
 
+    func commitsSinceBaseline() async -> [CommitSummary] {
+        guard let inspector, let state else { return [] }
+        return await inspector.commits(since: state)
+    }
+
     func diffSinceReview(for change: FileChange, reviewedBlob: String) async throws -> FileDiff? {
         guard let inspector else { return nil }
         return try await inspector.diffSinceReview(for: change, reviewedBlob: reviewedBlob)

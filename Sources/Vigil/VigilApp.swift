@@ -79,6 +79,8 @@ struct VigilCommands: Commands {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
             Button("Clear Start Marker") { if let session = model.selectedSession { Task { await session.clearStart() } } }
             Button("Take Snapshot Now") { if let session = model.selectedSession { Task { await session.takeSnapshotNow() } } }
+            Button("Session Summary…") { if let session = model.selectedSession { model.showSummary(for: session.id) } }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
             Divider()
             Button("Compare Uncommitted") { model.selectedSession?.setBaseline(.head) }
                 .keyboardShortcut("1")

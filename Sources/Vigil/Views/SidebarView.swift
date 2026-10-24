@@ -79,6 +79,8 @@ private struct RepositorySection: View {
                         Button("Copy Path") { Workspace.copy(worktree.path) }
                         Divider()
                         Button("Refresh") { model.sessions[worktree.path]?.requestRefresh(force: true) }
+                        Button("Session Summary…") { model.showSummary(for: worktree.path) }
+                            .disabled(model.sessions[worktree.path] == nil)
                         Divider()
                         Button("Hide Worktree") { model.hideWorktree(worktree.path) }
                         Button("Stop Watching \(repo.displayName)…", role: .destructive) { model.requestRemoval(of: repo) }

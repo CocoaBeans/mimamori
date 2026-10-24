@@ -36,6 +36,11 @@ struct ContentView: View {
         .onAppear {
             if model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
         }
+        .sheet(item: $model.summaryRequest) { request in
+            if let session = model.sessions[request.id] {
+                SessionSummarySheet(session: session)
+            }
+        }
     }
 
     @ViewBuilder
