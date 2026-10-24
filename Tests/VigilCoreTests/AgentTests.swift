@@ -402,3 +402,43 @@ struct HookSocketServerTests {
         var first: HookEvent? { lock.lock(); defer { lock.unlock() }; return events.first }
     }
 }
+
+@Suite("Session placement")
+struct SessionPlacementTests {
+    @Test func aReadElsewhereDoesNotMoveAPlacedSession() {
+        var placement = SessionPlacement()
+        // Hermes edits in harbor: firm.
+        let edit = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: true)
+        #expect(edit == .init(worktree: "/p/harbor", movedFrom: nil))
+        // It reads a file in ledger: stays in harbor.
+        let read = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: false)
+        #expect(read.worktree == "/p/harbor")
+        // An event with no path at all follows the session.
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false).worktree == "/p/harbor")
+    }
+
+    @Test func changingFilesElsewhereMovesTheSession() {
+        var placement = SessionPlacement()
+        _ = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: true)
+        let write = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: true)
+        #expect(write == .init(worktree: "/p/ledger", movedFrom: "/p/harbor"))
+    }
+
+    @Test func aReadPlacesOnlyUntilSomethingFirmerArrives() {
+        var placement = SessionPlacement()
+        // First sign of the session is a read: place it there for now.
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: false).worktree == "/p/ledger")
+        // A later read elsewhere may still move a tentative placement.
+        let reread = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: false)
+        #expect(reread == .init(worktree: "/p/harbor", movedFrom: "/p/ledger"))
+        // A working directory always wins and is firm.
+        _ = placement.place(session: "h1", cwdMatch: "/p/vigil", pathMatch: nil, changesFiles: false)
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: false).worktree == "/p/vigil")
+    }
+
+    @Test func eventsWithoutASessionStillPlaceByPath() {
+        var placement = SessionPlacement()
+        #expect(placement.place(session: nil, cwdMatch: nil, pathMatch: "/p/a", changesFiles: false).worktree == "/p/a")
+        #expect(placement.place(session: nil, cwdMatch: nil, pathMatch: nil, changesFiles: true).worktree == nil)
+    }
+}

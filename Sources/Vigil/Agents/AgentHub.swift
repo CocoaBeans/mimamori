@@ -54,8 +54,8 @@ final class AgentHub {
     var onNotes: @MainActor (_ worktree: String, _ agent: AgentKind, _ notes: [AgentNote]) -> Void = { _, _, _ in }
 
     private var machines: [String: AgentStatusMachine] = [:]
-    /// Last worktree each agent session was matched to, for events that carry no usable path.
-    private var worktreeBySession: [String: String] = [:]
+    /// Which worktree each agent session works in, for events that carry no usable directory.
+    private var placement = SessionPlacement()
     private var server: HookSocketServer?
     private let scanner = AgentScanner()
     private var scanTask: Task<Void, Never>?
@@ -140,21 +140,26 @@ final class AgentHub {
         lastEventAt = event.receivedAt
         isListening = server?.isListening ?? false
         // Gateway and desktop agents run with a working directory of their own (Hermes's gateway
-        // sits in ~/.hermes), so fall back to the file a tool touches, then to the session's last
-        // known worktree.
-        var resolved: String? = event.cwd.flatMap(resolveWorktree)
-        if resolved == nil, let file = event.filePath, file.hasPrefix("/") { resolved = resolveWorktree(file) }
-        if resolved == nil {
+        // sits in ~/.hermes), so the paths a tool touches stand in; see SessionPlacement for how
+        // a read weighs against an edit.
+        var pathMatch: String? = nil
+        if let file = event.filePath, file.hasPrefix("/") { pathMatch = resolveWorktree(file) }
+        if pathMatch == nil {
             for hint in event.absolutePathHints {
-                if let match = resolveWorktree(hint) { resolved = match; break }
+                if let match = resolveWorktree(hint) { pathMatch = match; break }
             }
         }
-        if resolved == nil, let session = event.sessionID { resolved = worktreeBySession[session] }
-        guard let worktree = resolved else {
+        let decision = placement.place(session: event.sessionID, cwdMatch: event.cwd.flatMap(resolveWorktree),
+                                       pathMatch: pathMatch, changesFiles: event.isMutatingTool)
+        guard let worktree = decision.worktree else {
             eventsUnmatched += 1
             return
         }
-        if let session = event.sessionID { worktreeBySession[session] = worktree }
+        // The session moved on: do not leave its old status behind.
+        if let old = decision.movedFrom, let session = event.sessionID, statuses[old]?.sessionID == session {
+            statuses.removeValue(forKey: old)
+            machines.removeValue(forKey: old)
+        }
         var event = event
         if let file = event.filePath, !file.hasPrefix("/") {
             event.filePath = (worktree as NSString).appendingPathComponent(file)
