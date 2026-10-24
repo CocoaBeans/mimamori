@@ -12,6 +12,15 @@ enum AgentApps {
         return appNamed(like: presence.kind)
     }
 
+    /// Brings the agent's app to the front, or beeps when there is none to find.
+    static func bringForward(_ presence: AgentPresence) {
+        guard let app = app(for: presence) else {
+            NSSound.beep()
+            return
+        }
+        app.activate()
+    }
+
     static func canGo(to presence: AgentPresence) -> Bool {
         !presence.processIDs.isEmpty || appNamed(like: presence.kind) != nil
     }

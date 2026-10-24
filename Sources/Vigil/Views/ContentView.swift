@@ -190,7 +190,20 @@ private struct AgentBannerSlot: View {
 
     var body: some View {
         if let presence = model.agentHub.presence(for: worktree) {
-            AgentStatusBanner(presence: presence, now: model.now)
+            let session = model.sessions[worktree]
+            AgentStatusBanner(presence: presence, now: model.now, details: AgentBannerDetails(
+                worktree: worktree,
+                files: session.map { model.filesTouched(in: $0, by: presence) } ?? [],
+                expanded: model.settings.agentBannerExpanded,
+                canGoToAgent: AgentApps.canGo(to: presence),
+                onToggle: {
+                    var copy = model.settings
+                    copy.agentBannerExpanded.toggle()
+                    model.updateSettings(copy)
+                },
+                onOpenFile: { path in session?.selectedPath = path },
+                onGoToAgent: { AgentApps.bringForward(presence) },
+                onSummary: { model.showSummary(for: worktree) }))
         }
     }
 }

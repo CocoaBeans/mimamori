@@ -125,14 +125,35 @@ struct AgentStatusLine: View {
     }
 }
 
+/// What the banner above the diff can add about the agent's turn, and what it can do.
+struct AgentBannerDetails {
+    var worktree: String
+    /// Changed files touched this turn, most recent first.
+    var files: [FileChange]
+    var expanded: Bool
+    var canGoToAgent: Bool
+    var onToggle: () -> Void
+    var onOpenFile: (String) -> Void
+    var onGoToAgent: () -> Void
+    var onSummary: () -> Void
+}
+
 /// A prominent status banner for the top of the detail column.
 struct AgentStatusBanner: View {
     let presence: AgentPresence
     let now: Date
+    var details: AgentBannerDetails? = nil
+
+    private var expanded: Bool { details?.expanded ?? false }
+
+    /// When the steps are listed below, the headline need not name the running tool.
+    private var stepsShown: Bool {
+        expanded && presence.source == .hooks && !presence.turnSteps.isEmpty
+    }
 
     private var headline: String {
         switch (presence.source, presence.activity) {
-        case (.hooks, .working(let tool, _)): tool.map { "Working · \($0)" } ?? "Working"
+        case (.hooks, .working(let tool, _)): stepsShown ? "Working" : tool.map { "Working · \($0)" } ?? "Working"
         case (.hooks, .needsPermission(let tool, _)): "Needs your permission · \(tool)"
         case (.hooks, .askedQuestion): "Has a question for you"
         case (.hooks, .ready): "Ready for your next prompt"
@@ -144,7 +165,7 @@ struct AgentStatusBanner: View {
     /// The headline for a narrow column.
     private var shortHeadline: String {
         switch (presence.source, presence.activity) {
-        case (.hooks, .working(let tool, _)): tool ?? "Working"
+        case (.hooks, .working(let tool, _)): stepsShown ? "Working" : tool ?? "Working"
         case (.hooks, .needsPermission): "Needs permission"
         case (.hooks, .askedQuestion): "Has a question"
         case (.hooks, .ready): "Ready"
@@ -153,14 +174,17 @@ struct AgentStatusBanner: View {
         }
     }
 
-
     private var detail: String? {
         switch presence.activity {
-        case .working(_, let detail): detail
-        case .needsPermission(_, let detail): detail
+        case .working(_, let detail): stepsShown ? nil : detail.map(shorten)
+        case .needsPermission(_, let detail): detail.map(shorten)
         case .askedQuestion(let detail): detail
         default: presence.source == .process ? "No hooks installed; showing process presence only" : nil
         }
+    }
+
+    private func shorten(_ text: String) -> String {
+        details.map { AgentText.shortenPaths(text, in: $0.worktree) } ?? text
     }
 
     private func headlineRow(_ text: String, named: Bool) -> some View {
@@ -178,17 +202,23 @@ struct AgentStatusBanner: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: presence.systemImage)
                 .font(.title2)
                 .foregroundStyle(presence.tint)
                 .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                // Shorten the words before truncating them, so a narrow column still reads.
-                ViewThatFits(in: .horizontal) {
-                    headlineRow(headline, named: true)
-                    headlineRow(shortHeadline, named: true)
-                    headlineRow(shortHeadline, named: false)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    // Shorten the words before truncating them, so a narrow column still reads.
+                    ViewThatFits(in: .horizontal) {
+                        headlineRow(headline, named: true)
+                        headlineRow(shortHeadline, named: true)
+                        headlineRow(shortHeadline, named: false)
+                    }
+                    .layoutPriority(1)
+                    Spacer(minLength: 8)
+                    trailing
                 }
                 if let detail {
                     Text(detail)
@@ -197,17 +227,8 @@ struct AgentStatusBanner: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-            }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(presence.timing(now: now))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .help(presence.timingHelp)
-                if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
-                    Text(presence.toolCallsThisTurn == 1 ? "1 tool call" : "\(presence.toolCallsThisTurn) tool calls")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                if expanded, let details {
+                    expandedContent(details)
                 }
             }
         }
@@ -222,7 +243,72 @@ struct AgentStatusBanner: View {
         .padding(.top, 10)
         .padding(.bottom, 4)
         .help(presence.source == .hooks ? "Reported by the agent's hooks" : "An agent process has this worktree as its working directory. Install hooks for live status.")
-        .accessibilityElement(children: .combine)
+    }
+
+    /// The clock, the step count, and small buttons for the agent's app, the summary and collapsing.
+    private var trailing: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            // One line, so the detail below sits right under the headline.
+            HStack(spacing: 0) {
+                Text(presence.timing(now: now))
+                    .foregroundStyle(.secondary)
+                    .help(presence.timingHelp)
+                if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
+                    Text(" · " + (presence.toolCallsThisTurn == 1 ? "1 step" : "\(presence.toolCallsThisTurn) steps"))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .font(.callout.monospacedDigit())
+            .fixedSize()
+            if let details {
+                HStack(spacing: 6) {
+                    if details.canGoToAgent {
+                        Button(action: details.onGoToAgent) {
+                            Image(systemName: "arrow.up.forward.app")
+                        }
+                        .help("Go to agent: bring the app it runs in to the front")
+                    }
+                    Button(action: details.onSummary) {
+                        Image(systemName: "doc.text")
+                    }
+                    .help("Session summary (⇧⌘E)")
+                    Button(action: details.onToggle) {
+                        Image(systemName: details.expanded ? "chevron.up" : "chevron.down")
+                    }
+                    .help(details.expanded ? "Show less" : "Show the task, recent steps and files")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func expandedContent(_ details: AgentBannerDetails) -> some View {
+        if let task = presence.task, !task.isEmpty {
+            Label {
+                Text(task)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+            } icon: {
+                Image(systemName: "text.bubble")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+        let steps = Array(presence.turnSteps.suffix(3).reversed())
+        if !steps.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(steps) { step in
+                    StepLine(step: step, target: step.summary.map(shorten), now: now)
+                }
+            }
+            .padding(.top, 1)
+        }
+        if !details.files.isEmpty {
+            FileChips(files: details.files, onOpen: details.onOpenFile)
+                .padding(.top, 1)
+        }
     }
 }
 
