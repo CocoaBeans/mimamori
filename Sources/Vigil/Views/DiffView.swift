@@ -18,6 +18,8 @@ struct DiffView: View {
     @State private var loadedSinceReview = false
     /// A line to jump to once the full diff has loaded.
     @State private var pendingJump: Int?
+    /// Syntax colors and word emphasis for `diff`, worked out off the main thread.
+    @State private var decorations = DiffDecorations.empty
 
     private var review: ReviewStatus { session.reviewStatus(of: change) }
 
@@ -46,7 +48,7 @@ struct DiffView: View {
                 }
                 .background(.bar)
             }
-            .task(id: "\(change.contentKey)|\(reviewedBlob ?? "")|\(wantsSinceReview)") {
+            .task(id: "\(change.contentKey)|\(reviewedBlob ?? "")|\(wantsSinceReview)|\(model.settings.syntaxHighlighting)") {
                 showAll = false
                 targetLineID = nil
                 await load()
@@ -89,7 +91,8 @@ struct DiffView: View {
             if diff.hunks.isEmpty {
                 ContentUnavailableView("No Text Changes", systemImage: "doc", description: Text(emptyDiffDescription(diff)))
             } else {
-                DiffContentView(diff: diff, wrap: model.settings.wrapDiffLines,
+                DiffContentView(diff: diff, decorations: decorations, wrap: model.settings.wrapDiffLines,
+                                sideBySide: model.settings.diffLayout == .sideBySide,
                                 fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID)
             }
         } else if let errorText {
@@ -143,15 +146,16 @@ struct DiffView: View {
         do {
             if wantsSinceReview, let blob = reviewedBlob {
                 if let since = try await session.diffSinceReview(for: change, reviewedBlob: blob) {
-                    diff = since
                     loadedSinceReview = true
+                    await show(since)
                     return
                 }
                 missingReviewBlob = blob
             }
-            diff = try await session.diff(for: change)
+            let full = try await session.diff(for: change)
             loadedSinceReview = false
-            if diff == nil { errorText = "git produced no diff for this file." }
+            await show(full)
+            if full == nil { errorText = "git produced no diff for this file." }
             if let line = pendingJump {
                 pendingJump = nil
                 jump(toNewLine: line)
@@ -159,6 +163,23 @@ struct DiffView: View {
         } catch {
             errorText = error.localizedDescription
         }
+    }
+
+    /// Shows a loaded diff together with its colors, so it never flashes plain first.
+    private func show(_ loaded: FileDiff?) async {
+        guard let loaded else {
+            diff = nil
+            decorations = .empty
+            return
+        }
+        let path = change.path
+        let highlight = model.settings.syntaxHighlighting
+        let computed = await Task.detached(priority: .userInitiated) {
+            DiffDecorations.compute(for: loaded, path: path, highlightSyntax: highlight)
+        }.value
+        guard !Task.isCancelled else { return }
+        decorations = computed
+        diff = loaded
     }
 }
 
@@ -194,6 +215,18 @@ struct DiffHeaderView: View {
             })
     }
 
+    private var sideBySide: Bool { model.settings.diffLayout == .sideBySide }
+
+    private var sideBySideBinding: Binding<Bool> {
+        Binding(
+            get: { sideBySide },
+            set: { value in
+                var copy = model.settings
+                copy.diffLayout = value ? .sideBySide : .unified
+                model.updateSettings(copy)
+            })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             // Title row: only the path has to give way, everything else keeps its size.
@@ -219,11 +252,21 @@ struct DiffHeaderView: View {
                           : "Mark as reviewed and go to the next file to review (⌘↩)")
                 }
                 HStack(spacing: 6) {
+                    Toggle(isOn: sideBySideBinding) {
+                        Image(systemName: "rectangle.split.2x1")
+                    }
+                    .toggleStyle(.button)
+                    .help(sideBySide
+                          ? "Old and new side by side. Click for a single column (⌥⌘L)."
+                          : "Show old and new side by side (⌥⌘L)")
                     Toggle(isOn: wrapBinding) {
                         Image(systemName: "arrow.turn.down.left")
                     }
                     .toggleStyle(.button)
-                    .help(model.settings.wrapDiffLines
+                    .disabled(sideBySide)
+                    .help(sideBySide
+                          ? "Side by side always wraps long lines."
+                          : model.settings.wrapDiffLines
                           ? "Long lines wrap. Click to scroll them horizontally instead (⌥⌘W)."
                           : "Long lines scroll horizontally. Click to wrap them (⌥⌘W).")
                     Button {
@@ -405,15 +448,16 @@ struct DiffHeaderView: View {
 
 struct DiffContentView: View {
     let diff: FileDiff
+    let decorations: DiffDecorations
     let wrap: Bool
+    let sideBySide: Bool
     let fontSize: Double
     @Binding var showAll: Bool
     @Binding var targetLineID: Int?
 
     private static let initialLimit = 2500
-    /// Above this many lines the horizontal (no-wrap) layout falls back to wrapping,
-    /// because it needs a non-lazy stack to measure the widest line.
-    private static let horizontalLimit = 4000
+    /// Narrower than this, two columns are too cramped to read; show one instead.
+    private static let minimumSplitWidth: CGFloat = 560
 
     private struct Visible {
         var hunks: [DiffHunk]
@@ -448,58 +492,34 @@ struct DiffContentView: View {
         return CGFloat(digits) * fontSize * 0.62 + 10
     }
 
-    /// Character ranges to emphasise, keyed by line id, for paired deletion/addition runs.
-    private static func highlights(for hunks: [DiffHunk]) -> [Int: [Range<Int>]] {
-        var result: [Int: [Range<Int>]] = [:]
-        for hunk in hunks {
-            var deletions: [DiffLine] = []
-            var additions: [DiffLine] = []
-            func flush() {
-                let pairs = min(deletions.count, additions.count)
-                for index in 0..<pairs {
-                    let old = DiffLineRow.displayText(deletions[index].text)
-                    let new = DiffLineRow.displayText(additions[index].text)
-                    if let ranges = IntralineDiff.changedRanges(old: old, new: new) {
-                        if !ranges.old.isEmpty { result[deletions[index].id] = ranges.old }
-                        if !ranges.new.isEmpty { result[additions[index].id] = ranges.new }
-                    }
-                }
-                deletions.removeAll()
-                additions.removeAll()
-            }
-            for line in hunk.lines {
-                switch line.kind {
-                case .deletion:
-                    if !additions.isEmpty { flush() }
-                    deletions.append(line)
-                case .addition:
-                    additions.append(line)
-                case .context:
-                    flush()
-                case .noNewline:
-                    continue
-                }
-            }
-            flush()
-        }
-        return result
+    /// Width of the unwrapped layout, worked out from the widest line instead of by
+    /// measuring every row, so even long diffs build only the rows on screen.
+    private var unwrappedWidth: CGFloat {
+        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let column = ("M" as NSString).size(withAttributes: [.font: font]).width
+        return numberWidth * 2 + 8 + 12 + CGFloat(decorations.widestLineColumns) * column + 12 + 24
     }
 
     var body: some View {
         let visible = visible
-        let highlights = Self.highlights(for: visible.hunks)
-        let horizontal = !wrap && visible.lineCount <= Self.horizontalLimit
         GeometryReader { geometry in
+            let split = sideBySide && geometry.size.width >= Self.minimumSplitWidth
+            let horizontal = !split && !wrap
             ScrollViewReader { proxy in
                 ScrollView(horizontal ? [.vertical, .horizontal] : .vertical) {
                     Group {
                         if horizontal {
-                            VStack(alignment: .leading, spacing: 0) {
-                                rows(visible: visible, highlights: highlights, wrap: false)
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                rows(visible: visible, wrap: false)
+                            }
+                            .frame(width: max(unwrappedWidth, geometry.size.width), alignment: .leading)
+                        } else if split {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                                splitRows(visible: visible)
                             }
                         } else {
                             LazyVStack(alignment: .leading, spacing: 0) {
-                                rows(visible: visible, highlights: highlights, wrap: true)
+                                rows(visible: visible, wrap: true)
                             }
                         }
                     }
@@ -523,15 +543,34 @@ struct DiffContentView: View {
     }
 
     @ViewBuilder
-    private func rows(visible: Visible, highlights: [Int: [Range<Int>]], wrap: Bool) -> some View {
+    private func rows(visible: Visible, wrap: Bool) -> some View {
         ForEach(visible.hunks) { hunk in
             HunkHeaderRow(hunk: hunk, fontSize: fontSize)
             ForEach(hunk.lines) { line in
                 DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
-                            highlights: highlights[line.id], isTarget: line.id == targetLineID)
+                            syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
+                            isTarget: line.id == targetLineID)
                     .id(line.id)
             }
         }
+        truncationFooter(visible)
+    }
+
+    @ViewBuilder
+    private func splitRows(visible: Visible) -> some View {
+        ForEach(visible.hunks) { hunk in
+            HunkHeaderRow(hunk: hunk, fontSize: fontSize)
+            ForEach(SideBySide.rows(for: hunk)) { row in
+                SplitLineRow(row: row, decorations: decorations, fontSize: fontSize, numberWidth: numberWidth,
+                             isTarget: targetLineID != nil && (row.left?.id == targetLineID || row.right?.id == targetLineID))
+                    .id(row.id)
+            }
+        }
+        truncationFooter(visible)
+    }
+
+    @ViewBuilder
+    private func truncationFooter(_ visible: Visible) -> some View {
         if visible.truncated {
             HStack {
                 Spacer()
@@ -564,28 +603,9 @@ struct DiffLineRow: View {
     let wrap: Bool
     let fontSize: Double
     let numberWidth: CGFloat
-    let highlights: [Range<Int>]?
+    let syntax: [SyntaxSpan]?
+    let emphasis: [Range<Int>]?
     let isTarget: Bool
-
-    static func displayText(_ text: String) -> String {
-        text.replacingOccurrences(of: "\t", with: "    ")
-    }
-
-    private var background: Color {
-        switch line.kind {
-        case .addition: Color.green.opacity(0.13)
-        case .deletion: Color.red.opacity(0.13)
-        case .context, .noNewline: .clear
-        }
-    }
-
-    private var emphasis: Color {
-        switch line.kind {
-        case .addition: Color.green.opacity(0.32)
-        case .deletion: Color.red.opacity(0.32)
-        case .context, .noNewline: .clear
-        }
-    }
 
     private var marker: String {
         switch line.kind {
@@ -594,20 +614,6 @@ struct DiffLineRow: View {
         case .context: " "
         case .noNewline: "\\"
         }
-    }
-
-    private var attributedText: AttributedString {
-        let text = Self.displayText(line.text)
-        var attributed = AttributedString(text)
-        guard let highlights, !highlights.isEmpty else { return attributed }
-        let characters = attributed.characters
-        let count = characters.count
-        for range in highlights where range.lowerBound >= 0 && range.upperBound <= count && !range.isEmpty {
-            let start = characters.index(characters.startIndex, offsetBy: range.lowerBound)
-            let end = characters.index(start, offsetBy: range.count)
-            attributed[start..<end].backgroundColor = emphasis
-        }
-        return attributed
     }
 
     var body: some View {
@@ -622,7 +628,7 @@ struct DiffLineRow: View {
             Text(marker)
                 .frame(width: 12, alignment: .center)
                 .foregroundStyle(line.kind == .addition ? .green : line.kind == .deletion ? .red : .secondary)
-            Text(attributedText)
+            Text(DiffLineStyle.text(line, syntax: syntax, emphasis: emphasis))
                 .lineLimit(wrap ? nil : 1)
                 .fixedSize(horizontal: !wrap, vertical: false)
                 .foregroundStyle(line.kind == .noNewline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
@@ -633,12 +639,100 @@ struct DiffLineRow: View {
         .font(.system(size: fontSize, design: .monospaced))
         .padding(.vertical, 1)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(background)
+        .background(DiffLineStyle.background(line.kind))
         .overlay {
             if isTarget {
                 Rectangle()
                     .strokeBorder(Color.accentColor, lineWidth: 1.5)
             }
         }
+    }
+}
+
+/// Colors shared by the single-column and side-by-side rows.
+enum DiffLineStyle {
+    static func background(_ kind: DiffLineKind) -> Color {
+        switch kind {
+        case .addition: Color.green.opacity(0.13)
+        case .deletion: Color.red.opacity(0.13)
+        case .context, .noNewline: .clear
+        }
+    }
+
+    static func emphasis(_ kind: DiffLineKind) -> Color {
+        switch kind {
+        case .addition: Color.green.opacity(0.32)
+        case .deletion: Color.red.opacity(0.32)
+        case .context, .noNewline: .clear
+        }
+    }
+
+    static func text(_ line: DiffLine, syntax: [SyntaxSpan]?, emphasis: [Range<Int>]?) -> AttributedString {
+        DiffText.attributed(DiffText.display(line.text), syntax: syntax, emphasis: emphasis,
+                            emphasisColor: Self.emphasis(line.kind))
+    }
+}
+
+/// One row of the side-by-side layout: old on the left, new on the right.
+struct SplitLineRow: View {
+    let row: SplitRow
+    let decorations: DiffDecorations
+    let fontSize: Double
+    let numberWidth: CGFloat
+    let isTarget: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            SplitCell(line: row.left, number: row.left?.oldNumber,
+                      syntax: row.left.flatMap { decorations.syntax[$0.id] },
+                      emphasis: row.left.flatMap { decorations.emphasis[$0.id] },
+                      numberWidth: numberWidth)
+            Rectangle()
+                .fill(Color.secondary.opacity(0.25))
+                .frame(width: 1)
+            SplitCell(line: row.right, number: row.right?.newNumber,
+                      syntax: row.right.flatMap { decorations.syntax[$0.id] },
+                      emphasis: row.right.flatMap { decorations.emphasis[$0.id] },
+                      numberWidth: numberWidth)
+        }
+        // Both cells take the taller one's height, so their backgrounds line up.
+        .fixedSize(horizontal: false, vertical: true)
+        .font(.system(size: fontSize, design: .monospaced))
+        .overlay {
+            if isTarget {
+                Rectangle()
+                    .strokeBorder(Color.accentColor, lineWidth: 1.5)
+            }
+        }
+    }
+}
+
+private struct SplitCell: View {
+    let line: DiffLine?
+    let number: Int?
+    let syntax: [SyntaxSpan]?
+    let emphasis: [Range<Int>]?
+    let numberWidth: CGFloat
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Text(number.map(String.init) ?? "")
+                .frame(width: numberWidth, alignment: .trailing)
+                .foregroundStyle(.tertiary)
+                .padding(.trailing, 8)
+            if let line {
+                Text(DiffLineStyle.text(line, syntax: syntax, emphasis: emphasis))
+                    .foregroundStyle(line.kind == .noNewline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 8)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.vertical, 1)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // A missing side reads as a gap, not as unchanged text.
+        .background(line.map { DiffLineStyle.background($0.kind) } ?? Color.secondary.opacity(0.06))
     }
 }

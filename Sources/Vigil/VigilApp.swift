@@ -100,6 +100,21 @@ struct VigilCommands: Commands {
                     model.updateSettings(copy)
                 }))
                 .keyboardShortcut("w", modifiers: [.command, .option])
+            Toggle("Side-by-Side Diff", isOn: Binding(
+                get: { model.settings.diffLayout == .sideBySide },
+                set: { value in
+                    var copy = model.settings
+                    copy.diffLayout = value ? .sideBySide : .unified
+                    model.updateSettings(copy)
+                }))
+                .keyboardShortcut("l", modifiers: [.command, .option])
+            Toggle("Syntax Highlighting", isOn: Binding(
+                get: { model.settings.syntaxHighlighting },
+                set: { value in
+                    var copy = model.settings
+                    copy.syntaxHighlighting = value
+                    model.updateSettings(copy)
+                }))
             Divider()
             Button(model.selectedChangeIsReviewed ? "Mark as Not Reviewed" : "Mark as Reviewed") {
                 model.toggleReviewForSelection()

@@ -15,6 +15,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var recencyWindowSeconds: Double = 90
     var wrapDiffLines: Bool = true
     var diffFontSize: Double = 12
+    var syntaxHighlighting: Bool = true
+    var diffLayout: DiffLayout = .unified
     var inspector = InspectorConfiguration()
     var agentScanEnabled: Bool = true
     var agentScanIntervalSeconds: Double = 3
@@ -43,6 +45,8 @@ struct AppSettings: Codable, Hashable, Sendable {
         recencyWindowSeconds = try c.decodeIfPresent(Double.self, forKey: .recencyWindowSeconds) ?? defaults.recencyWindowSeconds
         wrapDiffLines = try c.decodeIfPresent(Bool.self, forKey: .wrapDiffLines) ?? defaults.wrapDiffLines
         diffFontSize = try c.decodeIfPresent(Double.self, forKey: .diffFontSize) ?? defaults.diffFontSize
+        syntaxHighlighting = try c.decodeIfPresent(Bool.self, forKey: .syntaxHighlighting) ?? defaults.syntaxHighlighting
+        diffLayout = try c.decodeIfPresent(DiffLayout.self, forKey: .diffLayout) ?? defaults.diffLayout
         inspector = try c.decodeIfPresent(InspectorConfiguration.self, forKey: .inspector) ?? defaults.inspector
         agentScanEnabled = try c.decodeIfPresent(Bool.self, forKey: .agentScanEnabled) ?? defaults.agentScanEnabled
         agentScanIntervalSeconds = try c.decodeIfPresent(Double.self, forKey: .agentScanIntervalSeconds) ?? defaults.agentScanIntervalSeconds
@@ -52,6 +56,13 @@ struct AppSettings: Codable, Hashable, Sendable {
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
         agentsWindowFloats = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowFloats) ?? defaults.agentsWindowFloats
     }
+}
+
+enum DiffLayout: String, Codable, CaseIterable, Sendable {
+    /// One column: deletions above additions.
+    case unified
+    /// Old on the left, new on the right.
+    case sideBySide
 }
 
 enum AgentToolCallFeedMode: String, Codable, CaseIterable, Sendable {

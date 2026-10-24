@@ -49,6 +49,11 @@ struct GeneralSettingsView: View {
             Section("Appearance") {
                 Toggle("Show in menu bar", isOn: settings.showMenuBarExtra)
                 Toggle("Wrap long diff lines", isOn: settings.wrapDiffLines)
+                    .disabled(settings.wrappedValue.diffLayout == .sideBySide)
+                Toggle("Show diffs side by side", isOn: Binding(
+                    get: { settings.wrappedValue.diffLayout == .sideBySide },
+                    set: { settings.wrappedValue.diffLayout = $0 ? .sideBySide : .unified }))
+                Toggle("Highlight syntax in diffs", isOn: settings.syntaxHighlighting)
                 Stepper("Diff font size: \(Int(settings.wrappedValue.diffFontSize))",
                         value: settings.diffFontSize, in: 9...20, step: 1)
             }

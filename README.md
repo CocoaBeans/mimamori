@@ -25,7 +25,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - *Since snapshot*: any earlier snapshot Vigil recorded.
 - **Follows every worktree.** Add a repository and Vigil discovers its linked worktrees (for example the ones agent tools create under `.claude/worktrees/`) and watches them all. Repositories collapse in the sidebar; worktrees you do not care about can be hidden. Stop watching a repository from any of its rows' context menu, the File menu (⌘⌫), or the Delete key.
 - **Flags what deserves a look.** Lockfiles, `.env` and key material, secret-looking strings in added lines, CI and agent instruction files, `.gitignore` edits, mass deletions, deleted or skipped tests, conflict markers, lint suppressions, debug leftovers, permission changes, huge files, and edits outside a scope you define. Click the orange count to see every flagged file and why. Every rule can be switched off and thresholds are adjustable.
-- **Shows diffs the way you read them.** Unified diff with line numbers, word-level emphasis on the parts of a line that actually changed, wrapping or horizontal scrolling, copy as a patch, and flags that jump to the offending line. ⌘F filters the file list.
+- **Shows diffs the way you read them.** Unified or side-by-side (⌥⌘L), with line numbers, syntax colors for about 25 languages and formats, word-level emphasis on the parts of a line that actually changed, wrapping or horizontal scrolling, copy as a patch, and flags that jump to the offending line. ⌘F filters the file list. The highlighter is built in, with no dependencies, and runs off the main thread once per diff.
 - **Remembers what you have reviewed.** Mark a file reviewed (⌘↩ marks it and moves to the next one) and it dims in the list; hide reviewed files to see only what is left. A mark covers the content you saw, so when an agent edits the file again it comes back as *changed since your review*, and the diff can show just the edits made after you looked. The sidebar counts what is left to review in each worktree.
 - **Records snapshots.** When the tree changes, Vigil writes a commit object of the whole working tree (untracked files included) under `refs/monitor/<worktree-id>/`. Branches, the index and the working tree are untouched. Snapshots keep the Start marker alive across restarts and let you compare against any earlier moment.
 - **Keeps an activity feed.** Created, modified, deleted and reverted files, commits, branch switches and new flags, newest first, for one worktree or all of them. Click an entry to jump to the file.
@@ -142,7 +142,6 @@ Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
 ## Ideas not built yet
 
 - A read-only transcript adapter for agents without hooks installed.
-- Side-by-side diffs and syntax highlighting.
 - A timeline scrubber across snapshots.
 - A gated "discard this hunk" escape hatch.
 
