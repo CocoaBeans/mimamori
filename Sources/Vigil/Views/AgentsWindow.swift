@@ -205,13 +205,17 @@ struct AgentDashboardRow: View {
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: detailed ? 5 : 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    // Project first, then the branch: the project is what you recognize at a glance.
+                    if !row.repositoryName.isEmpty {
+                        Text(row.repositoryName)
+                            .font(.title3.weight(.semibold))
+                            .lineLimit(1)
+                    }
                     Text(row.session.displayName)
-                        .font(.headline)
+                        .font(.title3)
+                        .foregroundStyle(row.repositoryName.isEmpty ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text(row.repositoryName)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                     Spacer(minLength: 6)
                     Text(timing)
                         .font(.callout.monospacedDigit())
