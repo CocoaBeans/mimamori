@@ -11,6 +11,7 @@ import VigilCore
 ///     VIGIL_DEBUG_REVIEW=path,path           mark these files in the selected worktree reviewed once they appear
 ///     VIGIL_WINDOW=1000x640                  resize the main window after launch
 ///     VIGIL_SUPPORT_DIR=/path                keep state, shadow indexes and the socket here instead
+///     VIGIL_SCREENSHOT_WINDOW=Agents         capture the window with this title instead of the largest
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -30,12 +31,15 @@ enum DebugHooks {
         let interval = Double(value("VIGIL_SCREENSHOT_INTERVAL") ?? "") ?? 0
 
         let windowSize = value("VIGIL_WINDOW")
+        let windowTitle = value("VIGIL_SCREENSHOT_WINDOW")
         var toggledReview = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
             if let windowSize {
                 let parts = windowSize.lowercased().split(separator: "x").compactMap { Double($0) }
-                if parts.count == 2, let window = NSApp.windows.first(where: { $0.styleMask.contains(.titled) && $0.isVisible }) {
+                if parts.count == 2, let window = NSApp.windows.first(where: {
+                    $0.styleMask.contains(.titled) && $0.isVisible && (windowTitle == nil || $0.title == windowTitle)
+                }) {
                     window.setContentSize(NSSize(width: parts[0], height: parts[1]))
                     window.center()
                 }
@@ -68,7 +72,7 @@ enum DebugHooks {
                     }
                 }
                 if let dump { writeDump(model: model, to: dump) }
-                if let screenshot { writeMainWindowImage(to: screenshot) }
+                if let screenshot { writeMainWindowImage(to: screenshot, title: windowTitle) }
                 if interval <= 0 { break }
                 try? await Task.sleep(for: .seconds(interval))
             } while !Task.isCancelled
@@ -125,8 +129,9 @@ enum DebugHooks {
         try? lines.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
     }
 
-    static func writeMainWindowImage(to path: String) {
-        let candidates = NSApp.windows.filter { $0.isVisible && $0.styleMask.contains(.titled) && $0.contentView != nil }
+    static func writeMainWindowImage(to path: String, title: String? = nil) {
+        var candidates = NSApp.windows.filter { $0.isVisible && $0.styleMask.contains(.titled) && $0.contentView != nil }
+        if let title { candidates = candidates.filter { $0.title == title } }
         guard let window = candidates.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }),
               let view = window.contentView?.superview ?? window.contentView else { return }
 

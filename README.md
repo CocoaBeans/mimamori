@@ -30,6 +30,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 - **Records snapshots.** When the tree changes, Vigil writes a commit object of the whole working tree (untracked files included) under `refs/monitor/<worktree-id>/`. Branches, the index and the working tree are untouched. Snapshots keep the Start marker alive across restarts and let you compare against any earlier moment.
 - **Keeps an activity feed.** Created, modified, deleted and reverted files, commits, branch switches and new flags, newest first, for one worktree or all of them. Click an entry to jump to the file.
 - **Knows where the agents are.** Vigil scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in. With Claude Code hooks installed (Settings › Agents, one click, reversible) it also knows exactly what the agent is doing: when a turn starts and ends, each tool call, and when it needs your permission or asks you a question. A finished turn reads as ready for your next prompt and does not count as needing you. File changes are attributed to the tool call that made them, worktrees that need you are counted in the sidebar and the menu bar, and you can be notified when an agent needs permission or has a question.
+- **Has an Agents window.** ⇧⌘A (or the toolbar's Agents button, or the menu bar) opens a compact list of every worktree with an agent in it: what it is doing, for how long, its last tool call, and how much is changed and left to review. Agents waiting on you sort to the top, longest wait first. Click a row to jump to that worktree; pin the window to keep it above everything else.
 - **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you; the menu lists every repository and worktree.
 
 
@@ -128,7 +129,8 @@ Environment variables for driving the app headlessly, useful on machines without
 | `VIGIL_DEBUG_SELECT=src/app.py` | Select that file in the selected worktree once it appears |
 | `VIGIL_DEBUG_REVIEW=README.md,src/app.py` | Mark those files in the selected worktree reviewed once they appear |
 | `VIGIL_WINDOW=1000x640` | Resize the main window after launch (clamped to the content minimum) |
-| `VIGIL_DEBUG_FLAGS=popover:sidebar,cycle` | Open the attention popover; cycle the selection through all worktrees; `toggle-review` presses ⌘↩ once on the selected file |
+| `VIGIL_DEBUG_FLAGS=popover:sidebar,cycle` | Open the attention popover; cycle the selection through all worktrees; `toggle-review` presses ⌘↩ once on the selected file; `agents-window` opens the Agents window |
+| `VIGIL_SCREENSHOT_WINDOW=Agents` | Capture the window with that title instead of the main window |
 | `VIGIL_SUPPORT_DIR=/tmp/vigil-scratch` | Keep state, shadow indexes and the hook socket in that folder, leaving your real setup alone |
 
 Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
@@ -140,7 +142,6 @@ Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
 ## Ideas not built yet
 
 - A read-only transcript adapter for agents without hooks installed.
-- A compact Agents window: every worktree with an agent, its state and how long it has been in it, with the ones waiting on you on top; click a row to jump to that worktree.
 - Side-by-side diffs and syntax highlighting.
 - A timeline scrubber across snapshots.
 - A gated "discard this hunk" escape hatch.

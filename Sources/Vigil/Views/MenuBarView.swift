@@ -60,6 +60,10 @@ struct MenuBarMenu: View {
         }
         Divider()
         Button("Open Vigil") { show(worktree: nil) }
+        Button("Agents…") {
+            openWindow(id: "agents")
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
         Button("Refresh All") { model.refreshAll() }
         SettingsLink { Text("Settings…") }
         Divider()

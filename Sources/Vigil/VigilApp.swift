@@ -25,6 +25,15 @@ struct VigilApp: App {
         .windowToolbarStyle(.unified)
         .commands { VigilCommands(model: model) }
 
+        Window("Agents", id: "agents") {
+            AgentsWindowView()
+                .environment(model)
+        }
+        .defaultSize(width: 460, height: 460)
+        .windowResizability(.contentMinSize)
+        .keyboardShortcut("a", modifiers: [.command, .shift])
+        .windowLevel(model.settings.agentsWindowFloats ? .floating : .normal)
+
         Settings {
             SettingsView()
                 .environment(model)

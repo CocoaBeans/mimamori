@@ -22,6 +22,7 @@ struct AppSettings: Codable, Hashable, Sendable {
     var notifyOnAgentPermission: Bool = true
     var notifyOnAgentTurnFinished: Bool = false
     var customAgentNames: [String] = []
+    var agentsWindowFloats: Bool = false
 
     init() {}
 
@@ -49,6 +50,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         notifyOnAgentPermission = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentPermission) ?? defaults.notifyOnAgentPermission
         notifyOnAgentTurnFinished = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentTurnFinished) ?? defaults.notifyOnAgentTurnFinished
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
+        agentsWindowFloats = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowFloats) ?? defaults.agentsWindowFloats
     }
 }
 

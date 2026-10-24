@@ -144,7 +144,8 @@ public enum HookEventParser {
             toolName: toolName,
             toolUseID: object["tool_use_id"] as? String,
             filePath: filePath,
-            summary: summary.map { String($0.prefix(120)) },
+            // Long enough for a deep absolute path, so views can shorten it relative to its worktree.
+            summary: summary.map { String($0.prefix(400)) },
             message: message.map { String($0.prefix(200)) },
             notificationType: object["notification_type"] as? String,
             receivedAt: receivedAt)

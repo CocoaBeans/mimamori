@@ -23,6 +23,41 @@ extension AgentPresence {
         case (.process, _): "sparkles"
         }
     }
+
+    /// What the clock measures, said plainly: "working for 4m", "waiting 30s", "idle for 3m".
+    func timing(now: Date) -> String {
+        let span = Format.duration(since: since, to: now)
+        switch (source, activity) {
+        case (.process, _): return "running for \(span)"
+        case (.hooks, .working): return "working for \(span)"
+        case (.hooks, .needsPermission), (.hooks, .askedQuestion): return "waiting \(span)"
+        case (.hooks, .ready): return "idle for \(span)"
+        case (.hooks, .idle): return "ended \(Format.relative(since, to: now))"
+        }
+    }
+
+    var timingHelp: String {
+        switch source {
+        case .process: "Time since the oldest agent process in this worktree started. Install hooks to see what it is doing."
+        case .hooks: "Time since the agent entered this state, as reported by its hooks."
+        }
+    }
+
+    var isWorking: Bool {
+        if case .working = activity, source == .hooks { return true }
+        return source == .process && isBusy
+    }
+
+    /// Sort rank in lists of agents: what is blocked on you, then what is busy, then the rest.
+    var urgency: Int {
+        switch (source, activity) {
+        case (.hooks, .needsPermission), (.hooks, .askedQuestion): 0
+        case (.hooks, .working): 1
+        case (.process, _): isBusy ? 1 : 2
+        case (.hooks, .ready): 2
+        case (.hooks, .idle): 3
+        }
+    }
 }
 
 /// A small colored dot plus agent name, for sidebar rows.
@@ -126,25 +161,6 @@ struct AgentStatusBanner: View {
         }
     }
 
-    /// What the clock on the right measures, said plainly.
-    private var timing: String {
-        let span = Format.duration(since: presence.since, to: now)
-        switch (presence.source, presence.activity) {
-        case (.process, _): return "running for \(span)"
-        case (.hooks, .working): return "working for \(span)"
-        case (.hooks, .needsPermission): return "waiting \(span)"
-        case (.hooks, .askedQuestion): return "waiting \(span)"
-        case (.hooks, .ready): return "idle for \(span)"
-        case (.hooks, .idle): return "ended \(Format.relative(presence.since, to: now))"
-        }
-    }
-
-    private var timingHelp: String {
-        switch presence.source {
-        case .process: "Time since the oldest agent process in this worktree started. Install hooks to see what it is doing."
-        case .hooks: "Time since the agent entered this state, as reported by its hooks."
-        }
-    }
 
     private var detail: String? {
         switch presence.activity {
@@ -193,10 +209,10 @@ struct AgentStatusBanner: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(timing)
+                Text(presence.timing(now: now))
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .help(timingHelp)
+                    .help(presence.timingHelp)
                 if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
                     Text(presence.toolCallsThisTurn == 1 ? "1 tool call" : "\(presence.toolCallsThisTurn) tool calls")
                         .font(.caption.monospacedDigit())

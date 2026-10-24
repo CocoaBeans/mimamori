@@ -3,6 +3,7 @@ import VigilCore
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -32,6 +33,9 @@ struct ContentView: View {
         .onChange(of: model.sortOrder) { model.persistUISoon() }
         .onChange(of: model.selectedWorktreeID) { model.persistUISoon() }
         .frame(minHeight: 480)
+        .onAppear {
+            if model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
+        }
     }
 
     @ViewBuilder
@@ -65,6 +69,14 @@ struct ContentView: View {
                 Label("Add Repository", systemImage: "plus")
             }
             .help("Watch another repository or worktree (⌘O)")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                openWindow(id: "agents")
+            } label: {
+                Label("Agents", systemImage: "sparkles.rectangle.stack")
+            }
+            .help("Show every agent at a glance (⇧⌘A)")
         }
         ToolbarItem(placement: .primaryAction) {
             Toggle(isOn: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) {
