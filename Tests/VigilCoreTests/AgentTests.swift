@@ -502,3 +502,178 @@ struct AgentTurnTests {
         #expect(ProcessInspector.parentPID(of: -1) == nil)
     }
 }
+
+@Suite("Permission requests")
+struct PermissionRequestTests {
+    private func event(_ name: HookEvent.Name, tool: String? = nil, id: String? = nil, summary: String? = nil,
+                       message: String? = nil, type: String? = nil, agentID: String? = nil, batch: [String] = [],
+                       at seconds: TimeInterval) -> HookEvent {
+        HookEvent(name: name, rawName: name.rawValue, sessionID: "s1", cwd: "/repo", toolName: tool, toolUseID: id,
+                  summary: summary, message: message, notificationType: type, agentID: agentID, batchToolUseIDs: batch,
+                  receivedAt: Date(timeIntervalSince1970: 1000 + seconds))
+    }
+
+    /// A turn with `xcodebuild test` waiting on your permission.
+    private func waitingMachine() -> AgentStatusMachine {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.userPromptSubmit, message: "run the tests", at: 0))
+        _ = machine.apply(event(.preToolUse, tool: "Bash", id: "t1", summary: "xcodebuild test", at: 1))
+        _ = machine.apply(event(.permissionRequest, tool: "Bash", summary: "xcodebuild test", at: 1.1))
+        return machine
+    }
+
+    @Test func parsesTheEventsThatEndAToolCall() throws {
+        let failure = try #require(HookEventParser.parse(Data(#"{"hook_event_name":"PostToolUseFailure","cwd":"/repo","tool_name":"Bash","tool_use_id":"t1","tool_input":{"command":"swift test"},"error":"Exit code 1\nerror: no such module","is_interrupt":false,"agent_id":"a7"}"#.utf8)))
+        #expect(failure.name == .postToolUseFailure)
+        #expect(failure.toolUseID == "t1")
+        #expect(failure.message == "Exit code 1")
+        #expect(failure.agentID == "a7")
+        #expect(!failure.isInterrupt)
+        let batch = try #require(HookEventParser.parse(Data(#"{"hook_event_name":"PostToolBatch","cwd":"/repo","tool_calls":[{"tool_name":"Bash","tool_input":{},"tool_use_id":"t1"},{"tool_name":"Read","tool_input":{},"tool_use_id":"t2"}]}"#.utf8)))
+        #expect(batch.name == .postToolBatch)
+        #expect(batch.batchToolUseIDs == ["t1", "t2"])
+        let stopFailure = try #require(HookEventParser.parse(Data(#"{"hook_event_name":"StopFailure","cwd":"/repo","error":"rate_limit"}"#.utf8)))
+        #expect(stopFailure.name == .stopFailure)
+        #expect(stopFailure.message == "rate_limit")
+        let denied = try #require(HookEventParser.parse(Data(#"{"hook_event_name":"PermissionDenied","cwd":"/repo","tool_name":"Bash","tool_use_id":"t3","tool_input":{"command":"rm -rf build"},"reason":"destructive"}"#.utf8)))
+        #expect(denied.name == .permissionDenied)
+    }
+
+    @Test func aRequestBelongsToTheCallThatAskedForIt() throws {
+        let machine = waitingMachine()
+        let status = try #require(machine.status)
+        #expect(status.activity == .needsPermission(tool: "Bash", detail: "xcodebuild test"))
+        #expect(status.pendingPermission?.callID == "t1")
+        #expect(status.commandAwaitingPermission?.command == "xcodebuild test")
+    }
+
+    @Test func approvingShowsTheCommandRunning() {
+        var machine = waitingMachine()
+        // Claude Code's reminder six seconds in neither changes the details nor makes a second entry.
+        let reminder = machine.apply(event(.notification, message: "Claude needs your permission to use Bash", type: "permission_prompt", at: 7))
+        #expect(reminder.isEmpty)
+        #expect(machine.status?.activity == .needsPermission(tool: "Bash", detail: "xcodebuild test"))
+        let approved = machine.noteApproved(at: Date(timeIntervalSince1970: 1009))
+        #expect(approved)
+        #expect(machine.status?.activity == .working(tool: "Bash", detail: "xcodebuild test"))
+        #expect(machine.status?.pendingPermission == nil)
+        #expect(machine.status?.commandAwaitingPermission == nil)
+        let again = machine.noteApproved()
+        #expect(!again)
+    }
+
+    @Test func aFailedCommandSettlesThePermission() throws {
+        var machine = waitingMachine()
+        _ = machine.apply(event(.postToolUseFailure, tool: "Bash", id: "t1", message: "Exit code 65", at: 40))
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+        let call = try #require(machine.status?.recentToolCalls.last)
+        #expect(call.finishedAt != nil && call.failed)
+    }
+
+    @Test func aDeniedCallIsSettledByItsBatch() throws {
+        var machine = waitingMachine()
+        _ = machine.apply(event(.postToolBatch, batch: ["t1"], at: 5))
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+        let call = try #require(machine.status?.recentToolCalls.last)
+        #expect(call.finishedAt != nil && !call.failed)
+    }
+
+    @Test func otherSubagentsDoNotSettleIt() {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.userPromptSubmit, at: 0))
+        _ = machine.apply(event(.preToolUse, tool: "Bash", id: "a-1", summary: "git push", agentID: "a", at: 1))
+        _ = machine.apply(event(.permissionRequest, tool: "Bash", summary: "git push", agentID: "a", at: 1.1))
+        // Subagent b keeps working while a waits on you.
+        _ = machine.apply(event(.preToolUse, tool: "Read", id: "b-1", summary: "README.md", agentID: "b", at: 2))
+        _ = machine.apply(event(.postToolUse, tool: "Read", id: "b-1", agentID: "b", at: 3))
+        _ = machine.apply(event(.postToolBatch, agentID: "b", batch: ["b-1"], at: 3.1))
+        #expect(machine.status?.activity.needsAttention == true)
+        #expect(machine.status?.recentToolCalls.first { $0.id == "b-1" }?.finishedAt != nil)
+        _ = machine.apply(event(.postToolUse, tool: "Bash", id: "a-1", agentID: "a", at: 9))
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+    }
+
+    @Test func theSameAgentMovingOnSettlesIt() {
+        var machine = waitingMachine()
+        // An install without the batch event: the agent's next call still shows it was answered.
+        _ = machine.apply(event(.preToolUse, tool: "Read", id: "t2", summary: "Package.swift", at: 5))
+        #expect(machine.status?.activity == .working(tool: "Read", detail: "Package.swift"))
+        #expect(machine.status?.pendingPermission == nil)
+    }
+
+    @Test func aReminderAloneNamesTheTool() {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.notification, message: "Claude needs your permission to use Write", type: "permission_prompt", at: 0))
+        #expect(machine.status?.activity == .needsPermission(tool: "Write", detail: "Claude needs your permission to use Write"))
+        // Not a shell command Vigil can look for.
+        #expect(machine.status?.commandAwaitingPermission == nil)
+    }
+
+    @Test func aTurnEndingOnAnErrorIsReady() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.userPromptSubmit, at: 0))
+        _ = machine.apply(event(.preToolUse, tool: "Bash", id: "t1", summary: "swift build", at: 1))
+        let notes = machine.apply(event(.stopFailure, message: "rate_limit", at: 20))
+        #expect(machine.status?.activity == .ready)
+        #expect(notes.first?.title.contains("error") == true)
+        #expect(notes.first?.detail?.contains("rate limit") == true)
+        #expect(try #require(machine.status?.recentToolCalls.last).finishedAt != nil)
+    }
+
+    @Test func aNewTurnClosesStepsAnInterruptLeftOpen() throws {
+        var machine = waitingMachine()
+        // Pressing Esc ends the turn without a Stop; the next prompt starts afresh.
+        _ = machine.apply(event(.userPromptSubmit, message: "never mind", at: 30))
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+        #expect(try #require(machine.status?.recentToolCalls.first).finishedAt != nil)
+    }
+}
+
+@Suite("Approved command probe")
+struct ClaudeCommandProbeTests {
+    @Test func needleMatchesHowClaudeCodeQuotesTheCommand() {
+        let line = "git commit -m 'it'\"'\"'s done' && echo ok"
+        let needle = ClaudeCommandProbe.needle(forFirstLine: "cat <<'EOF' > notes.txt")
+        #expect(needle == #"eval 'cat <<'"'"'EOF'"'"' > notes.txt"#)
+        let script = #"source ~/.claude/shell-snapshots/snapshot-zsh-1.sh && eval 'cat <<'"'"'EOF'"'"' > notes.txt"# + "\nhi\nEOF' < /dev/null && pwd -P >| /tmp/claude-1a2b-cwd"
+        #expect(ClaudeCommandProbe.isRunning(needle, arguments: ["/bin/zsh", "-c", script]))
+        #expect(!ClaudeCommandProbe.isRunning(needle, arguments: ["/bin/zsh", script]))
+        #expect(!ClaudeCommandProbe.isRunning(ClaudeCommandProbe.needle(forFirstLine: line), arguments: ["/bin/zsh", "-c", script]))
+    }
+
+    @Test func findsARunningShellStartedAfterTheRequest() throws {
+        let line = "sleep 3; echo vigil-probe-\(UUID().uuidString.prefix(8))"
+        let asked = Date().addingTimeInterval(-0.5)
+        let shell = Process()
+        shell.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        shell.arguments = ["-c", "eval '\(line)' < /dev/null"]
+        shell.standardOutput = FileHandle.nullDevice
+        try shell.run()
+        defer { shell.terminate() }
+        Thread.sleep(forTimeInterval: 0.2)
+        #expect(ClaudeCommandProbe.running([line: asked]) == [line])
+        // A request made after the shell started is not answered by it.
+        #expect(ClaudeCommandProbe.running([line: Date().addingTimeInterval(5)]).isEmpty)
+        #expect(ClaudeCommandProbe.running([:]).isEmpty)
+    }
+}
+
+@Suite("Claude hooks updates")
+struct ClaudeHooksUpdateTests {
+    let command = ClaudeHooksConfig.command(socketPath: "/Users/someone/Library/Application Support/Vigil/vigil.sock")
+
+    @Test func anOlderInstallIsOutdated() {
+        var older = ClaudeHooksConfig.install(into: [:], command: command)
+        var hooks = older["hooks"] as! [String: Any]
+        for name in ["PostToolUseFailure", "PostToolBatch", "PermissionDenied", "StopFailure"] { hooks.removeValue(forKey: name) }
+        older["hooks"] = hooks
+        #expect(ClaudeHooksConfig.isOutdated(in: older, command: command))
+        let updated = ClaudeHooksConfig.install(into: older, command: command)
+        #expect(ClaudeHooksConfig.isInstalled(in: updated))
+        #expect(!ClaudeHooksConfig.isOutdated(in: updated, command: command))
+        // Hooks aimed at another socket (another Vigil, a test run) are not ours to update.
+        let other = ClaudeHooksConfig.command(socketPath: "/tmp/elsewhere/vigil.sock")
+        #expect(!ClaudeHooksConfig.isOutdated(in: older, command: other))
+        #expect(!ClaudeHooksConfig.isOutdated(in: [:], command: command))
+    }
+}

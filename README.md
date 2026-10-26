@@ -82,7 +82,7 @@ This creates a throwaway repository, prints its path, and then edits, adds, dele
 
 Without any setup, Vigil detects agent processes by their working directory and shows them on the worktree they sit in. That tells you an agent is there and whether it is busy, nothing more.
 
-Hooks tell Vigil what the agent is doing. **Settings › Agents › Install Hooks** adds entries to `~/.claude/settings.json` for Claude Code's `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SubagentStop` and `SessionEnd` events. Each entry runs:
+Hooks tell Vigil what the agent is doing. **Settings › Agents › Install Hooks** adds entries to `~/.claude/settings.json` for Claude Code's `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `PermissionRequest`, `PermissionDenied`, `Notification`, `Stop`, `StopFailure`, `SubagentStop` and `SessionEnd` events. Each entry runs:
 
 ```bash
 curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \
@@ -90,7 +90,9 @@ curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \
   --data-binary @- http://vigil/event >/dev/null 2>&1 || true
 ```
 
-A timestamped backup of the settings file is written first, hooks you already have are kept, and **Uninstall Hooks** removes only Vigil's entries. When Vigil is not running the command fails silently in under a second, so agents are never slowed down. Events are kept in memory only; nothing is written to disk and nothing leaves the machine. **Hermes Agent** is supported the same way. **Install Hermes Hooks** writes a small script to `~/.hermes/agent-hooks/vigil.sh` and appends a delimited `hooks:` block to `~/.hermes/config.yaml` (backup first). If your config already has a `hooks:` key, Vigil copies the entries to the clipboard for you to paste instead. Hermes runs a hook only after you approve it, and its gateway has no terminal to ask from, so it skips unapproved hooks silently. Run `hermes --accept-hooks` once in a terminal (or plain `hermes` and answer each prompt), then open a new session; Settings › Agents shows how many of Vigil's hooks are still waiting for approval. Events arrive on `http://vigil/event/hermes` and are translated from Hermes's names (`pre_tool_call`, `pre_approval_request`, `on_human_input_request`, `pre_verify`, …).
+A timestamped backup of the settings file is written first, hooks you already have are kept, and **Uninstall Hooks** removes only Vigil's entries. When a newer Vigil listens to events an older one did not install, it adds them at launch the same way (backup first).
+
+A tool call ends in `PostToolUse` when it succeeds, `PostToolUseFailure` when it fails (a command exiting non-zero) or is interrupted, and only `PostToolBatch` when you deny it; a turn ends in `Stop`, or `StopFailure` after an API error. Claude Code sends nothing between your approval of a command and the command finishing, so while a shell command waits on your permission Vigil looks for the shell Claude Code starts for it (every 1.5 seconds, only while one waits). Once that is running, the agent shows as working instead of still needing you through a long build or test run. When Vigil is not running the command fails silently in under a second, so agents are never slowed down. Events are kept in memory only; nothing is written to disk and nothing leaves the machine. **Hermes Agent** is supported the same way. **Install Hermes Hooks** writes a small script to `~/.hermes/agent-hooks/vigil.sh` and appends a delimited `hooks:` block to `~/.hermes/config.yaml` (backup first). If your config already has a `hooks:` key, Vigil copies the entries to the clipboard for you to paste instead. Hermes runs a hook only after you approve it, and its gateway has no terminal to ask from, so it skips unapproved hooks silently. Run `hermes --accept-hooks` once in a terminal (or plain `hermes` and answer each prompt), then open a new session; Settings › Agents shows how many of Vigil's hooks are still waiting for approval. Events arrive on `http://vigil/event/hermes` and are translated from Hermes's names (`pre_tool_call`, `pre_approval_request`, `on_human_input_request`, `pre_verify`, …).
 
 Other agents with a hook mechanism can post the Claude Code JSON shape (`hook_event_name`, `cwd`, `tool_name`, `tool_input`, …) to `http://vigil/event`.
 
@@ -100,7 +102,7 @@ Vigil talks to nothing but your local `git`. It has no network code beyond a Uni
 
 - `~/Library/Application Support/Vigil/`: settings, the list of watched repositories, review marks, the shadow index files, and `activity.jsonl`, the activity feed (one JSON entry per line, kept for the number of days you choose).
 - `refs/monitor/…` inside watched repositories, for snapshots (see above).
-- `~/.claude/settings.json`, only when you click Install Hooks, with a backup beside it.
+- `~/.claude/settings.json`, only when you click Install Hooks or a newer Vigil adds events to hooks you installed, with a backup beside it.
 
 ## Development
 

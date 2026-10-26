@@ -27,6 +27,16 @@ enum HookInstaller {
         return try write(ClaudeHooksConfig.install(into: settings, command: command))
     }
 
+    /// Adds the events a newer Vigil listens to when an older one installed the rest, so a
+    /// status does not stick for want of the event that ends it. Returns the backup, if written.
+    @discardableResult
+    static func updateIfOutdated(socketPath: String) throws -> URL? {
+        let settings = try load()
+        let command = ClaudeHooksConfig.command(socketPath: socketPath)
+        guard ClaudeHooksConfig.isOutdated(in: settings, command: command) else { return nil }
+        return try write(ClaudeHooksConfig.install(into: settings, command: command))
+    }
+
     static func uninstall() throws -> URL {
         let settings = try load()
         return try write(ClaudeHooksConfig.uninstall(from: settings))

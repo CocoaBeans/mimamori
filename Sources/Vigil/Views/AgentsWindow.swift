@@ -262,7 +262,7 @@ struct AgentDashboardRow: View {
         if !steps.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(steps) { step in
-                    StepLine(step: step, target: step.summary.map(relative), now: now)
+                    StepLine(step: step, target: step.summary.map(relative), now: now, waiting: step.id == presence.awaitingCallID)
                 }
             }
             .padding(.top, 1)

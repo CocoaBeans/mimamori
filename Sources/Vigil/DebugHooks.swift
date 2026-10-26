@@ -120,7 +120,11 @@ enum DebugHooks {
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled())")
         for row in model.agentRows {
             let app = AgentApps.app(for: row.presence)?.localizedName ?? "-"
-            lines.append("  row \((row.session.id as NSString).lastPathComponent): task=\"\(row.presence.task ?? "-")\" steps=\(row.presence.turnSteps.map(\.toolName)) files=\(row.files.map(\.path)) goToAgent=\(app)")
+            let steps = row.presence.turnSteps.map { step in
+                let state = step.finishedAt == nil ? (step.id == row.presence.awaitingCallID ? "needs-you" : "running") : (step.failed ? "failed" : "done")
+                return "\(step.toolName):\(state)"
+            }
+            lines.append("  row \((row.session.id as NSString).lastPathComponent): status=\"\(row.presence.statusText)\" attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
         }
         for (worktree, list) in hub.processes.sorted(by: { $0.key < $1.key }) where !list.isEmpty {
             let processes = list.map { "\($0.kind.id)#\($0.pid) cpu=\(String(format: "%.0f%%", $0.cpuLoad * 100))" }.joined(separator: ", ")

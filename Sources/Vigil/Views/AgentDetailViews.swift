@@ -17,6 +17,8 @@ struct StepLine: View {
     let step: AgentToolCall
     let target: String?
     let now: Date
+    /// The step is waiting for your permission rather than running.
+    var waiting = false
 
     private var icon: (name: String, color: Color) {
         switch step.category {
@@ -46,8 +48,12 @@ struct StepLine: View {
             }
             Spacer(minLength: 6)
             if let finished = step.finishedAt {
-                Text(Format.relative(finished, to: now))
-                    .foregroundStyle(.tertiary)
+                Text(step.failed ? "failed " + Format.relative(finished, to: now) : Format.relative(finished, to: now))
+                    .foregroundStyle(step.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.tertiary))
+                    .fixedSize()
+            } else if waiting {
+                Text("needs you")
+                    .foregroundStyle(.orange)
                     .fixedSize()
             } else {
                 Text("running")

@@ -9,9 +9,18 @@ public struct HookEvent: Sendable, Hashable {
         case userPromptSubmit = "UserPromptSubmit"
         case preToolUse = "PreToolUse"
         case postToolUse = "PostToolUse"
+        /// A tool call that failed (a command exiting non-zero) or was interrupted. Claude Code
+        /// sends this instead of PostToolUse.
+        case postToolUseFailure = "PostToolUseFailure"
+        /// Every tool call from one model response has resolved, denied ones included.
+        case postToolBatch = "PostToolBatch"
         case permissionRequest = "PermissionRequest"
+        /// Auto mode's classifier turned a tool call down; no dialog was shown.
+        case permissionDenied = "PermissionDenied"
         case notification = "Notification"
         case stop = "Stop"
+        /// The turn ended on an API error (rate limit, overload, auth); sent instead of Stop.
+        case stopFailure = "StopFailure"
         case subagentStop = "SubagentStop"
         case preCompact = "PreCompact"
         case other = "Other"
@@ -33,11 +42,18 @@ public struct HookEvent: Sendable, Hashable {
     /// Claude Code's kind of notification: `permission_prompt`, `idle_prompt`, `elicitation_dialog`,
     /// `auth_success`. Hermes input requests are mapped to `question`.
     public var notificationType: String?
+    /// Set when a subagent's tool sent the event; nil for the main agent.
+    public var agentID: String?
+    /// PostToolUseFailure: the call was stopped rather than failing on its own.
+    public var isInterrupt: Bool
+    /// PostToolBatch: the tool calls that resolved.
+    public var batchToolUseIDs: [String]
     public var receivedAt: Date
 
     public init(name: Name, rawName: String, agent: AgentKind = .claudeCode, sessionID: String? = nil, cwd: String? = nil,
                 transcriptPath: String? = nil, toolName: String? = nil, toolUseID: String? = nil, filePath: String? = nil,
-                summary: String? = nil, message: String? = nil, notificationType: String? = nil, receivedAt: Date = Date()) {
+                summary: String? = nil, message: String? = nil, notificationType: String? = nil, agentID: String? = nil,
+                isInterrupt: Bool = false, batchToolUseIDs: [String] = [], receivedAt: Date = Date()) {
         self.name = name
         self.rawName = rawName
         self.agent = agent
@@ -50,6 +66,9 @@ public struct HookEvent: Sendable, Hashable {
         self.summary = summary
         self.message = message
         self.notificationType = notificationType
+        self.agentID = agentID
+        self.isInterrupt = isInterrupt
+        self.batchToolUseIDs = batchToolUseIDs
         self.receivedAt = receivedAt
     }
 
@@ -135,6 +154,9 @@ public enum HookEventParser {
         }
         if message == nil, let reason = object["reason"] as? String { message = reason }
         if message == nil, let source = object["source"] as? String, name == .sessionStart { message = source }
+        // A failed tool's error ("Exit code 1", then its output), or why a turn failed.
+        if message == nil, let error = object["error"] as? String { message = firstLine(error) }
+        let batch = (object["tool_calls"] as? [[String: Any]] ?? []).compactMap { $0["tool_use_id"] as? String }
 
         return HookEvent(
             name: name, rawName: rawName, agent: agent,
@@ -148,6 +170,9 @@ public enum HookEventParser {
             summary: summary.map { String($0.prefix(400)) },
             message: message.map { String($0.prefix(200)) },
             notificationType: object["notification_type"] as? String,
+            agentID: object["agent_id"] as? String,
+            isInterrupt: object["is_interrupt"] as? Bool ?? false,
+            batchToolUseIDs: batch,
             receivedAt: receivedAt)
     }
 

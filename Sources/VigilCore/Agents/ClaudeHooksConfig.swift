@@ -5,10 +5,13 @@ import Foundation
 /// objects; the app owns file reading, backups and writing.
 public enum ClaudeHooksConfig {
     /// Events Vigil wants, with the matcher to use (nil means the event takes none).
+    /// A tool call ends in PostToolUse, PostToolUseFailure or (when denied) only PostToolBatch;
+    /// a turn ends in Stop or StopFailure. Missing one leaves a status stuck.
     public static let events: [(name: String, matcher: String?)] = [
         ("SessionStart", nil), ("UserPromptSubmit", nil),
-        ("PreToolUse", "*"), ("PostToolUse", "*"), ("PermissionRequest", "*"),
-        ("Notification", nil), ("Stop", nil), ("SubagentStop", nil), ("SessionEnd", nil),
+        ("PreToolUse", "*"), ("PostToolUse", "*"), ("PostToolUseFailure", "*"), ("PostToolBatch", nil),
+        ("PermissionRequest", "*"), ("PermissionDenied", "*"),
+        ("Notification", nil), ("Stop", nil), ("StopFailure", nil), ("SubagentStop", nil), ("SessionEnd", nil),
     ]
 
     /// Substring that identifies Vigil's own hook commands.
@@ -57,6 +60,17 @@ public enum ClaudeHooksConfig {
         }
         if hooks.isEmpty { result.removeValue(forKey: "hooks") } else { result["hooks"] = hooks }
         return result
+    }
+
+    /// True when an older Vigil installed `command` for some events but not for every event
+    /// Vigil now listens to. Hooks pointing at another socket are left alone.
+    public static func isOutdated(in settings: [String: Any], command: String) -> Bool {
+        guard let hooks = settings["hooks"] as? [String: Any], !isInstalled(in: settings) else { return false }
+        return hooks.values.contains { value in
+            (value as? [[String: Any]] ?? []).contains { entry in
+                (entry["hooks"] as? [[String: Any]] ?? []).contains { $0["command"] as? String == command }
+            }
+        }
     }
 
     /// True when every event has a Vigil hook.

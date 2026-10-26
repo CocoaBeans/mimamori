@@ -300,7 +300,7 @@ struct AgentStatusBanner: View {
         if !steps.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(steps) { step in
-                    StepLine(step: step, target: step.summary.map(shorten), now: now)
+                    StepLine(step: step, target: step.summary.map(shorten), now: now, waiting: step.id == presence.awaitingCallID)
                 }
             }
             .padding(.top, 1)

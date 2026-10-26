@@ -20,6 +20,8 @@ struct AgentPresence: Hashable {
     var turnStartedAt: Date? = nil
     /// Agent processes running in the worktree, for finding the app they run in.
     var processIDs: [Int32] = []
+    /// The step waiting on your permission, when it is known.
+    var awaitingCallID: String? = nil
 
     var needsAttention: Bool { source == .hooks && activity.needsAttention }
 
@@ -74,6 +76,8 @@ final class AgentHub {
     /// agent's prompt arrives before any tool call says where it is working.
     @ObservationIgnored private var heldBySession: [String: [HookEvent]] = [:]
     @ObservationIgnored private var lastPublishedAt = Date.distantPast
+    /// Runs only while a Claude Code shell command waits on your permission.
+    @ObservationIgnored private var approvalWatch: Task<Void, Never>?
 
     /// A busy agent sends several hook events a second, and every change to `statuses` repaints
     /// each window that shows an agent. A change of state (to waiting on you, ready, ended)
@@ -86,6 +90,13 @@ final class AgentHub {
         self.settings = settings
         startServer()
         restartScanning()
+        do {
+            if let backup = try HookInstaller.updateIfOutdated(socketPath: socketPath) {
+                NSLog("Vigil: added newer Claude Code hook events; previous settings saved to \(backup.path)")
+            }
+        } catch {
+            NSLog("Vigil: could not update Claude Code hooks: \(error)")
+        }
     }
 
     func stop() {
@@ -93,6 +104,8 @@ final class AgentHub {
         server = nil
         isListening = false
         scanTask?.cancel()
+        approvalWatch?.cancel()
+        approvalWatch = nil
     }
 
     func updateSettings(_ settings: AppSettings) {
@@ -190,6 +203,44 @@ final class AgentHub {
         machines[worktree] = machine
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
         if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
+        watchForApprovals()
+    }
+
+    // MARK: Approvals
+
+    private var commandsAwaitingPermission: [(worktree: String, command: String, since: Date)] {
+        machines.compactMap { worktree, machine in
+            machine.status?.commandAwaitingPermission.map { (worktree, $0.command, $0.since) }
+        }
+    }
+
+    /// Claude Code sends nothing between your approval of a command and the command finishing,
+    /// so a long build would keep asking for permission it already has. While a command waits,
+    /// look for it running; once it is, show it working.
+    private func watchForApprovals() {
+        guard approvalWatch == nil, !commandsAwaitingPermission.isEmpty else { return }
+        approvalWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let waitingSince = self?.commandsAwaitingPermission.map(\.since).min() else { break }
+                // Quick at first, when an approval is likely; a dialog left open is checked less often.
+                try? await Task.sleep(for: .milliseconds(Date().timeIntervalSince(waitingSince) < 120 ? 1500 : 5000))
+                guard let self, !Task.isCancelled else { return }
+                let waiting = self.commandsAwaitingPermission
+                guard !waiting.isEmpty else { break }
+                let commands = Dictionary(waiting.map { ($0.command, $0.since) }, uniquingKeysWith: min)
+                let running = await Task.detached(priority: .utility) { ClaudeCommandProbe.running(commands) }.value
+                for item in waiting where running.contains(item.command) {
+                    self.noteApproved(in: item.worktree)
+                }
+            }
+            self?.approvalWatch = nil
+        }
+    }
+
+    private func noteApproved(in worktree: String) {
+        guard var machine = machines[worktree], machine.noteApproved() else { return }
+        machines[worktree] = machine
+        schedulePublish(urgent: true)
     }
 
     private func hold(_ event: HookEvent) {
@@ -288,7 +339,8 @@ final class AgentHub {
                                  lastToolCall: status.recentToolCalls.last, toolCallsThisTurn: status.toolCallsThisTurn,
                                  task: status.task, turnSteps: status.turnToolCalls,
                                  turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
-                                 processIDs: running.map(\.pid))
+                                 processIDs: running.map(\.pid),
+                                 awaitingCallID: status.pendingPermission?.callID)
         }
         guard let first = running.first else { return nil }
         let earliest = running.map(\.startedAt).min() ?? first.startedAt
