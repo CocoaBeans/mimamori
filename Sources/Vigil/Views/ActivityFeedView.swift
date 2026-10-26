@@ -5,9 +5,28 @@ struct ActivityFeedView: View {
     @Environment(AppModel.self) private var model
 
     private var entries: [ActivityEntry] {
-        if model.activityScopeAll { return model.activity }
-        guard let selected = model.selectedWorktreeID else { return model.activity }
-        return model.activity.filter { $0.worktreePath == selected }
+        let filter = model.activityAgentFilter
+        let selected = model.activityScopeAll ? nil : model.selectedWorktreeID
+        guard selected != nil || filter != .all else { return model.activity }
+        return model.activity.filter { entry in
+            (selected == nil || entry.worktreePath == selected) && filter.includes(entry)
+        }
+    }
+
+    private var emptyTitle: String {
+        switch model.activityAgentFilter {
+        case .all: "Quiet So Far"
+        case .agentsOnly: "No Agent Activity"
+        case .hideAgentEvents: "No Repository Activity"
+        }
+    }
+
+    private var emptyDescription: String {
+        switch model.activityAgentFilter {
+        case .all: "Edits, commits and flags show up here as they happen."
+        case .agentsOnly: "Agents' turns, tool calls and the changes they make show up here."
+        case .hideAgentEvents: "Edits, commits and flags show up here; agents' own events are hidden."
+        }
     }
 
     var body: some View {
@@ -15,8 +34,8 @@ struct ActivityFeedView: View {
         let entries = entries
         Group {
             if entries.isEmpty {
-                ContentUnavailableView("Quiet So Far", systemImage: "eye",
-                                       description: Text("Edits, commits and flags show up here as they happen."))
+                ContentUnavailableView(emptyTitle, systemImage: model.activityAgentFilter == .agentsOnly ? "sparkles" : "eye",
+                                       description: Text(emptyDescription))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(entries) { entry in
@@ -44,6 +63,21 @@ struct ActivityFeedView: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .frame(maxWidth: 130)
+                    Menu {
+                        Picker("Show", selection: $model.activityAgentFilter) {
+                            ForEach(ActivityAgentFilter.allCases, id: \.self) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        Image(systemName: model.activityAgentFilter == .all
+                              ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Showing: \(model.activityAgentFilter.title.lowercased()). Agents only keeps agents' events and the changes they made; hiding agent events keeps edits, commits and flags.")
                     Button {
                         model.clearActivity()
                     } label: {
@@ -109,7 +143,7 @@ struct ActivityRow: View {
                             DeltaText(additions: entry.additions, deletions: entry.deletions)
                         }
                         if let detail = entry.detail {
-                            Text(detail).lineLimit(1)
+                            Text(AgentText.shortenPaths(detail, in: entry.worktreePath)).lineLimit(1)
                         }
                         if showWorktree, let worktreeName {
                             Text(worktreeName).lineLimit(1)

@@ -373,6 +373,7 @@ final class WorktreeSession: Identifiable {
                 lastChanged[path] = now
                 if let attribution = attributionProvider?(path, now) {
                     attributions[path] = attribution
+                    events[index].agent = attribution.agent
                     let suffix = "by \(attribution.label)"
                     events[index].detail = events[index].detail.map { "\($0) · \(suffix)" } ?? suffix
                 }

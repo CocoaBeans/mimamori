@@ -7,13 +7,25 @@ struct SidebarView: View {
     var body: some View {
         List(selection: Binding(get: { model.selectedWorktreeID }, set: { model.select(worktree: $0) })) {
             ForEach(model.repositories) { repo in
-                RepositorySection(repo: repo)
+                // With the agents filter on, a repository with no agent at work drops out entirely.
+                if !model.sidebarAgentsOnly || !model.listedWorktrees(for: repo).isEmpty {
+                    RepositorySection(repo: repo)
+                }
             }
         }
         .listStyle(.sidebar)
         .onDeleteCommand { model.requestRemovalOfSelectedRepository() }
         .overlay {
-            if model.repositories.isEmpty {
+            if model.sidebarAgentsOnly, !model.repositories.isEmpty,
+               model.repositories.allSatisfy({ model.listedWorktrees(for: $0).isEmpty }) {
+                ContentUnavailableView {
+                    Label("No Agents Running", systemImage: "sparkles")
+                } description: {
+                    Text("Worktrees appear here while an agent works in them.")
+                } actions: {
+                    Button("Show All Worktrees") { model.sidebarAgentsOnly = false }
+                }
+            } else if model.repositories.isEmpty {
                 ContentUnavailableView {
                     Label("No Repositories", systemImage: "folder.badge.plus")
                 } description: {
@@ -32,6 +44,14 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.borderless)
                 Spacer()
+                Toggle(isOn: Binding(get: { model.sidebarAgentsOnly }, set: { model.sidebarAgentsOnly = $0 })) {
+                    Image(systemName: model.sidebarAgentsOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                }
+                .toggleStyle(.button)
+                .buttonStyle(.borderless)
+                .help(model.sidebarAgentsOnly
+                      ? "Showing only worktrees with an agent. Click to show them all."
+                      : "Show only worktrees with an agent at work")
                 AttentionNeededButton()
                 AttentionBadgeButton(sessions: model.orderedSessions, arrowEdge: .bottom, debugID: "sidebar")
             }
@@ -62,7 +82,7 @@ private struct RepositorySection: View {
     let repo: RepositoryEntry
 
     var body: some View {
-        let visible = model.visibleWorktrees(for: repo)
+        let visible = model.listedWorktrees(for: repo)
         let hidden = model.hiddenWorktrees(for: repo)
         let sessions = model.visibleSessions(for: repo)
         let collapsed = model.isCollapsed(repo)

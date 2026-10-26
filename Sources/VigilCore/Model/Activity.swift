@@ -64,10 +64,12 @@ public struct ActivityEntry: Identifiable, Hashable, Sendable, Codable {
     public var additions: Int?
     public var deletions: Int?
     public var severity: Severity?
+    /// The agent behind the entry: its own events, and file changes traced to its tool calls.
+    public var agent: String?
 
     public init(id: UUID = UUID(), date: Date = Date(), worktreePath: String, kind: ActivityKind,
                 path: String? = nil, title: String, detail: String? = nil,
-                additions: Int? = nil, deletions: Int? = nil, severity: Severity? = nil) {
+                additions: Int? = nil, deletions: Int? = nil, severity: Severity? = nil, agent: String? = nil) {
         self.id = id
         self.date = date
         self.worktreePath = worktreePath
@@ -78,5 +80,9 @@ public struct ActivityEntry: Identifiable, Hashable, Sendable, Codable {
         self.additions = additions
         self.deletions = deletions
         self.severity = severity
+        self.agent = agent
     }
+
+    /// An agent's own event, or a change Vigil traced to one.
+    public var isAgentWork: Bool { kind.isAgentEvent || agent != nil }
 }

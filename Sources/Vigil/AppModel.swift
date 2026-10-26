@@ -45,6 +45,9 @@ final class AppModel {
     var showActivity: Bool
     var flaggedOnly: Bool
     var hideReviewed: Bool
+    /// The sidebar lists only worktrees with an agent in them.
+    var sidebarAgentsOnly: Bool
+    var activityAgentFilter: ActivityAgentFilter
     var sortOrder: ChangeSortOrder
     var activityScopeAll: Bool
     var filterText = ""
@@ -67,6 +70,8 @@ final class AppModel {
         self.showActivity = persisted.ui.showActivity
         self.flaggedOnly = persisted.ui.flaggedOnly
         self.hideReviewed = persisted.ui.hideReviewed
+        self.sidebarAgentsOnly = persisted.ui.sidebarAgentsOnly
+        self.activityAgentFilter = persisted.ui.activityAgentFilter
         self.sortOrder = persisted.ui.sortOrder
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
@@ -101,6 +106,14 @@ final class AppModel {
 
     func visibleWorktrees(for repo: RepositoryEntry) -> [WorktreeInfo] {
         repo.worktrees.filter { !hiddenWorktrees.contains($0.path) }
+    }
+
+    /// The worktrees the sidebar lists: the visible ones, narrowed to those with an agent when
+    /// that filter is on.
+    func listedWorktrees(for repo: RepositoryEntry) -> [WorktreeInfo] {
+        let visible = visibleWorktrees(for: repo)
+        guard sidebarAgentsOnly else { return visible }
+        return visible.filter { agentHub.presence(for: $0.path) != nil }
     }
 
     func hiddenWorktrees(for repo: RepositoryEntry) -> [WorktreeInfo] {
@@ -567,7 +580,8 @@ final class AppModel {
                 relativePath = String(file.dropFirst(worktree.count + 1))
             }
             entries.append(ActivityEntry(worktreePath: worktree, kind: kind, path: relativePath,
-                                         title: note.title, detail: note.detail, severity: severity))
+                                         title: note.title, detail: note.detail, severity: severity,
+                                         agent: agent.displayName))
         }
         record(entries)
         let name = sessions[worktree]?.displayName ?? (worktree as NSString).lastPathComponent
@@ -596,7 +610,8 @@ final class AppModel {
     func persistUISoon() {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
-                                        hideReviewed: hideReviewed)
+                                        hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
+                                        activityAgentFilter: activityAgentFilter)
         persistSoon()
     }
 
@@ -613,7 +628,8 @@ final class AppModel {
     func persistNow() {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
-                                        hideReviewed: hideReviewed)
+                                        hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
+                                        activityAgentFilter: activityAgentFilter)
         saveTask?.cancel()
         Persistence.save(persisted)
     }

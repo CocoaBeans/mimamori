@@ -69,6 +69,31 @@ struct AppSettings: Codable, Hashable, Sendable {
     }
 }
 
+/// Which entries the activity feed shows, by whether an agent was behind them.
+enum ActivityAgentFilter: String, Codable, CaseIterable, Sendable {
+    case all
+    /// Agents' own events, and file changes traced to them.
+    case agentsOnly
+    /// Everything but agents' own events: file changes, commits, flags.
+    case hideAgentEvents
+
+    var title: String {
+        switch self {
+        case .all: "All activity"
+        case .agentsOnly: "Agents only"
+        case .hideAgentEvents: "Hide agent events"
+        }
+    }
+
+    func includes(_ entry: ActivityEntry) -> Bool {
+        switch self {
+        case .all: true
+        case .agentsOnly: entry.isAgentWork
+        case .hideAgentEvents: !entry.kind.isAgentEvent
+        }
+    }
+}
+
 enum DiffLayout: String, Codable, CaseIterable, Sendable {
     /// One column: deletions above additions.
     case unified
@@ -133,15 +158,20 @@ struct PersistedUIState: Codable, Hashable, Sendable {
     var selectedWorktree: String?
     var activityScopeAll: Bool = false
     var hideReviewed: Bool = false
+    var sidebarAgentsOnly: Bool = false
+    var activityAgentFilter: ActivityAgentFilter = .all
 
     init(showActivity: Bool = true, flaggedOnly: Bool = false, sortOrder: ChangeSortOrder = .recent,
-         selectedWorktree: String? = nil, activityScopeAll: Bool = false, hideReviewed: Bool = false) {
+         selectedWorktree: String? = nil, activityScopeAll: Bool = false, hideReviewed: Bool = false,
+         sidebarAgentsOnly: Bool = false, activityAgentFilter: ActivityAgentFilter = .all) {
         self.showActivity = showActivity
         self.flaggedOnly = flaggedOnly
         self.sortOrder = sortOrder
         self.selectedWorktree = selectedWorktree
         self.activityScopeAll = activityScopeAll
         self.hideReviewed = hideReviewed
+        self.sidebarAgentsOnly = sidebarAgentsOnly
+        self.activityAgentFilter = activityAgentFilter
     }
 
     init(from decoder: Decoder) throws {
@@ -152,6 +182,8 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         selectedWorktree = try c.decodeIfPresent(String.self, forKey: .selectedWorktree)
         activityScopeAll = try c.decodeIfPresent(Bool.self, forKey: .activityScopeAll) ?? false
         hideReviewed = try c.decodeIfPresent(Bool.self, forKey: .hideReviewed) ?? false
+        sidebarAgentsOnly = try c.decodeIfPresent(Bool.self, forKey: .sidebarAgentsOnly) ?? false
+        activityAgentFilter = try c.decodeIfPresent(ActivityAgentFilter.self, forKey: .activityAgentFilter) ?? .all
     }
 }
 

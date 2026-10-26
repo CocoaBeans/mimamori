@@ -96,3 +96,25 @@ struct ActivityLogTests {
         #expect(lines.last?.contains("e15") == true)
     }
 }
+
+@Suite("Activity entries")
+struct ActivityEntryTests {
+    @Test func agentWorkCoversEventsAndAttributedChanges() {
+        let event = ActivityEntry(worktreePath: "/w", kind: .agentTool, title: "Claude Code: Edit")
+        let attributed = ActivityEntry(worktreePath: "/w", kind: .modified, path: "a.swift", title: "a.swift", agent: "Claude Code")
+        let plain = ActivityEntry(worktreePath: "/w", kind: .modified, path: "b.swift", title: "b.swift")
+        #expect(event.isAgentWork)
+        #expect(attributed.isAgentWork)
+        #expect(!plain.isAgentWork)
+    }
+
+    @Test func entriesSavedBeforeTheAgentFieldStillLoad() throws {
+        // A line written by a Vigil that had no agent field.
+        let line = #"{"date":1792824429,"id":"984CEC4A-FEDE-49B3-9566-4CB2A703D231","kind":"modified","title":"a.swift","worktreePath":"/w"}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let entry = try decoder.decode(ActivityEntry.self, from: Data(line.utf8))
+        #expect(entry.agent == nil)
+        #expect(entry.title == "a.swift")
+    }
+}
