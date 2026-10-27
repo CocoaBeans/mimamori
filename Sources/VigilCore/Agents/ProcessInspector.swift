@@ -85,25 +85,58 @@ public enum ProcessInspector {
     }
 }
 
+/// What one scan found.
+public struct AgentScan: Sendable, Hashable {
+    /// Agents grouped by the watched worktree their working directory falls in.
+    public var byWorktree: [String: [AgentProcess]] = [:]
+    /// Claude Code sessions whose process sits outside every watched worktree; their hooks may
+    /// still report from one.
+    public var elsewhere: [AgentProcess] = []
+
+    public init(byWorktree: [String: [AgentProcess]] = [:], elsewhere: [AgentProcess] = []) {
+        self.byWorktree = byWorktree
+        self.elsewhere = elsewhere
+    }
+
+    /// Agents grouped by the worktree they work in. A Claude Code session counts where its status
+    /// is, per `homes` (session id → worktree), which is not the folder its process started in
+    /// once it moves to another worktree. A process outside every worktree counts only that way.
+    public func attributed(homes: [String: String]) -> [String: [AgentProcess]] {
+        var result: [String: [AgentProcess]] = [:]
+        for (worktree, list) in byWorktree {
+            for process in list {
+                result[process.claudeSession.flatMap { homes[$0.sessionID] } ?? worktree, default: []].append(process)
+            }
+        }
+        for process in elsewhere {
+            if let home = process.claudeSession.flatMap({ homes[$0.sessionID] }) { result[home, default: []].append(process) }
+        }
+        return result
+    }
+}
+
 /// Finds agent processes and matches them to worktrees.
 public actor AgentScanner {
     public var classifier: AgentClassifier
+    /// Where Claude Code records its sessions; nil to skip reading them.
+    private let claudeSessions: URL?
     private var previousCPU: [Int32: (time: TimeInterval, at: Date)] = [:]
 
-    public init(classifier: AgentClassifier = AgentClassifier()) {
+    public init(classifier: AgentClassifier = AgentClassifier(), claudeSessions: URL? = ClaudeSessionFiles.directory) {
         self.classifier = classifier
+        self.claudeSessions = claudeSessions
     }
 
     public func setClassifier(_ classifier: AgentClassifier) {
         self.classifier = classifier
     }
 
-    /// Returns agents grouped by the watched worktree their working directory falls in.
-    /// Worktrees are matched longest-prefix first so nested worktrees win over their parent.
-    public func scan(worktrees: [String]) -> [String: [AgentProcess]] {
+    /// Finds agents in `worktrees`, matched longest-prefix first so nested worktrees win over
+    /// their parent, and Claude Code sessions running anywhere else.
+    public func scan(worktrees: [String]) -> AgentScan {
         let roots = worktrees.sorted { $0.count > $1.count }
         let now = Date()
-        var result: [String: [AgentProcess]] = [:]
+        var result = AgentScan()
         var seen = Set<Int32>()
 
         for pid in ProcessInspector.allPIDs() {
@@ -113,7 +146,11 @@ public actor AgentScanner {
             let arguments = needsArguments ? ProcessInspector.arguments(of: pid) : []
             guard let kind = classifier.classify(executable: executable, arguments: arguments) else { continue }
             guard let cwd = ProcessInspector.currentDirectory(of: pid) else { continue }
-            guard let root = roots.first(where: { cwd == $0 || cwd.hasPrefix($0 + "/") }) else { continue }
+            let root = roots.first(where: { cwd == $0 || cwd.hasPrefix($0 + "/") })
+            let started = ProcessInspector.startDate(of: pid)
+            let session = kind == .claudeCode
+                ? claudeSessions.flatMap { ClaudeSessionFiles.record(for: pid, startedAt: started, in: $0) } : nil
+            guard root != nil || session != nil else { continue }
 
             seen.insert(pid)
             var load = 0.0
@@ -126,8 +163,12 @@ public actor AgentScanner {
             }
             let process = AgentProcess(
                 pid: pid, kind: kind, executable: executable, workingDirectory: cwd,
-                startedAt: ProcessInspector.startDate(of: pid) ?? now, cpuLoad: load)
-            result[root, default: []].append(process)
+                startedAt: started ?? now, cpuLoad: load, claudeSession: session)
+            if let root {
+                result.byWorktree[root, default: []].append(process)
+            } else {
+                result.elsewhere.append(process)
+            }
         }
         previousCPU = previousCPU.filter { seen.contains($0.key) }
         return result

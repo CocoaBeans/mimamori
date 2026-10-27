@@ -22,7 +22,7 @@ public enum AgentActivity: Sendable, Hashable, Codable {
     public var title: String {
         switch self {
         case .working(let tool, _): tool.map { "working · \($0)" } ?? "working"
-        case .needsPermission(let tool, _): "needs permission for \(tool)"
+        case .needsPermission(let tool, _): tool.isEmpty ? "needs permission" : "needs permission for \(tool)"
         case .askedQuestion: "has a question for you"
         case .ready: "ready for your next prompt"
         case .idle: "idle"
@@ -114,6 +114,9 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var lastTurnStartedAt: Date?
     /// Set while `activity` is `needsPermission`.
     public var pendingPermission: PendingPermission?
+    /// The status comes from Claude Code's record of the session, not its hooks: none has
+    /// reported since Vigil started. The session's first hook event takes over.
+    public var fromSessionFile = false
 
     public init(agent: AgentKind, activity: AgentActivity, since: Date, lastEventAt: Date, sessionID: String? = nil,
                 turnStartedAt: Date? = nil, toolCallsThisTurn: Int = 0, recentToolCalls: [AgentToolCall] = []) {
@@ -177,6 +180,7 @@ public struct AgentStatusMachine: Sendable {
         var current = status ?? AgentStatus(agent: event.agent, activity: .idle, since: now, lastEventAt: now)
         current.agent = event.agent
         current.lastEventAt = now
+        current.fromSessionFile = false
         if let session = event.sessionID { current.sessionID = session }
         var notes: [AgentNote] = []
         let agentName = event.agent.displayName
@@ -360,7 +364,7 @@ public struct AgentStatusMachine: Sendable {
     /// command's process. Returns false when nothing was waiting.
     public mutating func noteApproved(at date: Date = Date()) -> Bool {
         guard var current = status, case .needsPermission(let tool, let detail) = current.activity else { return false }
-        current.activity = .working(tool: tool, detail: detail)
+        current.activity = .working(tool: tool.isEmpty ? nil : tool, detail: detail)
         current.pendingPermission = nil
         current.since = date
         status = current
@@ -394,6 +398,27 @@ public struct AgentStatusMachine: Sendable {
                 }
             }
         }
+    }
+
+    /// Takes the status Claude Code records for a session its hooks have not reported. Keeps
+    /// following that record while the hooks stay silent; never overrides what they said.
+    /// Returns whether the status changed.
+    @discardableResult
+    public mutating func adopt(_ record: ClaudeSessionRecord, now: Date = Date()) -> Bool {
+        guard let activity = record.activity else { return false }
+        let at = record.statusUpdatedAt ?? now
+        if var current = status, current.sessionID == record.sessionID {
+            guard current.fromSessionFile, current.activity != activity else { return false }
+            current.activity = activity
+            current.since = at
+            current.lastEventAt = at
+            status = current
+            return true
+        }
+        var fresh = AgentStatus(agent: .claudeCode, activity: activity, since: at, lastEventAt: at, sessionID: record.sessionID)
+        fresh.fromSessionFile = true
+        status = fresh
+        return true
     }
 
     /// Forget a status whose agent has been silent and has no process alive.

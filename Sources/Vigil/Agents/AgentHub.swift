@@ -22,6 +22,9 @@ struct AgentPresence: Hashable {
     var processIDs: [Int32] = []
     /// The step waiting on your permission, when it is known.
     var awaitingCallID: String? = nil
+    /// For a process-only presence: whether this agent's hooks are installed, or nil for an
+    /// agent Vigil has no hooks for.
+    var hooksInstalled: Bool? = nil
 
     var needsAttention: Bool { source == .hooks && activity.needsAttention }
 
@@ -31,6 +34,7 @@ struct AgentPresence: Hashable {
             if let tool { return detail.map { "working · \(tool) \($0)" } ?? "working · \(tool)" }
             return "working"
         case (.hooks, .needsPermission(let tool, let detail)):
+            if tool.isEmpty { return "needs permission" }
             return detail.map { "needs permission · \(tool) \($0)" } ?? "needs permission · \(tool)"
         case (.hooks, .askedQuestion(let detail)):
             return detail.map { "asks: \($0)" } ?? "has a question for you"
@@ -56,6 +60,8 @@ final class AgentHub {
     private(set) var eventsReceived = 0
     private(set) var eventsUnmatched = 0
     private(set) var lastEventAt: Date?
+    /// Whether Claude Code's settings have Vigil's hooks; re-read when the file changes.
+    private(set) var claudeHooksInstalled = false
 
     let socketPath: String = Persistence.supportDirectory.appendingPathComponent("vigil.sock").path
 
@@ -68,6 +74,9 @@ final class AgentHub {
     @ObservationIgnored private var placement = SessionPlacement()
     @ObservationIgnored private var server: HookSocketServer?
     @ObservationIgnored private let scanner = AgentScanner()
+    /// The last scan, before its processes are attributed to the worktrees their sessions work in.
+    @ObservationIgnored private var lastScan = AgentScan()
+    @ObservationIgnored private var claudeSettingsStamp: Date?
     @ObservationIgnored private var scanTask: Task<Void, Never>?
     @ObservationIgnored private var watchedWorktrees: [String] = []
     @ObservationIgnored private var settings = AppSettings()
@@ -89,7 +98,6 @@ final class AgentHub {
     func start(settings: AppSettings) {
         self.settings = settings
         startServer()
-        restartScanning()
         do {
             if let backup = try HookInstaller.updateIfOutdated(socketPath: socketPath) {
                 NSLog("Vigil: added newer Claude Code hook events; previous settings saved to \(backup.path)")
@@ -97,6 +105,8 @@ final class AgentHub {
         } catch {
             NSLog("Vigil: could not update Claude Code hooks: \(error)")
         }
+        refreshHookState()
+        restartScanning()
     }
 
     func stop() {
@@ -149,6 +159,7 @@ final class AgentHub {
         scanTask?.cancel()
         guard settings.agentScanEnabled else {
             processes = [:]
+            lastScan = AgentScan()
             return
         }
         let interval = max(1, settings.agentScanIntervalSeconds)
@@ -158,7 +169,7 @@ final class AgentHub {
                 let roots = self.watchedWorktrees
                 let found = await self.scanner.scan(worktrees: roots)
                 guard !Task.isCancelled else { return }
-                self.apply(processes: found)
+                self.apply(scan: found)
                 try? await Task.sleep(for: .seconds(interval))
             }
         }
@@ -188,19 +199,26 @@ final class AgentHub {
             hold(event)
             return
         }
-        // The session moved on: do not leave its old status behind.
-        if let old = decision.movedFrom, let session = event.sessionID, machines[old]?.status?.sessionID == session {
-            statuses.removeValue(forKey: old)
-            machines.removeValue(forKey: old)
+        // The session moved on: do not leave its old status behind. That includes a status taken
+        // from Claude Code's record of the session where its process started.
+        var moved = false
+        if let session = event.sessionID {
+            for (other, machine) in machines where other != worktree && machine.status?.sessionID == session {
+                statuses.removeValue(forKey: other)
+                machines.removeValue(forKey: other)
+                moved = true
+            }
         }
         var machine = machines[worktree] ?? AgentStatusMachine()
         let before = machine.status?.activity
+        let sessionBefore = machine.status?.sessionID
         var notes: [AgentNote] = []
         if let session = event.sessionID, let held = heldBySession.removeValue(forKey: session) {
             for earlier in held { notes += machine.apply(Self.anchored(earlier, in: worktree)) }
         }
         notes += machine.apply(Self.anchored(event, in: worktree))
         machines[worktree] = machine
+        if moved || machine.status?.sessionID != sessionBefore { attributeProcesses() }
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
         if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
         watchForApprovals()
@@ -305,28 +323,97 @@ final class AgentHub {
         }
     }
 
-    private func apply(processes found: [String: [AgentProcess]]) {
+    /// The worktree each session's status is in.
+    private var sessionHomes: [String: String] {
+        var homes: [String: String] = [:]
+        for (worktree, machine) in machines {
+            if let session = machine.status?.sessionID { homes[session] = worktree }
+        }
+        return homes
+    }
+
+    /// Re-files the last scan's processes after a session's status moved to another worktree.
+    private func attributeProcesses() {
+        let found = lastScan.attributed(homes: sessionHomes)
+        if Self.visibleSummary(found) != Self.visibleSummary(processes) { processes = found }
+    }
+
+    private func apply(scan: AgentScan) {
+        lastScan = scan
+        refreshHookState()
+        var changed = adoptSessionRecords()
         let previous = processes
+        let found = scan.attributed(homes: sessionHomes)
         if Self.visibleSummary(found) != Self.visibleSummary(previous) { processes = found }
-        // Announce arrivals and departures only where hooks are not already reporting.
+        // Announce arrivals and departures only where hooks are not already reporting. A process
+        // counted in another worktree than before neither arrived nor left.
+        let before = Set(previous.values.flatMap { $0.map(\.pid) })
+        let running = Set(scan.byWorktree.values.flatMap { $0.map(\.pid) } + scan.elsewhere.map(\.pid))
         for (worktree, list) in found where machines[worktree]?.status == nil {
-            let before = Set(previous[worktree]?.map(\.pid) ?? [])
             for process in list where !before.contains(process.pid) {
                 onNotes(worktree, process.kind, [AgentNote(kind: .sessionStarted, title: "\(process.kind.displayName) is running here")])
             }
         }
         for (worktree, list) in previous where machines[worktree]?.status == nil {
-            let now = Set(found[worktree]?.map(\.pid) ?? [])
-            for process in list where !now.contains(process.pid) {
+            for process in list where !running.contains(process.pid) {
                 onNotes(worktree, process.kind, [AgentNote(kind: .sessionEnded, title: "\(process.kind.displayName) exited")])
             }
         }
         // Hook statuses outlive their process briefly; drop them once the agent is gone for a while.
+        // A status taken from Claude Code's record goes with the process.
         let cutoff = Date().addingTimeInterval(-10 * 60)
-        for (worktree, status) in statuses where status.lastEventAt < cutoff && (found[worktree] ?? []).isEmpty {
-            statuses.removeValue(forKey: worktree)
+        for (worktree, machine) in machines where (found[worktree] ?? []).isEmpty {
+            guard let status = machine.status, status.fromSessionFile || status.lastEventAt < cutoff else { continue }
             machines.removeValue(forKey: worktree)
+            changed = true
         }
+        if changed { schedulePublish(urgent: true) }
+    }
+
+    /// Gives a worktree whose Claude Code sessions have not reported through hooks the status
+    /// Claude Code records for them: after Vigil starts, a session sitting idle sends nothing
+    /// until you next use it. Hook statuses win, except one for a session that ended.
+    /// Returns whether a status changed.
+    private func adoptSessionRecords() -> Bool {
+        let homes = sessionHomes
+        var changed = false
+        for (worktree, list) in lastScan.attributed(homes: homes) {
+            let current = machines[worktree]?.status
+            if let current, !current.fromSessionFile, current.activity != .idle { continue }
+            let records = list.compactMap(\.claudeSession).filter { record in
+                record.activity != nil && (homes[record.sessionID] ?? worktree) == worktree
+            }
+            // The session that needs you, then one at work, then the latest to change.
+            func rank(_ record: ClaudeSessionRecord) -> (Int, Date) {
+                let urgency = switch record.activity {
+                case .needsPermission?, .askedQuestion?: 2
+                case .working?: 1
+                default: 0
+                }
+                return (urgency, record.statusUpdatedAt ?? .distantPast)
+            }
+            guard let record = records.max(by: { rank($0) < rank($1) }) else {
+                if current?.fromSessionFile == true {
+                    machines.removeValue(forKey: worktree)
+                    changed = true
+                }
+                continue
+            }
+            var machine = machines[worktree] ?? AgentStatusMachine()
+            if machine.adopt(record) {
+                machines[worktree] = machine
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    private func refreshHookState() {
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: HookInstaller.settingsURL.path))?[.modificationDate] as? Date
+        guard stamp != claudeSettingsStamp else { return }
+        claudeSettingsStamp = stamp
+        let installed = HookInstaller.isInstalled()
+        if installed != claudeHooksInstalled { claudeHooksInstalled = installed }
     }
 
     // MARK: Queries
@@ -346,7 +433,8 @@ final class AgentHub {
         let earliest = running.map(\.startedAt).min() ?? first.startedAt
         return AgentPresence(kind: first.kind, source: .process, activity: .idle, since: earliest,
                              processCount: running.count, isBusy: running.contains(where: \.isBusy),
-                             lastToolCall: nil, toolCallsThisTurn: 0, processIDs: running.map(\.pid))
+                             lastToolCall: nil, toolCallsThisTurn: 0, processIDs: running.map(\.pid),
+                             hooksInstalled: first.kind == .claudeCode ? claudeHooksInstalled : nil)
     }
 
     var worktreesNeedingAttention: [String] {

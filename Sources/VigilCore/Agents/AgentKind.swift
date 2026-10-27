@@ -97,14 +97,18 @@ public struct AgentProcess: Identifiable, Hashable, Sendable {
     public let startedAt: Date
     /// Share of one core used since the previous scan, 0…1.
     public var cpuLoad: Double
+    /// For Claude Code, the session it runs, as Claude Code records it.
+    public var claudeSession: ClaudeSessionRecord?
 
-    public init(pid: Int32, kind: AgentKind, executable: String, workingDirectory: String, startedAt: Date, cpuLoad: Double) {
+    public init(pid: Int32, kind: AgentKind, executable: String, workingDirectory: String, startedAt: Date, cpuLoad: Double,
+                claudeSession: ClaudeSessionRecord? = nil) {
         self.pid = pid
         self.kind = kind
         self.executable = executable
         self.workingDirectory = workingDirectory
         self.startedAt = startedAt
         self.cpuLoad = cpuLoad
+        self.claudeSession = claudeSession
     }
 
     public var isBusy: Bool { cpuLoad > 0.02 }

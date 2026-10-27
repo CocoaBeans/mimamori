@@ -154,7 +154,7 @@ struct AgentStatusBanner: View {
     private var headline: String {
         switch (presence.source, presence.activity) {
         case (.hooks, .working(let tool, _)): stepsShown ? "Working" : tool.map { "Working · \($0)" } ?? "Working"
-        case (.hooks, .needsPermission(let tool, _)): "Needs your permission · \(tool)"
+        case (.hooks, .needsPermission(let tool, _)): tool.isEmpty ? "Needs your permission" : "Needs your permission · \(tool)"
         case (.hooks, .askedQuestion): "Has a question for you"
         case (.hooks, .ready): "Ready for your next prompt"
         case (.hooks, .idle): "Session ended"
@@ -179,7 +179,16 @@ struct AgentStatusBanner: View {
         case .working(_, let detail): stepsShown ? nil : detail.map(shorten)
         case .needsPermission(_, let detail): detail.map(shorten)
         case .askedQuestion(let detail): detail
-        default: presence.source == .process ? "No hooks installed; showing process presence only" : nil
+        default: presence.source == .process ? processNote : nil
+        }
+    }
+
+    /// Why only the process shows.
+    private var processNote: String {
+        switch presence.hooksInstalled {
+        case false?: "No hooks installed; showing process presence only"
+        case true?: "No hook events from this session yet"
+        case nil: "Seen from its process only"
         }
     }
 

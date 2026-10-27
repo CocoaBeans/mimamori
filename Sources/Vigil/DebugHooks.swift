@@ -117,21 +117,25 @@ enum DebugHooks {
             }
         }
         let hub = model.agentHub
-        lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled())")
+        lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
         for row in model.agentRows {
             let app = AgentApps.app(for: row.presence)?.localizedName ?? "-"
             let steps = row.presence.turnSteps.map { step in
                 let state = step.finishedAt == nil ? (step.id == row.presence.awaitingCallID ? "needs-you" : "running") : (step.failed ? "failed" : "done")
                 return "\(step.toolName):\(state)"
             }
-            lines.append("  row \((row.session.id as NSString).lastPathComponent): status=\"\(row.presence.statusText)\" attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
+            let note = row.presence.source == .process ? " hooksInstalled=\(row.presence.hooksInstalled.map(String.init) ?? "-")" : ""
+            lines.append("  row \((row.session.id as NSString).lastPathComponent): status=\"\(row.presence.statusText)\"\(note) attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
         }
         for (worktree, list) in hub.processes.sorted(by: { $0.key < $1.key }) where !list.isEmpty {
-            let processes = list.map { "\($0.kind.id)#\($0.pid) cpu=\(String(format: "%.0f%%", $0.cpuLoad * 100))" }.joined(separator: ", ")
+            let processes = list.map { process in
+                let session = process.claudeSession.map { " session=\($0.sessionID.prefix(8)) \($0.status ?? "-")" } ?? ""
+                return "\(process.kind.id)#\(process.pid) cpu=\(String(format: "%.0f%%", process.cpuLoad * 100))\(session) cwd=\((process.workingDirectory as NSString).lastPathComponent)"
+            }.joined(separator: ", ")
             lines.append("  processes \((worktree as NSString).lastPathComponent): \(processes)")
         }
         for (worktree, status) in hub.statuses.sorted(by: { $0.key < $1.key }) {
-            lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count)")
+            lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count) session=\(status.sessionID?.prefix(8) ?? "-") from=\(status.fromSessionFile ? "session-file" : "hooks")")
         }
         if let monitor = NSApp.mainMenu?.items.first(where: { $0.title == "Monitor" })?.submenu {
             // Menus may be rebuilt lazily, just before they open; ask for that first.

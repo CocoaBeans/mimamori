@@ -55,12 +55,14 @@ struct ProcessInspectorTests {
         let cwd = try #require(ProcessInspector.currentDirectory(of: pid))
         let scanner = AgentScanner(classifier: AgentClassifier(customNames: [name]))
         let parent = (cwd as NSString).deletingLastPathComponent
-        let found = await scanner.scan(worktrees: [parent, cwd])
+        let found = await scanner.scan(worktrees: [parent, cwd]).byWorktree
         // Longest prefix wins: the exact cwd, not its parent.
         #expect(found[cwd]?.contains { $0.pid == pid } == true)
         #expect(found[parent]?.contains { $0.pid == pid } != true)
         let none = await scanner.scan(worktrees: ["/nonexistent/path"])
-        #expect(none.isEmpty)
+        #expect(none.byWorktree.isEmpty)
+        // Not Claude Code, so not followed outside the worktrees.
+        #expect(!none.elsewhere.contains { $0.pid == pid })
     }
 }
 
@@ -675,5 +677,158 @@ struct ClaudeHooksUpdateTests {
         let other = ClaudeHooksConfig.command(socketPath: "/tmp/elsewhere/vigil.sock")
         #expect(!ClaudeHooksConfig.isOutdated(in: older, command: other))
         #expect(!ClaudeHooksConfig.isOutdated(in: [:], command: command))
+    }
+}
+
+@Suite("Claude session files")
+struct ClaudeSessionFileTests {
+    private func record(_ json: String) -> ClaudeSessionRecord? {
+        ClaudeSessionFiles.parse(Data(json.utf8))
+    }
+
+    @Test func readsWhatClaudeCodeRecords() throws {
+        let busy = try #require(record(#"{"pid":27738,"sessionId":"4cb4b3ff","cwd":"/Users/me/acme-store","startedAt":1793028052343,"kind":"interactive","status":"busy","updatedAt":1793074792322,"statusUpdatedAt":1793074792000}"#))
+        #expect(busy.pid == 27738)
+        #expect(busy.sessionID == "4cb4b3ff")
+        #expect(busy.statusUpdatedAt == Date(timeIntervalSince1970: 1_793_074_792))
+        #expect(busy.startedAt == Date(timeIntervalSince1970: 1_793_028_052.343))
+        #expect(busy.activity == .working(tool: nil, detail: nil))
+        #expect(record(#"{"pid":1,"sessionId":"s","status":"idle"}"#)?.activity == .ready)
+        #expect(record(#"{"pid":1,"sessionId":"s","status":"waiting","waitingFor":"permission prompt"}"#)?.activity == .needsPermission(tool: "", detail: nil))
+        #expect(record(#"{"pid":1,"sessionId":"s","status":"waiting","waitingFor":"input needed"}"#)?.activity == .askedQuestion(detail: nil))
+        // Older versions record no status; the session still ties to its process.
+        let quiet = try #require(record(#"{"pid":1,"sessionId":"s","updatedAt":1000}"#))
+        #expect(quiet.activity == nil)
+        #expect(quiet.statusUpdatedAt == Date(timeIntervalSince1970: 1))
+        #expect(record(#"{"pid":1,"status":"idle"}"#) == nil)
+        #expect(record(#"{"sessionId":"s","status":"idle"}"#) == nil)
+        #expect(record("not json") == nil)
+    }
+
+    @Test func ignoresAFileLeftByAnEarlierProcess() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("vigil-sessions-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data(#"{"pid":4242,"sessionId":"s1","startedAt":1000000,"status":"idle"}"#.utf8)
+            .write(to: directory.appendingPathComponent("4242.json"))
+        #expect(ClaudeSessionFiles.record(for: 4242, startedAt: Date(timeIntervalSince1970: 999), in: directory)?.sessionID == "s1")
+        // The pid now belongs to a process started long after that session.
+        #expect(ClaudeSessionFiles.record(for: 4242, startedAt: Date(timeIntervalSince1970: 5000), in: directory) == nil)
+        #expect(ClaudeSessionFiles.record(for: 4243, startedAt: nil, in: directory) == nil)
+    }
+
+    @Test(.enabled(if: FileManager.default.isExecutableFile(atPath: "/usr/bin/python3")))
+    func scannerTiesAClaudeProcessToItsSession() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("vigil-scan-\(UUID().uuidString)")
+        let worktree = base.appendingPathComponent("repo")
+        let sessions = base.appendingPathComponent("sessions")
+        let package = base.appendingPathComponent("claude-code")
+        for directory in [worktree, sessions, package] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: base) }
+        // A stand-in for Claude Code: a script in a claude-code package is taken for it, as
+        // `node …/claude-code/cli.js` is. (A copied system binary is killed on launch.)
+        let script = package.appendingPathComponent("cli.py")
+        try Data("import time\ntime.sleep(5)\n".utf8).write(to: script)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = [script.path]
+        process.currentDirectoryURL = worktree
+        try process.run()
+        defer { process.terminate() }
+        let pid = process.processIdentifier
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        try Data(#"{"pid":\#(pid),"sessionId":"s-scan","startedAt":\#(now),"status":"busy","statusUpdatedAt":\#(now)}"#.utf8)
+            .write(to: sessions.appendingPathComponent("\(pid).json"))
+        try await Task.sleep(for: .milliseconds(500))
+
+        let scanner = AgentScanner(claudeSessions: sessions)
+        // As the process reports it: /private/var, not /var.
+        let directory = try #require(ProcessInspector.currentDirectory(of: pid))
+        #expect(directory.hasSuffix("/repo"))
+        let inside = await scanner.scan(worktrees: [directory])
+        let found = try #require(inside.byWorktree[directory]?.first { $0.pid == pid })
+        #expect(found.kind == .claudeCode)
+        #expect(found.claudeSession?.sessionID == "s-scan")
+        // Outside every watched worktree it is still found, to follow its session.
+        let outside = await scanner.scan(worktrees: ["/nonexistent/path"])
+        #expect(outside.elsewhere.first { $0.pid == pid }?.claudeSession?.sessionID == "s-scan")
+    }
+}
+
+@Suite("Session processes")
+struct SessionProcessTests {
+    private func process(_ pid: Int32, in directory: String, session: String? = nil) -> AgentProcess {
+        AgentProcess(pid: pid, kind: .claudeCode, executable: "/usr/local/bin/claude", workingDirectory: directory,
+                     startedAt: Date(timeIntervalSince1970: 0), cpuLoad: 0,
+                     claudeSession: session.map { ClaudeSessionRecord(pid: pid, sessionID: $0, status: "idle") })
+    }
+
+    @Test func aProcessCountsWhereItsSessionWorks() {
+        // The session started in the repository and moved into one of its worktrees.
+        let scan = AgentScan(byWorktree: ["/repo": [process(1, in: "/repo", session: "moved"), process(2, in: "/repo", session: "stayed"),
+                                                    process(3, in: "/repo")]],
+                             elsewhere: [process(4, in: "/scratch", session: "visiting"), process(5, in: "/scratch", session: "away")])
+        let found = scan.attributed(homes: ["moved": "/repo/.claude/worktrees/fix", "stayed": "/repo", "visiting": "/repo"])
+        #expect(found["/repo"]?.map(\.pid).sorted() == [2, 3, 4])
+        #expect(found["/repo/.claude/worktrees/fix"]?.map(\.pid) == [1])
+        #expect(!found.values.contains { $0.contains { $0.pid == 5 } })
+    }
+}
+
+@Suite("Session file statuses")
+struct SessionFileStatusTests {
+    private func record(_ status: String, waitingFor: String? = nil, session: String = "s1", at seconds: TimeInterval) -> ClaudeSessionRecord {
+        ClaudeSessionRecord(pid: 7, sessionID: session, status: status, waitingFor: waitingFor,
+                            statusUpdatedAt: Date(timeIntervalSince1970: 1000 + seconds))
+    }
+
+    private func event(_ name: HookEvent.Name, session: String = "s1", tool: String? = nil, at seconds: TimeInterval) -> HookEvent {
+        HookEvent(name: name, rawName: name.rawValue, sessionID: session, cwd: "/repo", toolName: tool, toolUseID: tool.map { "\($0)-1" },
+                  summary: nil, message: nil, receivedAt: Date(timeIntervalSince1970: 1000 + seconds))
+    }
+
+    @Test func takesTheRecordedStatusUntilHooksReport() throws {
+        var machine = AgentStatusMachine()
+        let changed1 = machine.adopt(record("idle", at: 0))
+        #expect(changed1)
+        var status = try #require(machine.status)
+        #expect(status.activity == .ready)
+        #expect(status.fromSessionFile)
+        #expect(status.sessionID == "s1")
+        #expect(status.since == Date(timeIntervalSince1970: 1000))
+        let changed2 = machine.adopt(record("idle", at: 0))
+        #expect(!changed2)
+        // Follows the record while the hooks stay silent.
+        let changed3 = machine.adopt(record("waiting", waitingFor: "permission prompt", at: 5))
+        #expect(changed3)
+        #expect(machine.status?.activity == .needsPermission(tool: "", detail: nil))
+        #expect(machine.status?.activity.title == "needs permission")
+        let changed4 = machine.noteApproved(at: Date(timeIntervalSince1970: 1006))
+        #expect(changed4)
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+        // The session's first hook event takes over, and the record no longer overrides it.
+        _ = machine.apply(event(.preToolUse, tool: "Bash", at: 10))
+        status = try #require(machine.status)
+        #expect(!status.fromSessionFile)
+        #expect(status.activity == .working(tool: "Bash", detail: nil))
+        let changed5 = machine.adopt(record("idle", at: 11))
+        #expect(!changed5)
+        #expect(machine.status?.activity == .working(tool: "Bash", detail: nil))
+    }
+
+    @Test func anotherSessionsRecordReplacesTheStatus() {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.sessionEnd, session: "old", at: 0))
+        let changed6 = machine.adopt(record("busy", session: "new", at: 1))
+        #expect(changed6)
+        #expect(machine.status?.sessionID == "new")
+        #expect(machine.status?.fromSessionFile == true)
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+        // A status Vigil does not know changes nothing.
+        let changed7 = machine.adopt(ClaudeSessionRecord(pid: 7, sessionID: "other", status: "parked"))
+        #expect(!changed7)
+        #expect(machine.status?.sessionID == "new")
     }
 }
