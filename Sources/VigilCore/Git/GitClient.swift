@@ -364,6 +364,22 @@ public struct GitClient: Sendable {
         }
     }
 
+    /// Bytes on disk of the objects only the refs under `prefix` keep: reachable from them and
+    /// not from any other ref, nor any worktree's HEAD or index. Deleting those refs frees this
+    /// much once git collects its garbage. `--disk-usage` needs git 2.38 or later.
+    public func exclusiveDiskUsage(ofRefsUnder prefix: String, in worktree: URL) async throws -> Int64 {
+        let glob = prefix.hasSuffix("/") ? prefix + "*" : prefix + "/*"
+        // Aggressive edges mark everything the other refs keep, not only the parents of these commits.
+        let result = try await run(["rev-list", "--objects-edge-aggressive", "--disk-usage", "--glob=\(glob)",
+                                    "--not", "--exclude=\(glob)", "--all", "--indexed-objects"], in: worktree)
+        // The boundary objects come first, each marked "-"; the total is the last line.
+        guard let line = result.stdoutText.split(separator: "\n").last(where: { !$0.hasPrefix("-") }),
+              let bytes = Int64(line.trimmingCharacters(in: .whitespaces)) else {
+            throw GitError(command: "rev-list --disk-usage", status: result.status, stderr: "no total in its output")
+        }
+        return bytes
+    }
+
     // MARK: Working tree queries
 
     /// Untracked, not-ignored files (individual paths).

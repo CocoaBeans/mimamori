@@ -107,6 +107,15 @@ struct GeneralSettingsView: View {
 struct SnapshotSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var confirmDelete = false
+    /// Disk space the selected worktree's snapshots alone use, once measured.
+    @State private var diskUsage: Int64?
+    @State private var measuredWorktree: String?
+    @State private var measuring = false
+
+    private var diskUsageText: String {
+        if measuring && diskUsage == nil { return "Measuring…" }
+        return diskUsage.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Unknown"
+    }
 
     var body: some View {
         let settings = SettingsBinding.make(model)
@@ -125,8 +134,10 @@ struct SnapshotSettingsView: View {
                 Text("A snapshot is a commit object of the whole working tree, including untracked files, stored under refs/monitor/ inside the repository. Branches, the index and the working tree are never touched. Snapshots let you compare against any earlier moment and keep the Start marker alive across restarts.")
             }
             if let session = model.selectedSession {
-                Section("Selected worktree: \(session.displayName)") {
+                Section {
                     LabeledContent("Snapshots", value: "\(session.snapshots.count)")
+                    LabeledContent("Disk space", value: diskUsageText)
+                        .help("Space only these snapshots use: untracked files and edits that no branch, tag or other worktree keeps")
                     if let start = session.startSnapshot {
                         LabeledContent("Start marker", value: Format.dateTime.string(from: start.date))
                     }
@@ -137,8 +148,25 @@ struct SnapshotSettingsView: View {
                             Button("Delete", role: .destructive) { Task { await session.deleteAllSnapshots() } }
                             Button("Cancel", role: .cancel) {}
                         } message: {
-                            Text("Removes every ref under refs/monitor for this worktree, including the start marker. The objects become unreachable and git will garbage-collect them later.")
+                            Text("Removes every ref under refs/monitor for this worktree, including the start marker. The objects become unreachable and git will garbage-collect them later"
+                                 + (diskUsage.map { ", freeing about \(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file))." } ?? "."))
                         }
+                } header: {
+                    Text("Selected worktree: \(session.displayName)")
+                } footer: {
+                    Text("Disk space counts only what these snapshots alone keep. Deleting them frees it the next time git cleans up unreachable objects (git gc), which by default waits about two weeks.")
+                }
+                // Measured again as snapshots come and go; only while this pane shows.
+                .task(id: "\(session.id)|\(session.snapshots.count)|\(session.snapshots.first?.id ?? "")") {
+                    if measuredWorktree != session.id {
+                        diskUsage = nil
+                        measuredWorktree = session.id
+                    }
+                    measuring = true
+                    let measured = await session.snapshotDiskUsage()
+                    guard !Task.isCancelled else { return }
+                    diskUsage = measured
+                    measuring = false
                 }
             }
         }

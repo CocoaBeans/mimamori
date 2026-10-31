@@ -127,6 +127,29 @@ struct InspectorIntegrationTests {
         #expect(await inspector.snapshots().isEmpty)
     }
 
+    @Test func snapshotDiskUsageCountsOnlyWhatSnapshotsAloneKeep() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        let inspector = try await WorktreeInspector(git: box.git, worktree: box.repo, shadowIndexDirectory: box.indexDir)
+        #expect(await inspector.snapshotDiskUsage() == 0)
+
+        // An untracked file only the snapshot keeps. Random bytes, so compression cannot hide it.
+        let bytes = Data((0..<200_000).map { _ in UInt8.random(in: 0...255) })
+        try bytes.write(to: box.repo.appendingPathComponent("scratch.bin"))
+        _ = try await inspector.takeSnapshot(force: true)
+        let withScratch = try #require(await inspector.snapshotDiskUsage())
+        #expect(withScratch > 190_000)
+
+        // Once a branch has the file too, deleting the snapshot would not free it.
+        try await box.sh(["add", "scratch.bin"])
+        try await box.sh(["commit", "-q", "-m", "Keep scratch"])
+        let committed = try #require(await inspector.snapshotDiskUsage())
+        #expect(committed < 10_000)
+
+        await inspector.deleteAllSnapshots()
+        #expect(await inspector.snapshotDiskUsage() == 0)
+    }
+
     @Test func linkedWorktreeIsDiscovered() async throws {
         let box = try await makeSandbox()
         defer { box.cleanup() }

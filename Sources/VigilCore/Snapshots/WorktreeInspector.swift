@@ -330,6 +330,12 @@ public actor WorktreeInspector {
         }
     }
 
+    /// Disk space only this worktree's snapshots use, which deleting them frees once git collects
+    /// its garbage; nil when git cannot say (before 2.38).
+    public func snapshotDiskUsage() async -> Int64? {
+        try? await git.exclusiveDiskUsage(ofRefsUnder: refNamespace, in: worktree)
+    }
+
     public func deleteAllSnapshots() async {
         let records = (try? await git.refRecords(withPrefix: refNamespace, in: worktree)) ?? []
         for record in records {

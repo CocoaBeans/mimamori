@@ -486,6 +486,12 @@ final class WorktreeSession: Identifiable {
         }
     }
 
+    /// Disk space only this worktree's snapshots use; nil when git cannot say.
+    func snapshotDiskUsage() async -> Int64? {
+        if snapshots.isEmpty { return 0 }
+        return await inspector?.snapshotDiskUsage()
+    }
+
     func deleteAllSnapshots() async {
         guard let inspector else { return }
         await inspector.deleteAllSnapshots()
