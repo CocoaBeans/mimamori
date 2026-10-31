@@ -127,7 +127,7 @@ private struct AttentionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 0) {
                     if !change.directory.isEmpty {
-                        Text(change.directory + "/").foregroundStyle(.tertiary)
+                        Text(change.directory + "/").foregroundStyle(.secondary)
                     }
                     Text(change.fileName).fontWeight(.medium)
                     if let worktreeName {

@@ -340,7 +340,7 @@ struct ChangeRow: View {
                 HStack(spacing: 0) {
                     if !change.directory.isEmpty {
                         Text(change.directory + "/")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                     Text(change.fileName)
                         .fontWeight(review.isReviewed ? .regular : .medium)
