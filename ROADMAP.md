@@ -33,7 +33,7 @@ cask. These items gate it.
 
 - [ ] Keep the debug hooks (`VIGIL_DEBUG_*`, `DebugHooks.swift`) out of release builds,
       or gate them behind a build flag.
-- [ ] Every control has a tooltip and an accessibility label.
+- [x] Every control has a tooltip and an accessibility label.
 
 ### Trust and docs
 
@@ -41,6 +41,8 @@ cask. These items gate it.
       (expanding the README's "Privacy and footprint").
 - [ ] Add CONTRIBUTING and a security contact (the code is already MIT licensed).
 - [ ] Screenshots and a short demo for the README and release page.
+- [ ] A short in-app guide under Help › Vigil Help (⌘?): what Vigil does and how to use it.
+      Planned in [docs/plans/help-window.md](docs/plans/help-window.md).
 
 ## Later
 
