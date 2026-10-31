@@ -357,6 +357,8 @@ struct AgentSettingsView: View {
     @State private var confirmHermesUninstall = false
     @State private var hermesMessage: String?
     @State private var hermesUnapproved = HermesHookInstaller.unapprovedEvents()
+    @State private var recipe: AgentHookRecipe = .codex
+    @State private var otherAgentName = AgentHookRecipe.other.agentName
 
     private static let hermesApproveCommand = "hermes --accept-hooks"
 
@@ -385,11 +387,18 @@ struct AgentSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                LabeledContent("Claude Code hooks") {
+                LabeledContent("Events received", value: "\(hub.eventsReceived)" + (hub.lastEventAt.map { " · last \(Format.relative($0, to: model.now))" } ?? ""))
+                heardFrom
+            } header: {
+                Text("Hooks")
+            } footer: {
+                Text("Hooks are commands an agent runs whenever something happens: a prompt, a tool call, a permission request. Vigil's post each event to its local socket, so it knows what the agent is doing. Vigil installs them for Claude Code and Hermes with one click; any other agent takes a setup you paste into its own settings (see Other agents).")
+            }
+            Section {
+                LabeledContent("Hooks") {
                     Text(hooksInstalled ? "Installed" : "Not installed")
                         .foregroundStyle(hooksInstalled ? .green : .secondary)
                 }
-                LabeledContent("Events received", value: "\(hub.eventsReceived)" + (hub.lastEventAt.map { " · last \(Format.relative($0, to: model.now))" } ?? ""))
                 HStack {
                     Button("Install Hooks…") { confirmInstall = true }
                         .help("Add Vigil's hooks to ~/.claude/settings.json. A backup is saved first and your own hooks are kept.")
@@ -407,13 +416,13 @@ struct AgentSettingsView: View {
                     Text(lastMessage).font(.callout).foregroundStyle(.secondary)
                 }
             } header: {
-                Text("Hooks")
+                Text("Claude Code")
             } footer: {
                 Text("Hooks let Claude Code tell Vigil exactly what it is doing: when a turn starts and ends, every tool call, and when it needs your permission or asks you a question. Installing adds entries to ~/.claude/settings.json that post each event to Vigil's local socket with curl; a backup is saved first and your other hooks are left untouched. If Vigil is not running the command fails silently in under a second.")
             }
             if hermesState != .notPresent {
                 Section {
-                    LabeledContent("Hermes hooks") {
+                    LabeledContent("Hooks") {
                         Text(hermesStatusText)
                             .foregroundStyle(hermesAwaitingApproval ? .orange : hermesState == .installed ? .green : .secondary)
                     }
@@ -456,12 +465,14 @@ struct AgentSettingsView: View {
                 } header: {
                     Text("Hermes Agent")
                 } footer: {
-                    Text(hermesState == .manualMergeNeeded
+                    Text((hermesState == .manualMergeNeeded
                          ? "Your config.yaml already has a hooks: block, so Vigil will not edit it. Install writes the script to ~/.hermes/agent-hooks/vigil.sh; then paste the copied YAML entries under your existing hooks: key."
                          : "Install writes a small script to ~/.hermes/agent-hooks/vigil.sh and appends a delimited hooks: block to ~/.hermes/config.yaml (backup first). Hermes then needs you to approve the hooks once from a terminal; sessions opened after that report to Vigil.")
+                         + " Hermes gets an installer of its own because it runs hooks without a shell, which needs the script, and skips any you have not approved; this section shows which are still waiting.")
                 }
                 .onAppear { refreshHermes() }
             }
+            otherAgents
             Section {
                 Toggle("Detect agent processes", isOn: settings.agentScanEnabled)
                     .help("Look for agent processes in your worktrees, so an agent shows even without hooks")
@@ -518,6 +529,71 @@ struct AgentSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Removes the script and Vigil's delimited block from config.yaml after saving a backup.")
+        }
+    }
+
+    /// Every agent that has reported since launch, so you can see a setup work.
+    @ViewBuilder private var heardFrom: some View {
+        let contacts = model.agentHub.contacts.values.sorted { $0.lastEventAt > $1.lastEventAt }
+        if contacts.isEmpty {
+            LabeledContent("Heard from") {
+                Text("No agent since Vigil started").foregroundStyle(.secondary)
+            }
+        }
+        ForEach(contacts) { contact in
+            LabeledContent(contact.agent.displayName) {
+                Text("\(contact.events == 1 ? "1 event" : "\(contact.events) events") · last \(Format.relative(contact.lastEventAt, to: model.now))")
+                    .foregroundStyle(.secondary)
+            }
+            .help(contact.lastWorktree.map { "Last event: \(contact.lastEvent), in \(($0 as NSString).lastPathComponent)" }
+                  ?? "Last event: \(contact.lastEvent), not in a worktree Vigil watches")
+        }
+    }
+
+    /// The setup to copy into another agent's settings.
+    @ViewBuilder private var otherAgents: some View {
+        let setup = recipe.setup(socketPath: model.agentHub.socketPath, agent: recipe == .other ? otherAgentName : nil)
+        Section {
+            Picker("Set up", selection: $recipe) {
+                ForEach(AgentHookRecipe.allCases) { Text($0.title).tag($0) }
+            }
+            .help("Which agent to show the hook setup for")
+            if recipe == .other {
+                TextField("Agent name", text: $otherAgentName, prompt: Text(AgentHookRecipe.other.agentName))
+                    .help("The name Vigil shows for this agent")
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(recipe.file.map { "Add this to \($0):" } ?? "Have the agent's hooks run:")
+                    .font(.callout)
+                ScrollView {
+                    Text(setup)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(6)
+                }
+                .frame(height: recipe == .other ? 54 : 150)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                Text(recipe.note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Button(recipe == .other ? "Copy Command" : "Copy Setup") { Workspace.copy(setup) }
+                    .help(recipe.file.map { "Copy the hooks to add to \($0)" } ?? "Copy the command for the agent's hooks to run")
+                Spacer()
+                if let file = recipe.file {
+                    let url = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)
+                    Button("Reveal File") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                        .help("Show \(file) in Finder")
+                        .disabled(!FileManager.default.fileExists(atPath: url.path))
+                }
+            }
+        } header: {
+            Text("Other agents")
+        } footer: {
+            Text("Any agent that can run a command when something happens can report to Vigil. Add the setup to the agent's own settings: Vigil works out which agent sent each event and understands its event names. Vigil never edits these files, so remove the entries yourself to stop.")
         }
     }
 

@@ -37,17 +37,24 @@ enum DebugHooks {
         var openedSummary = false
         var openedCommit = false
         Task { @MainActor [weak model] in
-            try? await Task.sleep(for: .seconds(1.5))
-            if let windowSize {
+            /// Resizes the window once it is open; Settings opens a moment after the main window.
+            var resized = windowSize == nil
+            func resize() {
+                guard !resized, let windowSize else { return }
                 let parts = windowSize.lowercased().split(separator: "x").compactMap { Double($0) }
                 if parts.count == 2, let window = NSApp.windows.first(where: {
                     $0.styleMask.contains(.titled) && $0.isVisible && (windowTitle == nil || $0.title == windowTitle)
                 }) {
                     window.setContentSize(NSSize(width: parts[0], height: parts[1]))
                     window.center()
+                    resized = true
                 }
             }
-            try? await Task.sleep(for: .seconds(3.5))
+            try? await Task.sleep(for: .seconds(1.5))
+            resize()
+            try? await Task.sleep(for: .seconds(1.5))
+            resize()
+            try? await Task.sleep(for: .seconds(2))
             repeat {
                 guard let model else { return }
                 if let select, let session = model.selectedSession,
@@ -137,6 +144,9 @@ enum DebugHooks {
         }
         let hub = model.agentHub
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
+        for contact in hub.contacts.values.sorted(by: { $0.agent.id < $1.agent.id }) {
+            lines.append("  heard \(contact.agent.id) (\(contact.agent.displayName)): events=\(contact.events) last=\(contact.lastEvent) worktree=\(contact.lastWorktree.map { ($0 as NSString).lastPathComponent } ?? "-")")
+        }
         for row in model.agentRows {
             let app = AgentApps.app(for: row.presence)?.localizedName ?? "-"
             let steps = row.presence.turnSteps.map { step in
@@ -144,7 +154,7 @@ enum DebugHooks {
                 return "\(step.toolName):\(state)"
             }
             let note = row.presence.source == .process ? " hooksInstalled=\(row.presence.hooksInstalled.map(String.init) ?? "-")" : ""
-            lines.append("  row \((row.session.id as NSString).lastPathComponent): status=\"\(row.presence.statusText)\"\(note) attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
+            lines.append("  row \((row.session.id as NSString).lastPathComponent): agent=\(row.presence.kind.displayName) status=\"\(row.presence.statusText)\"\(note) attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
         }
         if let session = model.selectedSession {
             let history = session.history

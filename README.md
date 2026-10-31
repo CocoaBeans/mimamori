@@ -31,7 +31,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 - **Writes up a session.** ⇧⌘E (or the document button by the filter) opens a Markdown summary of a worktree's session: what changed, what needs attention and why, what you have reviewed, the commits since the baseline, and what the agent did, with diffs if you want them. Preview it, then copy it into a pull request description or save it as a handoff note.
 - **Records snapshots.** When the tree changes, Vigil writes a commit object of the whole working tree (untracked files included) under `refs/monitor/<worktree-id>/`. Branches, the index and the working tree are untouched. Snapshots keep the Start marker alive across restarts and let you compare against any earlier moment.
 - **Keeps an activity feed.** Created, modified, deleted and reverted files, commits, branch switches, new flags and agent work, newest first, for one worktree or all of them. Click an entry to jump to the file. The feed is saved to disk and kept for a week by default (Settings › General), so it and session summaries survive a restart. Its filter menu shows agents only (their events and the changes traced to them) or hides agents' own events.
-- **Knows where the agents are.** Vigil scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in. With Claude Code hooks installed (Settings › Agents, one click, reversible) it also knows exactly what the agent is doing: when a turn starts and ends, each tool call, and when it needs your permission or asks you a question. A finished turn reads as ready for your next prompt and does not count as needing you. File changes are attributed to the tool call that made them, worktrees that need you are counted in the sidebar and the menu bar, and you can be notified when an agent needs permission or has a question.
+- **Knows where the agents are.** Vigil scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in. With hooks connected (one reversible click for Claude Code and Hermes, a setup to paste for Codex, Gemini CLI, Cursor or any agent that can run a command) it also knows exactly what the agent is doing: when a turn starts and ends, each tool call, and when it needs your permission or asks you a question. A finished turn reads as ready for your next prompt and does not count as needing you. File changes are attributed to the tool call that made them, worktrees that need you are counted in the sidebar and the menu bar, and you can be notified when an agent needs permission or has a question.
 - **Has an Agents window.** ⇧⌘A (or the toolbar's Agents button, or the menu bar) lists every worktree with an agent in it: what it is doing and for how long, the task it was given, its last few steps, the files it has touched this turn (click one to open its diff), and how much is changed and left to review. Agents waiting on you sort to the top, longest wait first. **Go to agent** brings the app the agent runs in (Terminal, iTerm, VS Code, the Claude or Hermes app) to the front. Click a row to jump to that worktree, switch off Details for one line per agent, or pin the window above everything else.
 - **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you; the menu lists every repository and worktree.
 
@@ -97,11 +97,41 @@ A tool call ends in `PostToolUse` when it succeeds, `PostToolUseFailure` when it
 
 Hooks only report what happens while Vigil runs: a session sitting at its prompt when Vigil starts sends nothing until you next use it, and one started before the hooks were installed never sends anything. For those, Vigil reads the small file Claude Code keeps for each running session in `~/.claude/sessions/<pid>.json` (read only) and shows whether it is working, ready or waiting on you, until the session's first hook event takes over. The same file ties a Claude Code process to its session, so a session that moves into another worktree (say, from the repository into one of its worktrees) shows there, process and all, instead of leaving a bare process behind in the folder it started in. Events are kept in memory only; nothing is written to disk and nothing leaves the machine. **Hermes Agent** is supported the same way. **Install Hermes Hooks** writes a small script to `~/.hermes/agent-hooks/vigil.sh` and appends a delimited `hooks:` block to `~/.hermes/config.yaml` (backup first). If your config already has a `hooks:` key, Vigil copies the entries to the clipboard for you to paste instead. Hermes runs a hook only after you approve it, and its gateway has no terminal to ask from, so it skips unapproved hooks silently. Run `hermes --accept-hooks` once in a terminal (or plain `hermes` and answer each prompt), then open a new session; Settings › Agents shows how many of Vigil's hooks are still waiting for approval. Events arrive on `http://vigil/event/hermes` and are translated from Hermes's names (`pre_tool_call`, `pre_approval_request`, `on_human_input_request`, `pre_verify`, …). Hermes's hooks report the gateway's own directory, not the project, so Vigil reads where each session works from Hermes's `~/.hermes/state.db` (read only) and shows the session there from its first event; a file it changes in another worktree moves it there.
 
-Other agents with a hook mechanism can post the Claude Code JSON shape (`hook_event_name`, `cwd`, `tool_name`, `tool_input`, …) to `http://vigil/event`.
+### Connecting other agents
+
+Any agent that can run a command when something happens can report to Vigil the same way. **Settings › Agents › Other agents** shows what to paste into Codex (`~/.codex/hooks.json`), Gemini CLI (`~/.gemini/settings.json`) or Cursor (`~/.cursor/hooks.json`), with a Copy button, and lists every agent that has reported since Vigil started, so you can see a new setup work. Vigil never edits those files; remove the entries yourself to stop. Every setup runs the same command, with the agent's name in the address:
+
+```bash
+curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \
+  --unix-socket "$HOME/Library/Application Support/Vigil/vigil.sock" \
+  --data-binary @- 'http://vigil/event?agent=codex' >/dev/null 2>&1 || true
+```
+
+The hook's JSON goes in on standard input, as each agent writes it. Vigil understands each agent's own names for the same moments and maps them onto one set:
+
+| Moment | Claude Code, Codex | Gemini CLI | Cursor | Hermes | Plain name |
+|---|---|---|---|---|---|
+| Session opened | `SessionStart` | `SessionStart` | `sessionStart` | `on_session_start` | `session_start` |
+| Prompt sent, turn starts | `UserPromptSubmit` | `BeforeAgent` | `beforeSubmitPrompt` | `pre_llm_call` | `turn_start` |
+| About to use a tool | `PreToolUse` | `BeforeTool` | `preToolUse` | `pre_tool_call` | `tool_start` |
+| Tool finished | `PostToolUse` | `AfterTool` | `postToolUse` | `post_tool_call` | `tool_end` |
+| Tool failed | `PostToolUseFailure` | `AfterTool` with an error | `postToolUseFailure` | | `tool_failed` |
+| Waiting for your permission | `PermissionRequest` | `Notification` (`ToolPermission`) | | `pre_approval_request` | `needs_permission` |
+| Asked you something | `Notification` | | | `on_human_input_request` | `question` |
+| Turn finished | `Stop`, Codex's `Interrupt` | `AfterAgent` | `stop` | `pre_verify` | `turn_end` |
+| Turn failed | `StopFailure` | | `stop` with status `error` | | `turn_failed` |
+| Session closed | `SessionEnd` | `SessionEnd` | `sessionEnd` | `on_session_end` | `session_end` |
+
+For an agent of your own, use the plain names with the fields Claude Code uses: `{"event": "tool_start", "session_id": "…", "cwd": "/path/to/worktree", "tool_name": "Edit", "tool_input": {"file_path": "src/a.py"}}`. `file_path` and `command` may also sit at the top level, and `message` carries a question's text. The address takes two optional parameters:
+
+- `agent=<name>` names the agent. Without it, Vigil asks macOS which process is on the other end of the socket and walks up from there to the agent that ran the hook (the same detection as above, including names you added), then falls back to what the event's names suggest.
+- `event=<name>` names the event, for an agent whose hook sends no JSON or names its events in a way Vigil does not know. An empty body is fine with it: `curl … --data-binary '' 'http://vigil/event?agent=aider&event=turn_end'`. Without a `cwd` in the payload, Vigil uses the hook command's working directory.
+
+What Vigil can show depends on what an agent sends: start and end of a turn give working and ready; tool events add each step and which edit changed which file; permission and question events make it count as needing you, with notifications. Without a session id, a worktree holds one session at a time.
 
 ## Privacy and footprint
 
-Vigil talks to nothing but your local `git`. It has no network code beyond a Unix-domain socket that only local processes can reach, and no telemetry. On disk it writes:
+Vigil talks to nothing but your local `git`. It has no network code beyond a Unix-domain socket that only your own processes can reach (the socket file is readable and writable by you alone), and no telemetry. On disk it writes:
 
 - `~/Library/Application Support/Vigil/`: settings, the list of watched repositories, review marks, the shadow index files, and `activity.jsonl`, the activity feed (one JSON entry per line, kept for the number of days you choose).
 - `refs/monitor/…` inside watched repositories, for snapshots (see above).

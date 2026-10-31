@@ -3,7 +3,7 @@ import Foundation
 /// One event posted by an agent's hook (Claude Code's hook JSON shape, which other
 /// agents' hooks are mapped onto).
 public struct HookEvent: Sendable, Hashable {
-    public enum Name: String, Sendable, Codable {
+    public enum Name: String, Sendable, Codable, CaseIterable {
         case sessionStart = "SessionStart"
         case sessionEnd = "SessionEnd"
         case userPromptSubmit = "UserPromptSubmit"
@@ -102,6 +102,10 @@ public struct HookEvent: Sendable, Hashable {
         "Edit", "Write", "MultiEdit", "NotebookEdit", "Bash", "Task", "Agent",
         // Hermes
         "terminal", "write_file", "patch", "apply_patch", "edit_file", "delete_file", "execute_code", "delegate_task",
+        // Cursor
+        "Shell", "Delete",
+        // Gemini CLI
+        "run_shell_command", "replace",
     ]
 }
 
@@ -123,13 +127,18 @@ public enum HookEventParser {
         var filePath: String? = nil
         var summary: String? = nil
 
+        func resolved(_ path: String) -> String {
+            if path.hasPrefix("/") || !resolveRelativePaths { return path }
+            return cwd.map { ($0 as NSString).appendingPathComponent(path) } ?? path
+        }
+
         if let toolInput {
-            if let path = (toolInput["file_path"] ?? toolInput["notebook_path"] ?? toolInput["path"]) as? String, !path.isEmpty {
-                if path.hasPrefix("/") || !resolveRelativePaths {
-                    filePath = path
-                } else {
-                    filePath = cwd.map { ($0 as NSString).appendingPathComponent(path) } ?? path
-                }
+            if let path = (toolInput["file_path"] ?? toolInput["notebook_path"] ?? toolInput["path"] ?? toolInput["absolute_path"]) as? String,
+               !path.isEmpty {
+                filePath = resolved(path)
+                summary = path
+            } else if let command = toolInput["command"] as? String, let path = patchedFile(in: command) {
+                filePath = resolved(path)  // Codex's apply_patch
                 summary = path
             } else if let questions = toolInput["questions"] as? [[String: Any]],
                       let question = questions.first?["question"] as? String {
@@ -174,6 +183,18 @@ public enum HookEventParser {
             isInterrupt: object["is_interrupt"] as? Bool ?? false,
             batchToolUseIDs: batch,
             receivedAt: receivedAt)
+    }
+
+    /// The first file a patch in the `*** Begin Patch` format changes.
+    static func patchedFile(in text: String) -> String? {
+        guard text.hasPrefix("*** Begin Patch") else { return nil }
+        for line in text.split(separator: "\n").prefix(20) {
+            for marker in ["*** Update File: ", "*** Add File: ", "*** Delete File: "] where line.hasPrefix(marker) {
+                let path = line.dropFirst(marker.count).trimmingCharacters(in: .whitespaces)
+                if !path.isEmpty { return path }
+            }
+        }
+        return nil
     }
 
     private static func firstLine(_ text: String) -> String {

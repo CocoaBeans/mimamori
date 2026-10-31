@@ -30,8 +30,13 @@ public enum HermesHookParser {
     ]
 
     public static func parse(_ data: Data, receivedAt: Date = Date()) -> HookEvent? {
-        guard var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rawName = object["hook_event_name"] as? String else { return nil }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return parse(object, receivedAt: receivedAt)
+    }
+
+    public static func parse(_ object: [String: Any], receivedAt: Date = Date()) -> HookEvent? {
+        var object = object
+        guard let rawName = object["hook_event_name"] as? String else { return nil }
         let extra = object["extra"] as? [String: Any] ?? [:]
         if let id = extra["tool_call_id"] as? String, object["tool_use_id"] == nil {
             object["tool_use_id"] = id

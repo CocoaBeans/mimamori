@@ -48,6 +48,19 @@ struct AgentPresence: Hashable {
     }
 }
 
+/// An agent that has reported to Vigil, so you can see its hooks work.
+struct AgentContact: Hashable, Identifiable {
+    var agent: AgentKind
+    var events: Int
+    var lastEventAt: Date
+    /// The event's name as the agent sent it.
+    var lastEvent: String
+    /// The watched worktree the last event was placed in; nil when it fit none (yet).
+    var lastWorktree: String?
+
+    var id: String { agent.id }
+}
+
 /// Collects agent signals for every watched worktree: hook events over the Unix socket,
 /// and agent processes found by scanning.
 @MainActor
@@ -62,6 +75,8 @@ final class AgentHub {
     private(set) var lastEventAt: Date?
     /// Whether Claude Code's settings have Vigil's hooks; re-read when the file changes.
     private(set) var claudeHooksInstalled = false
+    /// Every agent heard from since launch, by agent id.
+    private(set) var contacts: [String: AgentContact] = [:]
 
     let socketPath: String = Persistence.supportDirectory.appendingPathComponent("vigil.sock").path
 
@@ -124,7 +139,9 @@ final class AgentHub {
         let previous = self.settings
         self.settings = settings
         if previous.customAgentNames != settings.customAgentNames {
-            Task { await scanner.setClassifier(AgentClassifier(customNames: settings.customAgentNames)) }
+            let classifier = AgentClassifier(customNames: settings.customAgentNames)
+            server?.classifier = classifier
+            Task { await scanner.setClassifier(classifier) }
         }
         if previous.agentScanEnabled != settings.agentScanEnabled || previous.agentScanIntervalSeconds != settings.agentScanIntervalSeconds {
             restartScanning()
@@ -143,6 +160,7 @@ final class AgentHub {
         let server = HookSocketServer(path: socketPath) { [weak self] event in
             Task { @MainActor [weak self] in self?.handle(event) }
         }
+        server.classifier = AgentClassifier(customNames: settings.customAgentNames)
         do {
             try server.start()
             self.server = server
@@ -197,6 +215,9 @@ final class AgentHub {
         let decision = placement.place(session: event.sessionID, cwdMatch: event.cwd.flatMap(resolveWorktree),
                                        pathMatch: pathMatch, changesFiles: event.isMutatingTool,
                                        homeMatch: self.hermesDirectory(for: event).flatMap(self.resolveWorktree))
+        contacts[event.agent.id] = AgentContact(agent: event.agent, events: (contacts[event.agent.id]?.events ?? 0) + 1,
+                                                lastEventAt: event.receivedAt, lastEvent: event.rawName,
+                                                lastWorktree: decision.worktree)
         guard let worktree = decision.worktree else {
             eventsUnmatched += 1
             hold(event)
@@ -453,7 +474,8 @@ final class AgentHub {
         return AgentPresence(kind: first.kind, source: .process, activity: .idle, since: earliest,
                              processCount: running.count, isBusy: running.contains(where: \.isBusy),
                              lastToolCall: nil, toolCallsThisTurn: 0, processIDs: running.map(\.pid),
-                             hooksInstalled: first.kind == .claudeCode ? claudeHooksInstalled : nil)
+                             hooksInstalled: first.kind == .claudeCode ? claudeHooksInstalled
+                                : contacts[first.kind.id] != nil ? true : nil)
     }
 
     var worktreesNeedingAttention: [String] {

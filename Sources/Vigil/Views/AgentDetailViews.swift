@@ -40,6 +40,8 @@ struct StepLine: View {
                 .frame(width: 14)
             Text(step.toolName)
                 .fontWeight(.medium)
+                .lineLimit(1)
+                .layoutPriority(1)
             if let target, !target.isEmpty {
                 Text(target)
                     .foregroundStyle(.secondary)

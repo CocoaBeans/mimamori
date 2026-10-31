@@ -62,16 +62,16 @@ public enum AgentToolCategory: String, Sendable, Hashable, CaseIterable {
 
     public init(toolName: String) {
         switch toolName {
-        case "Edit", "Write", "MultiEdit", "NotebookEdit",
-             "write_file", "patch", "apply_patch", "edit_file", "delete_file":
+        case "Edit", "Write", "MultiEdit", "NotebookEdit", "Delete",
+             "write_file", "patch", "apply_patch", "edit_file", "delete_file", "replace":
             self = .edit
-        case "Bash", "BashOutput", "KillShell", "terminal", "execute_code", "process":
+        case "Bash", "BashOutput", "KillShell", "Shell", "terminal", "execute_code", "process", "run_shell_command":
             self = .command
-        case "Read", "NotebookRead", "read_file", "view_file":
+        case "Read", "NotebookRead", "read_file", "view_file", "read_many_files":
             self = .read
-        case "Grep", "Glob", "LS", "search_files", "list_files", "find_files":
+        case "Grep", "Glob", "LS", "search_files", "list_files", "find_files", "glob", "search_file_content", "list_directory":
             self = .search
-        case "WebFetch", "WebSearch", "web_search", "web_extract":
+        case "WebFetch", "WebSearch", "web_search", "web_extract", "web_fetch", "google_web_search":
             self = .web
         case "Task", "Agent", "delegate_task":
             self = .subagent
@@ -178,6 +178,22 @@ public struct AgentStatusMachine: Sendable {
     public mutating func apply(_ event: HookEvent) -> [AgentNote] {
         let now = event.receivedAt
         var current = status ?? AgentStatus(agent: event.agent, activity: .idle, since: now, lastEventAt: now)
+        let otherSession = event.sessionID.flatMap { session in current.sessionID.map { $0 != session } } ?? false
+        if status != nil, otherSession || current.agent != event.agent {
+            // Another session took the worktree over, perhaps another agent: the last one's turn,
+            // task and open steps are not this one's. Its calls stay, so its changes stay credited.
+            for index in current.recentToolCalls.indices where current.recentToolCalls[index].finishedAt == nil {
+                current.recentToolCalls[index].finishedAt = now
+            }
+            current.activity = .ready
+            current.since = now
+            current.task = nil
+            current.turnStartedAt = nil
+            current.lastTurnStartedAt = now
+            current.toolCallsThisTurn = 0
+            current.pendingPermission = nil
+            current.sessionID = nil
+        }
         current.agent = event.agent
         current.lastEventAt = now
         current.fromSessionFile = false
@@ -317,7 +333,9 @@ public struct AgentStatusMachine: Sendable {
                 if case .needsPermission = current.activity { break }
                 let tool = event.toolName ?? Self.permissionTool(in: event.message) ?? "a tool"
                 set(.needsPermission(tool: tool, detail: event.summary ?? event.message))
-                current.pendingPermission = PendingPermission(callID: nil, agentID: event.agentID)
+                // Gemini CLI's alert names its tool, so the step waiting on you can be found.
+                let call = event.toolName.flatMap { name in current.recentToolCalls.last { $0.finishedAt == nil && $0.toolName == name } }
+                current.pendingPermission = PendingPermission(callID: call?.id, agentID: event.agentID)
                 notes.append(AgentNote(kind: .needsPermission, title: "\(agentName) needs permission", detail: event.message))
             case .question:
                 set(.askedQuestion(detail: event.message))

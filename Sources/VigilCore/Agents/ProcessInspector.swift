@@ -60,6 +60,33 @@ public enum ProcessInspector {
         return Double(info.numer) / Double(info.denom) / 1_000_000_000
     }()
 
+    /// The agent `pid` is, judged as the scanner judges it: by its executable and, for an
+    /// interpreter, its arguments.
+    public static func agentKind(of pid: Int32, classifier: AgentClassifier) -> AgentKind? {
+        guard let executable = executablePath(of: pid) else { return nil }
+        let arguments = AgentClassifier.isInterpreter((executable as NSString).lastPathComponent) ? arguments(of: pid) : []
+        return classifier.classify(executable: executable, arguments: arguments)
+    }
+
+    /// The agent that started `pid`, or `pid` itself when it is one. A hook's command runs as a
+    /// child of its agent, usually through a shell or two.
+    public static func agentAncestor(of pid: Int32, classifier: AgentClassifier) -> (pid: Int32, kind: AgentKind)? {
+        nearest(from: pid, parent: parentPID(of:)) { agentKind(of: $0, classifier: classifier) }
+    }
+
+    /// The first of `pid` and its ancestors, at most `limit` levels up, that `match` accepts.
+    static func nearest<T>(from pid: Int32, limit: Int = 8, parent: (Int32) -> Int32?,
+                           match: (Int32) -> T?) -> (pid: Int32, kind: T)? {
+        var current = pid
+        for _ in 0...limit {
+            guard current > 1 else { return nil }
+            if let found = match(current) { return (current, found) }
+            guard let next = parent(current), next != current else { return nil }
+            current = next
+        }
+        return nil
+    }
+
     /// The process's argument vector, via KERN_PROCARGS2.
     public static func arguments(of pid: Int32) -> [String] {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]

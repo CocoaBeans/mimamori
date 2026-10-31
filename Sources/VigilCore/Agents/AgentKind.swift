@@ -19,8 +19,23 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
     public static let opencode = AgentKind(id: "opencode", displayName: "OpenCode")
     public static let amp = AgentKind(id: "amp", displayName: "Amp")
     public static let hermes = AgentKind(id: "hermes", displayName: "Hermes")
+    /// An agent whose events did not say which agent it is.
+    public static let unnamed = AgentKind(id: "agent", displayName: "Agent")
 
     public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes]
+
+    /// The agent a hook names itself as (`?agent=codex`, `gemini-cli`, `Claude Code`): a known
+    /// agent when the name is one, otherwise a new kind with that name.
+    public static func named(_ name: String) -> AgentKind? {
+        let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        guard !trimmed.isEmpty else { return nil }
+        let key = trimmed.lowercased().replacingOccurrences(of: " ", with: "-")
+        for kind in known {
+            let names = [kind.id, kind.displayName.lowercased().replacingOccurrences(of: " ", with: "-")]
+            if names.contains(key) || key.hasPrefix(kind.id + "-") { return kind }
+        }
+        return AgentKind(id: key, displayName: trimmed)
+    }
 }
 
 /// Decides whether a process is a coding agent, from its executable and arguments.
