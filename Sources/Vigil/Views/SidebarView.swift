@@ -83,6 +83,7 @@ struct SidebarView: View {
 /// One collapsible repository with its visible worktrees.
 private struct RepositorySection: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     let repo: RepositoryEntry
 
     var body: some View {
@@ -103,7 +104,7 @@ private struct RepositorySection: View {
                         Button("Copy Path") { Workspace.copy(worktree.path) }
                         Divider()
                         Button("Refresh") { model.sessions[worktree.path]?.requestRefresh(force: true) }
-                        Button("Session Summary…") { model.showSummary(for: worktree.path) }
+                        Button("Session Summary…") { openWindow.summary(for: worktree.path) }
                             .disabled(model.sessions[worktree.path] == nil)
                         Divider()
                         Button("Hide Worktree") { model.hideWorktree(worktree.path) }

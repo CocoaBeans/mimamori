@@ -3,10 +3,6 @@ import Foundation
 import Observation
 import VigilCore
 
-struct SummaryRequest: Identifiable, Hashable {
-    let id: String
-}
-
 struct RepositoryEntry: Identifiable, Hashable {
     let id: UUID
     var rootPath: String
@@ -34,7 +30,8 @@ final class AppModel {
 
     var selectedWorktreeID: String?
     /// The worktree whose session summary sheet is open.
-    var summaryRequest: SummaryRequest?
+    /// A worktree whose summary window code outside the views wants open; the main window opens it.
+    var summaryWindowRequest: String?
     /// The pane the Settings window shows; set it before opening Settings to land on that pane.
     var settingsTab: SettingsTab = .general
     let launchedAt = Date()
@@ -480,11 +477,6 @@ final class AppModel {
     }
 
     // MARK: Session summary
-
-    func showSummary(for worktree: String) {
-        select(worktree: worktree)
-        summaryRequest = SummaryRequest(id: worktree)
-    }
 
     /// Gathers what a summary reports about a worktree's session. Fetching every file's diff
     /// can take a moment, so it happens only when asked for.

@@ -58,7 +58,7 @@ enum DebugHooks {
                 }
                 // "summary": open the session summary for the selected worktree once.
                 if model.debugFlags.contains("summary"), !openedSummary, let session = model.selectedSession, session.state != nil {
-                    model.showSummary(for: session.id)
+                    model.summaryWindowRequest = session.id
                     openedSummary = true
                     if let dump {
                         let summary = await model.sessionSummary(for: session, includeDiffs: model.settings.summaryOptions.diffs)

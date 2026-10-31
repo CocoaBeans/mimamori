@@ -606,6 +606,7 @@ struct ListControls: View {
 /// Mark Start, the session summary and Refresh, next to the filter.
 struct SessionControls: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     let session: WorktreeSession
 
     var body: some View {
@@ -618,7 +619,7 @@ struct SessionControls: View {
             .help("Mark Start: snapshot the working tree now and compare against it (⇧⌘S)")
             .accessibilityLabel("Mark start")
             Button {
-                model.showSummary(for: session.id)
+                openWindow.summary(for: session.id)
             } label: {
                 Image(systemName: "doc.text")
             }

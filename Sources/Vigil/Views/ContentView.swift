@@ -46,10 +46,11 @@ struct ContentView: View {
                 openSettings()
             }
         }
-        .sheet(item: $model.summaryRequest) { request in
-            if let session = model.sessions[request.id] {
-                SessionSummarySheet(session: session)
-            }
+        // Code that is not a view (the debug hooks) asks for a summary through the model.
+        .onChange(of: model.summaryWindowRequest) { _, worktree in
+            guard let worktree else { return }
+            model.summaryWindowRequest = nil
+            openWindow.summary(for: worktree)
         }
     }
 
@@ -224,6 +225,7 @@ struct WelcomeView: View {
 /// keeps a busy agent's updates from re-evaluating the whole main window.
 private struct AgentBannerSlot: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     let worktree: String
 
     var body: some View {
@@ -241,7 +243,7 @@ private struct AgentBannerSlot: View {
                 },
                 onOpenFile: { path in session?.selectedPath = path },
                 onGoToAgent: { AgentApps.bringForward(presence) },
-                onSummary: { model.showSummary(for: worktree) },
+                onSummary: { openWindow.summary(for: worktree) },
                 onDismissCollision: { model.agentHub.dismissCollision(in: worktree) }))
         }
     }

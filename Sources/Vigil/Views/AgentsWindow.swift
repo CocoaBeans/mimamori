@@ -143,8 +143,7 @@ struct AgentsWindowView: View {
     }
 
     private func summary(_ row: AgentRow) {
-        show(row)
-        model.showSummary(for: row.session.id)
+        openWindow.summary(for: row.session.id)
     }
 
     private func goToAgent(_ row: AgentRow) {

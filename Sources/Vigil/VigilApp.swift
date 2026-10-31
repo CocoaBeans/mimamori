@@ -25,6 +25,16 @@ struct VigilApp: App {
         .windowToolbarStyle(.unified)
         .commands { VigilCommands(model: model) }
 
+        // One per worktree, so a summary can sit beside your work. A summary reopened after a
+        // relaunch could name a worktree no longer watched, so they are not restored.
+        WindowGroup("Session Summary", id: SessionSummaryWindow.id, for: String.self) { $worktree in
+            SessionSummaryWindow(worktree: worktree)
+                .environment(model)
+        }
+        .defaultSize(width: 760, height: 680)
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
+
         Window("Agents", id: "agents") {
             AgentsWindowView()
                 .environment(model)
@@ -61,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct VigilCommands: Commands {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -79,7 +90,7 @@ struct VigilCommands: Commands {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
             Button("Clear Start Marker") { if let session = model.selectedSession { Task { await session.clearStart() } } }
             Button("Take Snapshot Now") { if let session = model.selectedSession { Task { await session.takeSnapshotNow() } } }
-            Button("Session Summary…") { if let session = model.selectedSession { model.showSummary(for: session.id) } }
+            Button("Session Summary…") { if let session = model.selectedSession { openWindow.summary(for: session.id) } }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
             Divider()
             Button("Compare Uncommitted") { model.selectedSession?.setBaseline(.head) }

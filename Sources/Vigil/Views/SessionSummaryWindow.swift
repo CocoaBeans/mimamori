@@ -3,11 +3,38 @@ import SwiftUI
 import UniformTypeIdentifiers
 import VigilCore
 
-/// A write-up of one worktree's session: what changed, what needs a look, what you have
-/// reviewed and what the agent did, as Markdown to copy or save.
-struct SessionSummarySheet: View {
+/// The window a session summary opens in: one per worktree, to keep beside your work.
+struct SessionSummaryWindow: View {
+    static let id = "summary"
+
     @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
+    let worktree: String?
+
+    var body: some View {
+        if let worktree, let session = model.sessions[worktree] {
+            SessionSummaryView(session: session)
+                .navigationTitle("Session Summary — \(session.displayName)")
+        } else {
+            ContentUnavailableView("Worktree Not Watched", systemImage: "eye.slash",
+                                   description: Text("Vigil no longer watches this worktree, so there is nothing to summarize."))
+                .frame(minWidth: 620, minHeight: 480)
+                .navigationTitle("Session Summary")
+        }
+    }
+}
+
+extension OpenWindowAction {
+    /// Opens the session summary for `worktree`, or brings its window to the front.
+    func summary(for worktree: String) {
+        self(id: SessionSummaryWindow.id, value: worktree)
+    }
+}
+
+/// A write-up of one worktree's session: what changed, what needs a look, what you have
+/// reviewed and what the agent did, as Markdown to copy or save. It keeps itself up to date
+/// while the window stays open.
+struct SessionSummaryView: View {
+    @Environment(AppModel.self) private var model
     let session: WorktreeSession
 
     private enum Mode: String, CaseIterable { case preview = "Preview", markdown = "Markdown" }
@@ -16,6 +43,27 @@ struct SessionSummarySheet: View {
     @State private var summaryHasDiffs = false
     @State private var mode = Mode.preview
     @State private var copied = false
+    @State private var gatheredAt: Date?
+    /// The worktree changed since the summary was gathered, and gathering again is left to you.
+    @State private var outOfDate = false
+    @State private var refreshes = 0
+    @State private var refreshesGathered = 0
+
+    /// What, changing, makes the summary out of date: the worktree's state, your reviews, the
+    /// agent's activity there, whether diffs are included, and a press of Refresh.
+    private struct Stamp: Hashable {
+        var state: WorktreeState?
+        var unreviewed: Int
+        var latestActivity: UUID?
+        var diffs: Bool
+        var refreshes: Int
+    }
+
+    private var stamp: Stamp {
+        Stamp(state: session.state, unreviewed: session.unreviewedCount,
+              latestActivity: model.activity.first { $0.worktreePath == session.id }?.id,
+              diffs: options.diffs, refreshes: refreshes)
+    }
 
     private var options: SessionSummaryOptions { model.settings.summaryOptions }
 
@@ -60,28 +108,40 @@ struct SessionSummarySheet: View {
             footer
         }
         .frame(minWidth: 620, idealWidth: 760, minHeight: 480, idealHeight: 680)
-        // Diffs take a while to gather, so only fetch them when they are wanted.
-        .task(id: options.diffs) {
-            guard summary == nil || (options.diffs && !summaryHasDiffs) else { return }
-            let wantDiffs = options.diffs
-            let gathered = await model.sessionSummary(for: session, includeDiffs: wantDiffs)
+        .task(id: stamp) { await gather() }
+    }
+
+    /// Gathers the summary at first, when asked, and a moment after the worktree settles.
+    /// Diffs take a while to gather, so they are fetched only when wanted, and a summary that
+    /// includes them is marked out of date rather than gathered again on its own.
+    private func gather() async {
+        let wantDiffs = options.diffs
+        let asked = refreshes != refreshesGathered
+        if summary != nil, !asked, !(wantDiffs && !summaryHasDiffs) {
+            if wantDiffs {
+                outOfDate = true
+                return
+            }
+            try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
-            summary = gathered
-            summaryHasDiffs = wantDiffs
         }
+        refreshesGathered = refreshes
+        let gathered = await model.sessionSummary(for: session, includeDiffs: wantDiffs)
+        guard !Task.isCancelled else { return }
+        summary = gathered
+        summaryHasDiffs = wantDiffs
+        gatheredAt = Date()
+        outOfDate = false
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Session Summary")
-                        .font(.title3.weight(.semibold))
-                    Text("\(session.state?.branch.displayName ?? session.displayName) · \(session.state?.baseline.label ?? session.baseline.title)")
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                // The window's title names the worktree; this says what the summary covers.
+                Text("\(session.state?.branch.displayName ?? session.displayName) · \(session.state?.baseline.label ?? session.baseline.title)")
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 Picker("Summary view", selection: $mode) {
                     ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -117,8 +177,10 @@ struct SessionSummarySheet: View {
             if let summary {
                 Text(footerNote(summary))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(outOfDate ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                     .lineLimit(1)
+                    .help(outOfDate ? "The worktree changed since this summary was gathered. With diffs included it is not gathered again on its own; press Refresh."
+                          : "The summary gathers itself again a moment after the worktree changes")
             }
             if options.diffs && !summaryHasDiffs && summary != nil {
                 ProgressView().controlSize(.small)
@@ -129,6 +191,9 @@ struct SessionSummarySheet: View {
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
+            Button("Refresh") { refreshes += 1 }
+                .disabled(summary == nil)
+                .help("Gather the summary again now")
             Button("Save…") { save() }
                 .disabled(summary == nil)
                 .help("Save the summary as a Markdown file, for example as a handoff note")
@@ -136,9 +201,6 @@ struct SessionSummarySheet: View {
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(summary == nil)
                 .help("Copy the summary as Markdown to paste into a pull request or note (⇧⌘C)")
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
-                .help("Close the summary")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -146,7 +208,9 @@ struct SessionSummarySheet: View {
 
     private func footerNote(_ summary: SessionSummary) -> String {
         let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).count
-        return "\(lines) lines · activity since \(Format.dateTime.string(from: summary.activitySince ?? model.launchedAt))"
+        let updated = gatheredAt.map { (outOfDate ? "Out of date · gathered " : "Updated ") + Format.time.string(from: $0) }
+        return [updated, "\(lines) lines", "activity since \(Format.dateTime.string(from: summary.activitySince ?? model.launchedAt))"]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 
     private func copy() {
@@ -158,17 +222,25 @@ struct SessionSummarySheet: View {
         }
     }
 
+    /// Asks where to save, attached to this window so the rest of Vigil stays usable.
     private func save() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         panel.nameFieldStringValue = suggestedFileName
         panel.canCreateDirectories = true
         let text = markdown
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            NSSound.beep()
+        let write = { (response: NSApplication.ModalResponse) in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try text.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                NSSound.beep()
+            }
+        }
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: write)
+        } else {
+            write(panel.runModal())
         }
     }
 
