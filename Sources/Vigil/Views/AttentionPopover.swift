@@ -98,12 +98,14 @@ struct AttentionPopover: View {
                     openSettings()
                     dismiss()
                 }
+                .help("Open the Attention settings, where each rule can be switched off and thresholds tuned")
                 Spacer()
                 Button("Show Only Flagged") {
                     model.flaggedOnly = true
                     if sessions.count == 1, let only = sessions.first { model.select(worktree: only.id) }
                     dismiss()
                 }
+                .help("List only files that need attention (⇧⌘F)")
             }
             .controlSize(.small)
         }

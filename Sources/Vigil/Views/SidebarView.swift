@@ -24,6 +24,7 @@ struct SidebarView: View {
                     Text("Worktrees appear here while an agent works in them.")
                 } actions: {
                     Button("Show All Worktrees") { model.sidebarAgentsOnly = false }
+                        .help("Turn off the agents-only filter")
                 }
             } else if model.repositories.isEmpty {
                 ContentUnavailableView {
@@ -32,6 +33,7 @@ struct SidebarView: View {
                     Text("Add one or drop a folder here.")
                 } actions: {
                     Button("Add Repository…") { model.promptForRepository() }
+                        .help("Choose a repository or worktree folder to watch (⌘O)")
                 }
             }
         }
@@ -43,6 +45,7 @@ struct SidebarView: View {
                     Label("Add Repository", systemImage: "plus")
                 }
                 .buttonStyle(.borderless)
+                .help("Watch another repository or worktree (⌘O)")
                 Spacer()
                 Toggle(isOn: Binding(get: { model.sidebarAgentsOnly }, set: { model.sidebarAgentsOnly = $0 })) {
                     Image(systemName: model.sidebarAgentsOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
@@ -52,6 +55,7 @@ struct SidebarView: View {
                 .help(model.sidebarAgentsOnly
                       ? "Showing only worktrees with an agent. Click to show them all."
                       : "Show only worktrees with an agent at work")
+                .accessibilityLabel("Only worktrees with agents")
                 AttentionNeededButton()
                 AttentionBadgeButton(sessions: model.orderedSessions, arrowEdge: .bottom, debugID: "sidebar")
             }

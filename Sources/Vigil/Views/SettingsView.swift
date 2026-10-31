@@ -56,12 +56,16 @@ struct GeneralSettingsView: View {
             }
             Section("Appearance") {
                 Toggle("Show in menu bar", isOn: settings.showMenuBarExtra)
+                    .help("Show changed and flagged files, and agents waiting on you, in the menu bar")
                 Toggle("Wrap long diff lines", isOn: settings.wrapDiffLines)
+                    .help("Wrap long lines instead of scrolling them sideways (⌥⌘W)")
                     .disabled(settings.wrappedValue.diffLayout == .sideBySide)
                 Toggle("Show diffs side by side", isOn: Binding(
                     get: { settings.wrappedValue.diffLayout == .sideBySide },
                     set: { settings.wrappedValue.diffLayout = $0 ? .sideBySide : .unified }))
+                    .help("Show old and new side by side instead of in one column (⌥⌘L)")
                 Toggle("Highlight syntax in diffs", isOn: settings.syntaxHighlighting)
+                    .help("Color code in diffs by language")
                 Stepper("Diff font size: \(Int(settings.wrappedValue.diffFontSize))",
                         value: settings.diffFontSize, in: 9...20, step: 1)
             }
@@ -75,12 +79,14 @@ struct GeneralSettingsView: View {
             }
             Section("Notifications") {
                 Toggle("Notify when a change is flagged", isOn: settings.notificationsEnabled)
+                    .help("Post a notification when a change matches an attention rule")
                     .disabled(!model.isNotifierAvailable)
                 Picker("Minimum severity", selection: settings.notifyMinimumSeverity) {
                     Text("Warning").tag(Severity.warning)
                     Text("Critical").tag(Severity.critical)
                 }
                 .disabled(!settings.wrappedValue.notificationsEnabled)
+                .help("Notify only for flags at least this severe")
                 if !model.isNotifierAvailable {
                     Text("Notifications work when Vigil runs from an app bundle (Scripts/make-app.sh).")
                         .font(.callout)
@@ -107,6 +113,7 @@ struct SnapshotSettingsView: View {
         Form {
             Section {
                 Toggle("Record snapshots automatically", isOn: settings.snapshotsEnabled)
+                    .help("Save a snapshot of the working tree as it changes, so you can compare against earlier moments")
                 Stepper("At most one every \(Int(settings.wrappedValue.snapshotMinimumIntervalSeconds)) s",
                         value: settings.snapshotMinimumIntervalSeconds, in: 5...600, step: 5)
                     .disabled(!settings.wrappedValue.snapshotsEnabled)
@@ -125,6 +132,7 @@ struct SnapshotSettingsView: View {
                     }
                     Button("Delete All Snapshots for This Worktree…", role: .destructive) { confirmDelete = true }
                         .disabled(session.snapshots.isEmpty)
+                        .help("Remove every snapshot Vigil recorded for this worktree, including the start marker")
                         .confirmationDialog("Delete all snapshots?", isPresented: $confirmDelete) {
                             Button("Delete", role: .destructive) { Task { await session.deleteAllSnapshots() } }
                             Button("Cancel", role: .cancel) {}
@@ -188,6 +196,7 @@ struct AttentionSettingsView: View {
                             Image(systemName: rule.systemImage)
                         }
                     }
+                    .help(rule.explanation)
                 }
             }
         }

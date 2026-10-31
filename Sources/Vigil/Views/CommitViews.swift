@@ -44,6 +44,7 @@ struct CommitListView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(session.loadingHistory)
+                                .help("Load the next 100 commits")
                             }
                         }
                     }
@@ -209,6 +210,7 @@ struct CommitOverviewView: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Copy the commit id")
+                        .accessibilityLabel("Copy the commit id")
                     }
                     .foregroundStyle(.secondary)
                     Text("\(commit.author) · \(Format.dateTime.string(from: commit.date))")
@@ -249,6 +251,7 @@ struct CommitOverviewView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .help("Show this file's diff in the commit")
                     }
                     if session.hiddenCommitChangeCount > 0 {
                         MoreCommitFilesButton(session: session)

@@ -83,21 +83,28 @@ struct SessionSummarySheet: View {
                         .truncationMode(.middle)
                 }
                 Spacer()
-                Picker("Show", selection: $mode) {
+                Picker("Summary view", selection: $mode) {
                     ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+                .help("Read the summary formatted, or as the Markdown that Copy and Save produce")
             }
             HStack(spacing: 14) {
                 Text("Include:").foregroundStyle(.secondary)
                 Toggle("Needs attention", isOn: option(\.attention))
+                    .help("Include the flagged files and why each was flagged")
                 Toggle("Files", isOn: option(\.files))
+                    .help("Include every changed file with its line counts")
                 Toggle("Not reviewed", isOn: option(\.unreviewed))
+                    .help("Include the files you have not reviewed yet")
                 Toggle("Commits", isOn: option(\.commits))
+                    .help("Include the commits made since the baseline")
                 Toggle("Agent activity", isOn: option(\.activity))
+                    .help("Include what the agent did: its turns and tool calls")
                 Toggle("Diffs", isOn: option(\.diffs))
+                    .help("Include each file's diff. This can make the summary much longer.")
             }
             .toggleStyle(.checkbox)
             .controlSize(.small)
@@ -124,11 +131,14 @@ struct SessionSummarySheet: View {
             }
             Button("Save…") { save() }
                 .disabled(summary == nil)
+                .help("Save the summary as a Markdown file, for example as a handoff note")
             Button("Copy Markdown") { copy() }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
                 .disabled(summary == nil)
+                .help("Copy the summary as Markdown to paste into a pull request or note (⇧⌘C)")
             Button("Done") { dismiss() }
                 .keyboardShortcut(.defaultAction)
+                .help("Close the summary")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

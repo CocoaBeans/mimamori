@@ -265,6 +265,7 @@ struct DiffHeaderView: View {
                     .help(sideBySide
                           ? "Old and new side by side. Click for a single column (⌥⌘L)."
                           : "Show old and new side by side (⌥⌘L)")
+                    .accessibilityLabel("Side by side")
                     Toggle(isOn: wrapBinding) {
                         Image(systemName: "arrow.turn.down.left")
                     }
@@ -275,12 +276,14 @@ struct DiffHeaderView: View {
                           : model.settings.wrapDiffLines
                           ? "Long lines wrap. Click to scroll them horizontally instead (⌥⌘W)."
                           : "Long lines scroll horizontally. Click to wrap them (⌥⌘W).")
+                    .accessibilityLabel("Wrap long lines")
                     Button {
                         if let diff { Workspace.copy(diff.unifiedText) }
                     } label: {
                         Image(systemName: "doc.on.doc")
                     }
                     .help("Copy the diff as a patch")
+                    .accessibilityLabel("Copy the diff")
                     .disabled(diff == nil || diff?.hunks.isEmpty == true)
                     Button {
                         Workspace.reveal(path: change.path, in: worktreePath)
@@ -288,12 +291,14 @@ struct DiffHeaderView: View {
                         Image(systemName: "folder")
                     }
                     .help("Reveal in Finder")
+                    .accessibilityLabel("Reveal in Finder")
                     Button {
                         Workspace.open(path: change.path, in: worktreePath)
                     } label: {
                         Image(systemName: "arrow.up.forward.app")
                     }
                     .help("Open with the default application")
+                    .accessibilityLabel("Open with the default application")
                     .disabled(change.kind == .deleted)
                 }
                 .buttonStyle(.borderless)
@@ -401,7 +406,7 @@ struct DiffHeaderView: View {
                 }
                 Spacer(minLength: 8)
                 if let selection = info.showingSinceReview {
-                    Picker("Show", selection: selection) {
+                    Picker("Diff to show", selection: selection) {
                         Text("Since Review").tag(true)
                         Text("Full Diff").tag(false)
                     }
@@ -581,6 +586,7 @@ struct DiffContentView: View {
             HStack {
                 Spacer()
                 Button("Show all \(diff.lineCount) lines") { showAll = true }
+                    .help("This diff is long, so only its start is shown. Show the rest.")
                 Spacer()
             }
             .padding()

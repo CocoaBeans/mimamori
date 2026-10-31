@@ -55,7 +55,7 @@ struct ActivityFeedView: View {
                         .font(.headline)
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    Picker("Scope", selection: $model.activityScopeAll) {
+                    Picker("Activity from", selection: $model.activityScopeAll) {
                         Text("Worktree").tag(false)
                         Text("All").tag(true)
                     }
@@ -63,6 +63,7 @@ struct ActivityFeedView: View {
                     .labelsHidden()
                     .controlSize(.small)
                     .frame(maxWidth: 130)
+                    .help("Show the selected worktree's activity, or every worktree's")
                     Menu {
                         Picker("Show", selection: $model.activityAgentFilter) {
                             ForEach(ActivityAgentFilter.allCases, id: \.self) { filter in
@@ -77,6 +78,7 @@ struct ActivityFeedView: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
+                    .accessibilityLabel("Filter the feed")
                     .help("Showing: \(model.activityAgentFilter.title.lowercased()). Agents only keeps agents' events and the changes they made; hiding agent events keeps edits, commits and flags.")
                     Button {
                         model.clearActivity()
@@ -85,6 +87,7 @@ struct ActivityFeedView: View {
                     }
                     .buttonStyle(.borderless)
                     .help("Clear the feed")
+                    .accessibilityLabel("Clear the feed")
                     .disabled(model.activity.isEmpty)
                 }
                 .padding(.horizontal, 12)

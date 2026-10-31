@@ -168,6 +168,16 @@ enum DebugHooks {
         for (worktree, status) in hub.statuses.sorted(by: { $0.key < $1.key }) {
             lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count) session=\(status.sessionID?.prefix(8) ?? "-") from=\(status.fromSessionFile ? "session-file" : "hooks")")
         }
+        if let toolbar = NSApp.windows.first(where: { $0.toolbar != nil && $0.isVisible })?.toolbar {
+            func tips(_ view: NSView?) -> [String] {
+                guard let view else { return [] }
+                return (view.toolTip.map { [$0] } ?? []) + view.subviews.flatMap(tips)
+            }
+            lines.append("toolbar: " + toolbar.items.map { item in
+                let name = item.label.isEmpty ? item.itemIdentifier.rawValue : item.label
+                return "\(name)=\(item.toolTip ?? "-") views=\(tips(item.view))"
+            }.joined(separator: " | "))
+        }
         if let monitor = NSApp.mainMenu?.items.first(where: { $0.title == "Monitor" })?.submenu {
             // Menus may be rebuilt lazily, just before they open; ask for that first.
             monitor.delegate?.menuNeedsUpdate?(monitor)

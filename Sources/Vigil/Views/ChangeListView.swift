@@ -11,7 +11,7 @@ struct ChangeListView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
-                    Picker("Show", selection: $model.showCommits) {
+                    Picker("Changes or commits", selection: $model.showCommits) {
                         Text("Changes").tag(false)
                         Text("Commits").tag(true)
                     }
@@ -86,8 +86,10 @@ struct ChangeListView: View {
             } actions: {
                 if state.baseline.baseline == .start {
                     Button("Mark Start Now") { Task { await session.markStart() } }
+                        .help("Snapshot the working tree now and compare against it (⇧⌘S)")
                 }
                 Button("Show Uncommitted") { session.setBaseline(.head) }
+                    .help("Compare the working tree with HEAD instead (⌘1)")
             }
         } else {
             let rows = model.listedChanges(in: session)
@@ -134,6 +136,7 @@ struct ChangeListView: View {
                 Text("You have reviewed all \(session.changes.count) changed files, and To review hides them. Files an agent edits again come back here.")
             } actions: {
                 Button("Show Reviewed Files") { model.hideReviewed = false }
+                    .help("Turn off To review and list every changed file (⌥⌘R)")
             }
         } else {
             ContentUnavailableView {
@@ -142,6 +145,7 @@ struct ChangeListView: View {
                 Text(emptyFilterDescription + " " + hidden.summary(searchText: model.filterText) + ".")
             } actions: {
                 Button("Show All Files") { model.showAllChanges() }
+                    .help("Turn off every filter on the list")
             }
         }
     }
@@ -192,6 +196,7 @@ struct HiddenChangesBar: View {
                     Spacer(minLength: 8)
                     Button(hidden.reasons.count == 1 ? "Show" : "Show All") { model.showAllChanges() }
                         .buttonStyle(.borderless)
+                        .help("Turn off the filters hiding these files")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -551,6 +556,7 @@ struct FilterField: View {
                 }
                 .buttonStyle(.plain)
                 .help("Clear the filter")
+                .accessibilityLabel("Clear the filter")
             }
         }
         .font(.callout)
@@ -575,6 +581,7 @@ struct ListControls: View {
             .buttonStyle(.borderless)
             .tint(.orange)
             .help("Show only files that need attention (⇧⌘F)")
+            .accessibilityLabel("Flagged only")
 
             Menu {
                 Picker("Sort By", selection: $model.sortOrder) {
@@ -590,6 +597,7 @@ struct ListControls: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Sort: \(model.sortOrder.title)")
+            .accessibilityLabel("Sort")
         }
         .controlSize(.small)
     }
@@ -608,18 +616,21 @@ struct SessionControls: View {
                 Image(systemName: session.startSnapshot == nil ? "flag" : "flag.fill")
             }
             .help("Mark Start: snapshot the working tree now and compare against it (⇧⌘S)")
+            .accessibilityLabel("Mark start")
             Button {
                 model.showSummary(for: session.id)
             } label: {
                 Image(systemName: "doc.text")
             }
             .help("Session summary: what changed, what needs a look and what the agent did, as Markdown (⇧⌘E)")
+            .accessibilityLabel("Session summary")
             Button {
                 session.requestRefresh(force: true)
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .help("Refresh now (⌘R)")
+            .accessibilityLabel("Refresh")
             .disabled(session.isBusy)
         }
         .buttonStyle(.borderless)

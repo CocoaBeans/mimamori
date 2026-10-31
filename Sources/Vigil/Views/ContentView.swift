@@ -28,6 +28,7 @@ struct ContentView: View {
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 460)
         }
         .toolbar { toolbarItems }
+        .background(ToolbarTooltips(tips: Self.toolbarTips))
         .onChange(of: model.showActivity) { model.persistUISoon() }
         .onChange(of: model.showCommits) { model.persistUISoon() }
         .onChange(of: model.flaggedOnly) { model.persistUISoon() }
@@ -90,6 +91,13 @@ struct ContentView: View {
         }
     }
 
+    /// Tooltips for the toolbar buttons, by their labels. Kept with `.help` on each button,
+    /// which SwiftUI drops for toolbar buttons; `ToolbarTooltips` applies these instead.
+    static let toolbarTips: [String: String] = [
+        "Add Repository": "Watch another repository or worktree (⌘O)",
+        "Agents": "Show every agent at a glance (⇧⌘A)",
+    ]
+
     /// Window-level items only. The monitor controls live in the change list header,
     /// so the inspector's width never affects their spacing.
     @ToolbarContentBuilder
@@ -100,7 +108,7 @@ struct ContentView: View {
             } label: {
                 Label("Add Repository", systemImage: "plus")
             }
-            .help("Watch another repository or worktree (⌘O)")
+            .help(Self.toolbarTips["Add Repository"]!)
         }
         ToolbarItem(placement: .primaryAction) {
             Button {
@@ -108,7 +116,7 @@ struct ContentView: View {
             } label: {
                 Label("Agents", systemImage: "sparkles.rectangle.stack")
             }
-            .help("Show every agent at a glance (⇧⌘A)")
+            .help(Self.toolbarTips["Agents"]!)
         }
         ToolbarItem(placement: .primaryAction) {
             Toggle(isOn: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) {
@@ -195,6 +203,7 @@ struct WelcomeView: View {
                 .frame(maxWidth: 340)
             Button("Add Repository…") { model.promptForRepository() }
                 .keyboardShortcut("o")
+                .help("Choose a repository or worktree folder to watch (⌘O)")
             if let error = model.gitError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.callout)
@@ -234,5 +243,42 @@ private struct AgentBannerSlot: View {
                 onGoToAgent: { AgentApps.bringForward(presence) },
                 onSummary: { model.showSummary(for: worktree) }))
         }
+    }
+}
+
+/// SwiftUI turns a toolbar `Button` into a native toolbar item and drops its `.help`, leaving
+/// it with no tooltip and no accessibility help. This sets the tooltips on those items, by label,
+/// once the view is in a window.
+private struct ToolbarTooltips: NSViewRepresentable {
+    let tips: [String: String]
+
+    final class Applier: NSView {
+        var tips: [String: String] = [:]
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply()
+        }
+
+        func apply() {
+            // The toolbar is built after the window's content; wait a turn for its items.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let items = self.window?.toolbar?.items else { return }
+                for item in items {
+                    if let tip = self.tips[item.label], item.toolTip != tip { item.toolTip = tip }
+                }
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> Applier {
+        let view = Applier()
+        view.tips = tips
+        return view
+    }
+
+    func updateNSView(_ view: Applier, context: Context) {
+        view.tips = tips
+        view.apply()
     }
 }

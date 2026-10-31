@@ -64,6 +64,31 @@ public enum RuleID: String, Codable, Sendable, Hashable, CaseIterable, Identifia
         }
     }
 
+    /// What the rule looks for, in a sentence, for its switch in Settings.
+    public var explanation: String {
+        switch self {
+        case .lockfile: "Flags changes to dependency lockfiles such as package-lock.json, Podfile.lock or Cargo.lock."
+        case .secretsFile: "Flags .env files, private keys, certificates and other files that usually hold credentials."
+        case .secretContent: "Flags added lines that look like API keys, tokens or passwords."
+        case .ciConfig: "Flags changes to CI pipelines such as GitHub Actions workflows."
+        case .agentConfig: "Flags changes to agent instructions and settings such as CLAUDE.md, AGENTS.md or .claude/."
+        case .gitConfig: "Flags changes to .gitignore, .gitattributes, submodules and git hooks."
+        case .buildConfig: "Notes changes to project, build, container and infrastructure files."
+        case .massDeletion: "Flags deleted files and edits that remove many lines at once."
+        case .largeAddition: "Notes files that gain a very large number of lines."
+        case .binary: "Notes binary files that were added or changed."
+        case .testDisabled: "Flags tests marked skipped, disabled or focused."
+        case .testDeleted: "Flags deleted test files."
+        case .conflictMarkers: "Flags unresolved merge conflicts and leftover conflict markers."
+        case .lintSuppressed: "Notes added comments that silence a linter or type checker."
+        case .debugLeftover: "Notes added print statements, debugger calls and similar leftovers."
+        case .modeChange: "Notes files whose permissions changed, such as becoming executable."
+        case .symlink: "Flags symbolic links that were added or changed."
+        case .hugeFile: "Flags files above the size threshold."
+        case .outsideScope: "Flags changes outside the path prefixes you allow for a worktree."
+        }
+    }
+
     public var defaultSeverity: Severity {
         switch self {
         case .secretsFile, .secretContent, .conflictMarkers: .critical

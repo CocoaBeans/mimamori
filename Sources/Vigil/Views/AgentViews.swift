@@ -276,15 +276,18 @@ struct AgentStatusBanner: View {
                             Image(systemName: "arrow.up.forward.app")
                         }
                         .help("Go to agent: bring the app it runs in to the front")
+                        .accessibilityLabel("Go to agent")
                     }
                     Button(action: details.onSummary) {
                         Image(systemName: "doc.text")
                     }
                     .help("Session summary (⇧⌘E)")
+                    .accessibilityLabel("Session summary")
                     Button(action: details.onToggle) {
                         Image(systemName: details.expanded ? "chevron.up" : "chevron.down")
                     }
                     .help(details.expanded ? "Show less" : "Show the task, recent steps and files")
+                    .accessibilityLabel(details.expanded ? "Show less" : "Show details")
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
@@ -389,13 +392,16 @@ struct AgentSettingsView: View {
                 LabeledContent("Events received", value: "\(hub.eventsReceived)" + (hub.lastEventAt.map { " · last \(Format.relative($0, to: model.now))" } ?? ""))
                 HStack {
                     Button("Install Hooks…") { confirmInstall = true }
+                        .help("Add Vigil's hooks to ~/.claude/settings.json. A backup is saved first and your own hooks are kept.")
                         .disabled(hooksInstalled)
                     Button("Uninstall Hooks…") { confirmUninstall = true }
+                        .help("Remove only Vigil's hooks from ~/.claude/settings.json. A backup is saved first.")
                         .disabled(!hooksInstalled)
                     Spacer()
                     Button("Reveal settings.json") {
                         NSWorkspace.shared.activateFileViewerSelecting([HookInstaller.settingsURL])
                     }
+                    .help("Show Claude Code's settings file in Finder")
                 }
                 if let lastMessage {
                     Text(lastMessage).font(.callout).foregroundStyle(.secondary)
@@ -423,7 +429,9 @@ struct AgentSettingsView: View {
                                     .textSelection(.enabled)
                                 Spacer()
                                 Button("Copy") { Workspace.copy(Self.hermesApproveCommand) }
+                                    .help("Copy the command that approves Vigil's hooks in Hermes")
                                 Button("Check Again") { refreshHermes() }
+                                    .help("Read Hermes's hook approvals again")
                             }
                             Text("Or run plain hermes and approve each hook when it asks. --accept-hooks approves every hook in config.yaml, so look there first if you have hooks of your own.")
                                 .font(.caption)
@@ -433,8 +441,10 @@ struct AgentSettingsView: View {
                     }
                     HStack {
                         Button("Install Hermes Hooks…") { confirmHermesInstall = true }
+                            .help("Write Vigil's hook script and add its hooks to ~/.hermes/config.yaml. A backup is saved first.")
                             .disabled(hermesState == .installed)
                         Button("Uninstall Hermes Hooks…") { confirmHermesUninstall = true }
+                            .help("Remove Vigil's hook script and its block from ~/.hermes/config.yaml. A backup is saved first.")
                             .disabled(hermesState != .installed)
                         Spacer()
                         Button("Copy YAML") { Workspace.copy(HermesHookInstaller.snippet) }
@@ -454,6 +464,7 @@ struct AgentSettingsView: View {
             }
             Section {
                 Toggle("Detect agent processes", isOn: settings.agentScanEnabled)
+                    .help("Look for agent processes in your worktrees, so an agent shows even without hooks")
                 Stepper("Scan every \(Int(settings.wrappedValue.agentScanIntervalSeconds)) s",
                         value: settings.agentScanIntervalSeconds, in: 1...30, step: 1)
                     .disabled(!settings.wrappedValue.agentScanEnabled)
@@ -471,10 +482,13 @@ struct AgentSettingsView: View {
                         Text(mode.title).tag(mode)
                     }
                 }
+                .help("Which of an agent's tool calls get their own entry in the activity feed")
             }
             Section("Notifications") {
                 Toggle("When an agent needs permission or asks a question", isOn: settings.notifyOnAgentPermission)
+                    .help("Post a notification when an agent is waiting on you")
                 Toggle("When an agent finishes a turn", isOn: settings.notifyOnAgentTurnFinished)
+                    .help("Post a notification when an agent finishes its turn and is ready for your next prompt")
                 if !model.isNotifierAvailable {
                     Text("Notifications work when Vigil runs from an app bundle.").font(.callout).foregroundStyle(.secondary)
                 }
