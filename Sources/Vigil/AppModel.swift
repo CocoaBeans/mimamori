@@ -603,6 +603,9 @@ final class AppModel {
             if note.kind == .needsPermission || note.kind == .waiting, settings.notifyOnAgentPermission {
                 notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "permission:" + worktree)
             }
+            if note.kind == .collision, settings.notifyOnAgentCollision {
+                notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "collision:" + worktree)
+            }
             if note.kind == .turnFinished, settings.notifyOnAgentTurnFinished {
                 notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "turn:" + worktree)
             }

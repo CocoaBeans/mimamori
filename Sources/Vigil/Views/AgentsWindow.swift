@@ -30,10 +30,12 @@ extension AppModel {
     /// Files the agent's tools edited this turn, plus any that changed on disk during it (a
     /// shell command's edits have no file path), limited to those still differing from the baseline.
     func filesTouched(in session: WorktreeSession, by presence: AgentPresence) -> [FileChange] {
-        guard let start = presence.turnStartedAt else { return [] }
+        // Every agent working here: with two, each one's edits matter.
+        let everyone = [presence] + presence.others
+        guard let start = everyone.compactMap(\.turnStartedAt).min() else { return [] }
         var ordered: [String] = []
         var seen = Set<String>()
-        for step in presence.turnSteps.reversed() where step.isMutating {
+        for step in everyone.flatMap(\.turnSteps).sorted(by: { $0.startedAt > $1.startedAt }) where step.isMutating {
             guard let file = step.filePath else { continue }
             let path = file.hasPrefix(session.id + "/") ? String(file.dropFirst(session.id.count + 1)) : file
             if seen.insert(path).inserted { ordered.append(path) }
@@ -72,7 +74,8 @@ struct AgentsWindowView: View {
                                     canGoToAgent: AgentApps.canGo(to: row.presence),
                                     onGoToAgent: { goToAgent(row) },
                                     onSummary: { summary(row) },
-                                    onOpenFile: { path in show(row, path: path) })
+                                    onOpenFile: { path in show(row, path: path) },
+                                    onDismissCollision: { model.agentHub.dismissCollision(in: row.id) })
                             }
                             .contentShape(Rectangle())
                             .onTapGesture { show(row) }
@@ -157,6 +160,7 @@ struct AgentDashboardRow: View {
     var onGoToAgent: () -> Void = {}
     var onSummary: () -> Void = {}
     var onOpenFile: (String) -> Void = { _ in }
+    var onDismissCollision: () -> Void = {}
 
     private var presence: AgentPresence { row.presence }
 
@@ -215,9 +219,15 @@ struct AgentDashboardRow: View {
                         .help(presence.timingHelp)
                 }
                 Text("\(presence.kind.displayName) · \(statusText)")
-                    .foregroundStyle(presence.needsAttention ? presence.tint : .primary)
+                    .foregroundStyle(presence.source == .hooks && presence.activity.needsAttention ? presence.tint : .primary)
                     .lineLimit(2)
                     .truncationMode(.tail)
+                if let collision = presence.collision {
+                    AgentCollisionNote(collision: collision, worktree: row.session.id, onDismiss: onDismissCollision)
+                }
+                if !presence.others.isEmpty {
+                    OtherAgentsList(others: presence.others, now: now, worktree: row.session.id)
+                }
                 if detailed {
                     details
                 } else {

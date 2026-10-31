@@ -88,6 +88,7 @@ struct MenuBarMenu: View {
         var title = session.displayName
         if let presence = model.agentHub.presence(for: session.id) {
             title += presence.needsAttention ? " ✋" : (presence.source == .hooks ? " ✨" : " ·")
+            if presence.agentCount > 1 { title += " \(presence.agentCount) agents" }
         }
         if session.changes.isEmpty {
             title += " · clean"

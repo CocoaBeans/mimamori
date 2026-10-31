@@ -415,13 +415,10 @@ final class AgentHub {
             var announced = announcedCollisions[worktree] ?? []
             let new = here.collisions.filter { announced.insert($0.path + "|" + $0.sessions.sorted().joined(separator: ",")).inserted }
             announcedCollisions[worktree] = announced
-            if let latest = new.first {
-                let names = WorktreeAgents.describe(Array(new.flatMap(\.agents)))
+            if let latest = new.first, let collision = Self.collision(new, in: worktree) {
                 let files = new.map { Self.relative($0.path, in: worktree) }
-                let title = files.count == 1 ? "\(names) both edited \((files[0] as NSString).lastPathComponent)"
-                    : "\(names) edited the same \(files.count) files"
                 onNotes(worktree, latest.agents.last ?? .unnamed,
-                        [AgentNote(kind: .collision, title: title, detail: files.joined(separator: ", "), filePath: latest.path)])
+                        [AgentNote(kind: .collision, title: collision.title, detail: files.joined(separator: ", "), filePath: latest.path)])
             }
         }
         // Back to one agent: forget what was announced and dismissed there.

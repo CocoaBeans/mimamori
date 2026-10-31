@@ -26,6 +26,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var agentToolCallsInFeed: AgentToolCallFeedMode = .mutating
     var notifyOnAgentPermission: Bool = true
     var notifyOnAgentTurnFinished: Bool = false
+    /// Notify when two agents in one worktree edit the same file.
+    var notifyOnAgentCollision: Bool = true
     var customAgentNames: [String] = []
     var agentsWindowFloats: Bool = false
     /// Rows show the task, recent steps and files; off for one-line-per-agent rows.
@@ -62,6 +64,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         agentToolCallsInFeed = try c.decodeIfPresent(AgentToolCallFeedMode.self, forKey: .agentToolCallsInFeed) ?? defaults.agentToolCallsInFeed
         notifyOnAgentPermission = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentPermission) ?? defaults.notifyOnAgentPermission
         notifyOnAgentTurnFinished = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentTurnFinished) ?? defaults.notifyOnAgentTurnFinished
+        notifyOnAgentCollision = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentCollision) ?? defaults.notifyOnAgentCollision
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
         agentsWindowFloats = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowFloats) ?? defaults.agentsWindowFloats
         agentsWindowDetailed = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowDetailed) ?? defaults.agentsWindowDetailed

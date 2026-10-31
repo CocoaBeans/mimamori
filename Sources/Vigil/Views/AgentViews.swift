@@ -16,6 +16,9 @@ extension AgentPresence {
         }
     }
 
+    /// The tint for the worktree as a whole: orange while agents there collide.
+    var alertTint: Color { collision != nil ? .orange : tint }
+
     var systemImage: String {
         switch (source, activity) {
         case (.hooks, .needsPermission): "hand.raised.fill"
@@ -53,7 +56,8 @@ extension AgentPresence {
 
     /// Sort rank in lists of agents: what is blocked on you, then what is busy, then the rest.
     var urgency: Int {
-        switch (source, activity) {
+        if collision != nil { return 0 }
+        return switch (source, activity) {
         case (.hooks, .needsPermission), (.hooks, .askedQuestion): 0
         case (.hooks, .working): 1
         case (.process, _): isBusy ? 1 : 2
@@ -69,18 +73,31 @@ struct AgentPresenceBadge: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: presence.systemImage)
+            Image(systemName: presence.others.isEmpty ? presence.systemImage : "person.2.fill")
                 .font(.caption2)
-                .foregroundStyle(presence.tint)
+                .foregroundStyle(presence.alertTint)
             Text(summary)
                 .font(.caption)
-                .foregroundStyle(presence.needsAttention ? presence.tint : .secondary)
+                .foregroundStyle(presence.needsAttention ? presence.alertTint : .secondary)
                 .lineLimit(1)
         }
-        .help(presence.kind.displayName + " · " + presence.statusText)
+        .help(help)
+    }
+
+    private var help: String {
+        var lines = ([presence] + presence.others).map { $0.kind.displayName + " · " + $0.statusText }
+        if let collision = presence.collision { lines.append(collision.title) }
+        return lines.joined(separator: "\n")
     }
 
     private var summary: String {
+        guard presence.others.isEmpty else {
+            return "\(presence.agentCount) agents · " + (presence.collision != nil ? "editing the same files" : single)
+        }
+        return single
+    }
+
+    private var single: String {
         switch (presence.source, presence.activity) {
         case (.hooks, .working(let tool, _)): tool.map { "\(presence.kind.displayName) · \($0)" } ?? "\(presence.kind.displayName) · working"
         case (.hooks, .needsPermission): "\(presence.kind.displayName) · needs permission"
@@ -136,6 +153,7 @@ struct AgentBannerDetails {
     var onOpenFile: (String) -> Void
     var onGoToAgent: () -> Void
     var onSummary: () -> Void
+    var onDismissCollision: () -> Void = {}
 }
 
 /// A prominent status banner for the top of the detail column.
@@ -218,6 +236,10 @@ struct AgentStatusBanner: View {
                 .frame(width: 28)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 4) {
+                if let collision = presence.collision {
+                    AgentCollisionNote(collision: collision, worktree: details?.worktree, onDismiss: details?.onDismissCollision)
+                        .padding(.bottom, 4)
+                }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     // Shorten the words before truncating them, so a narrow column still reads.
                     ViewThatFits(in: .horizontal) {
@@ -239,14 +261,18 @@ struct AgentStatusBanner: View {
                 if expanded, let details {
                     expandedContent(details)
                 }
+                if !presence.others.isEmpty {
+                    OtherAgentsList(others: presence.others, now: now, worktree: details?.worktree)
+                        .padding(.top, 4)
+                }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(presence.tint.opacity(presence.needsAttention ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 10))
+        .background(presence.alertTint.opacity(presence.needsAttention ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(presence.tint.opacity(presence.needsAttention ? 0.5 : 0.2), lineWidth: 1)
+                .strokeBorder(presence.alertTint.opacity(presence.needsAttention ? 0.5 : 0.2), lineWidth: 1)
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
@@ -321,6 +347,119 @@ struct AgentStatusBanner: View {
             FileChips(files: details.files, onOpen: details.onOpenFile)
                 .padding(.top, 1)
         }
+    }
+}
+
+extension AgentCollision {
+    /// "Claude Code and Codex both edited App.swift", "… both edited 4 files".
+    var title: String {
+        let names = files.map { ($0 as NSString).lastPathComponent }
+        let what = switch names.count {
+        case 1: names[0]
+        case 2: "\(names[0]) and \(names[1])"
+        default: "\(names.count) files"
+        }
+        return agents.hasPrefix("Two ") || agents.hasPrefix("Three ") || agents.first?.isNumber == true
+            ? "\(agents) edited \(what)" : "\(agents) both edited \(what)"
+    }
+}
+
+/// The warning that agents sharing a worktree edited the same files.
+struct AgentCollisionNote: View {
+    let collision: AgentCollision
+    var worktree: String? = nil
+    var onDismiss: (() -> Void)? = nil
+
+    private var files: String {
+        collision.files.prefix(4).map { path in
+            worktree.map { path.hasPrefix($0 + "/") ? String(path.dropFirst($0.count + 1)) : path } ?? path
+        }.joined(separator: ", ") + (collision.files.count > 4 ? ", …" : "")
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(collision.title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.orange)
+                if collision.files.count > 2 {
+                    Text(files)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Text("Agents in one folder can undo each other's work. Stop one, or give it a worktree of its own.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 6)
+            if let onDismiss {
+                Button("Dismiss", action: onDismiss)
+                    .controlSize(.small)
+                    .help("Hide this warning until the agents edit another file in common")
+            }
+        }
+        .font(.callout)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The other agents in a worktree, a line each, under "Also here".
+struct OtherAgentsList: View {
+    let others: [AgentPresence]
+    let now: Date
+    var worktree: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Also here")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(Array(others.enumerated()), id: \.offset) { _, other in
+                OtherAgentLine(presence: other, now: now, worktree: worktree)
+            }
+        }
+    }
+}
+
+/// One more agent in the worktree, in a single line, with a way to reach it.
+struct OtherAgentLine: View {
+    let presence: AgentPresence
+    let now: Date
+    var worktree: String? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: presence.systemImage)
+                .foregroundStyle(presence.tint)
+                .frame(width: 14)
+            Text(presence.kind.displayName)
+                .fontWeight(.medium)
+            Text("·").foregroundStyle(.tertiary)
+            Text(worktree.map { AgentText.shortenPaths(presence.statusText, in: $0) } ?? presence.statusText)
+                .foregroundStyle(presence.needsAttention ? presence.tint : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 6)
+            Text(presence.timing(now: now))
+                .foregroundStyle(.tertiary)
+                .monospacedDigit()
+                .fixedSize()
+                .help(presence.timingHelp)
+            if AgentApps.canGo(to: presence) {
+                Button {
+                    AgentApps.bringForward(presence)
+                } label: {
+                    Image(systemName: "arrow.up.forward.app")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Go to \(presence.kind.displayName): bring the app it runs in to the front")
+                .accessibilityLabel("Go to \(presence.kind.displayName)")
+            }
+        }
+        .font(.callout)
     }
 }
 
@@ -498,6 +637,8 @@ struct AgentSettingsView: View {
             Section("Notifications") {
                 Toggle("When an agent needs permission or asks a question", isOn: settings.notifyOnAgentPermission)
                     .help("Post a notification when an agent is waiting on you")
+                Toggle("When two agents edit the same files", isOn: settings.notifyOnAgentCollision)
+                    .help("Post a notification when agents working in one worktree edit the same file, which can undo each other's work")
                 Toggle("When an agent finishes a turn", isOn: settings.notifyOnAgentTurnFinished)
                     .help("Post a notification when an agent finishes its turn and is ready for your next prompt")
                 if !model.isNotifierAvailable {

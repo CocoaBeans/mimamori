@@ -241,7 +241,8 @@ private struct AgentBannerSlot: View {
                 },
                 onOpenFile: { path in session?.selectedPath = path },
                 onGoToAgent: { AgentApps.bringForward(presence) },
-                onSummary: { model.showSummary(for: worktree) }))
+                onSummary: { model.showSummary(for: worktree) },
+                onDismissCollision: { model.agentHub.dismissCollision(in: worktree) }))
         }
     }
 }
