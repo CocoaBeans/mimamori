@@ -91,8 +91,21 @@ public struct WorktreeAgents: Sendable, Hashable {
         self.collisions = Self.collisions(among: live, now: now)
     }
 
+    /// "Claude Code and Codex", "Claude Code, Codex and Gemini CLI", "Two Claude Code sessions".
+    public static func describe(_ agents: [AgentKind]) -> String {
+        guard let first = agents.first else { return "Agents" }
+        if agents.allSatisfy({ $0.id == first.id }), agents.count > 1 {
+            let count = agents.count == 2 ? "Two" : agents.count == 3 ? "Three" : "\(agents.count)"
+            return "\(count) \(first.displayName) sessions"
+        }
+        var names: [String] = []
+        for agent in agents where !names.contains(agent.displayName) { names.append(agent.displayName) }
+        guard names.count > 1 else { return names[0] }
+        return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+    }
+
     /// Waiting on you first, then working, then ready; the latest to report first among equals.
-    static func morePressing(_ a: AgentStatus, _ b: AgentStatus) -> Bool {
+    public static func morePressing(_ a: AgentStatus, _ b: AgentStatus) -> Bool {
         if a.activity.urgency != b.activity.urgency { return a.activity.urgency < b.activity.urgency }
         return a.lastEventAt > b.lastEventAt
     }

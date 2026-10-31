@@ -153,7 +153,7 @@ enum DebugHooks {
                 return "\(step.toolName):\(state)"
             }
             let note = row.presence.source == .process ? " hooksInstalled=\(row.presence.hooksInstalled.map(String.init) ?? "-")" : ""
-            lines.append("  row \((row.session.id as NSString).lastPathComponent): agent=\(row.presence.kind.displayName) status=\"\(row.presence.statusText)\"\(note) attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
+            lines.append("  row \((row.session.id as NSString).lastPathComponent): agent=\(row.presence.kind.displayName) status=\"\(row.presence.statusText)\"\(note) others=\(row.presence.others.map { "\($0.kind.id):\($0.statusText)" }) collision=\(row.presence.collision.map { "\($0.agents): \($0.files.map { ($0 as NSString).lastPathComponent })" } ?? "-") attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
         }
         if let session = model.selectedSession {
             let history = session.history
@@ -174,8 +174,14 @@ enum DebugHooks {
             }.joined(separator: ", ")
             lines.append("  processes \((worktree as NSString).lastPathComponent): \(processes)")
         }
-        for (worktree, status) in hub.statuses.sorted(by: { $0.key < $1.key }) {
-            lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count) session=\(status.sessionID?.prefix(8) ?? "-") from=\(status.fromSessionFile ? "session-file" : "hooks")")
+        for (worktree, sessions) in hub.statuses.sorted(by: { $0.key < $1.key }) {
+            for status in sessions {
+                lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count) session=\(status.sessionID?.prefix(8) ?? "-") from=\(status.fromSessionFile ? "session-file" : "hooks")")
+            }
+        }
+        for (worktree, here) in hub.agents.sorted(by: { $0.key < $1.key }) where here.agentCount > 0 {
+            let collisions = here.collisions.map { "\(($0.path as NSString).lastPathComponent)<\($0.agents.map(\.id).joined(separator: "+"))>" }
+            lines.append("  agents \((worktree as NSString).lastPathComponent): live=\(here.live.map { "\($0.agent.id):\($0.key.prefix(8))" }) unclaimed=\(here.unclaimed.map(\.pid)) shared=\(here.isShared) collisions=\(collisions) dismissed=\(hub.dismissedCollisions[worktree]?.count ?? 0)")
         }
         if let toolbar = NSApp.windows.first(where: { $0.toolbar != nil && $0.isVisible })?.toolbar {
             func tips(_ view: NSView?) -> [String] {

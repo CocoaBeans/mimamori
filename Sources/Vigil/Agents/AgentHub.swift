@@ -25,8 +25,13 @@ struct AgentPresence: Hashable {
     /// For a process-only presence: whether this agent's hooks are installed, or nil for an
     /// agent Vigil has no hooks for.
     var hooksInstalled: Bool? = nil
+    /// The other agents working in the same worktree, the most pressing first.
+    var others: [AgentPresence] = []
+    /// Files two of them edited, unless you dismissed it.
+    var collision: AgentCollision? = nil
 
-    var needsAttention: Bool { source == .hooks && activity.needsAttention }
+    var needsAttention: Bool { source == .hooks && activity.needsAttention || collision != nil }
+    var agentCount: Int { 1 + others.count }
 
     var statusText: String {
         switch (source, activity) {
@@ -48,6 +53,14 @@ struct AgentPresence: Hashable {
     }
 }
 
+/// Two agents in one worktree edited the same files.
+struct AgentCollision: Hashable {
+    /// "Claude Code and Codex", "Two Claude Code sessions".
+    var agents: String
+    /// Absolute paths, the most recently edited first.
+    var files: [String]
+}
+
 /// An agent that has reported to Vigil, so you can see its hooks work.
 struct AgentContact: Hashable, Identifiable {
     var agent: AgentKind
@@ -66,7 +79,12 @@ struct AgentContact: Hashable, Identifiable {
 @MainActor
 @Observable
 final class AgentHub {
-    private(set) var statuses: [String: AgentStatus] = [:]
+    /// Each worktree's sessions, the most pressing first.
+    private(set) var statuses: [String: [AgentStatus]] = [:]
+    /// Who works in each worktree and whether they collide, from `statuses` and `processes`.
+    private(set) var agents: [String: WorktreeAgents] = [:]
+    /// Shared files you dismissed, per worktree; forgotten once the worktree has one agent again.
+    private(set) var dismissedCollisions: [String: Set<String>] = [:]
     private(set) var processes: [String: [AgentProcess]] = [:]
     private(set) var isListening = false
     private(set) var socketError: String?
@@ -84,7 +102,13 @@ final class AgentHub {
     var onNotes: @MainActor (_ worktree: String, _ agent: AgentKind, _ notes: [AgentNote]) -> Void = { _, _, _ in }
 
     // Bookkeeping that views never read, kept out of observation.
-    @ObservationIgnored private var machines: [String: AgentStatusMachine] = [:]
+    /// One machine per session (`AgentStatus.key`) in each worktree.
+    @ObservationIgnored private var machines: [String: [String: AgentStatusMachine]] = [:]
+    /// Processes the previous scan saw: a process counts as an agent of its own only once it stays.
+    @ObservationIgnored private var establishedPIDs: Set<Int32> = []
+    /// The agents and collisions already announced, per worktree, so each is announced once.
+    @ObservationIgnored private var announcedAgents: [String: Set<String>] = [:]
+    @ObservationIgnored private var announcedCollisions: [String: Set<String>] = [:]
     /// Which worktree each agent session works in, for events that carry no usable directory.
     @ObservationIgnored private var placement = SessionPlacement()
     @ObservationIgnored private var server: HookSocketServer?
@@ -154,6 +178,7 @@ final class AgentHub {
             statuses.removeValue(forKey: path)
             machines.removeValue(forKey: path)
         }
+        for path in agents.keys where !paths.contains(path) { agents.removeValue(forKey: path) }
     }
 
     private func startServer() {
@@ -225,24 +250,23 @@ final class AgentHub {
         }
         // The session moved on: do not leave its old status behind. That includes a status taken
         // from Claude Code's record of the session where its process started.
+        let key = AgentStatus.key(session: event.sessionID, agent: event.agent)
         var moved = false
-        if let session = event.sessionID {
-            for (other, machine) in machines where other != worktree && machine.status?.sessionID == session {
-                statuses.removeValue(forKey: other)
-                machines.removeValue(forKey: other)
+        if event.sessionID != nil {
+            for (other, sessions) in machines where other != worktree && sessions[key] != nil {
+                remove(session: key, from: other)
                 moved = true
             }
         }
-        var machine = machines[worktree] ?? AgentStatusMachine()
+        var machine = machines[worktree]?[key] ?? AgentStatusMachine()
         let before = machine.status?.activity
-        let sessionBefore = machine.status?.sessionID
         var notes: [AgentNote] = []
         if let session = event.sessionID, let held = heldBySession.removeValue(forKey: session) {
             for earlier in held { notes += machine.apply(Self.anchored(earlier, in: worktree)) }
         }
         notes += machine.apply(Self.anchored(event, in: worktree))
-        machines[worktree] = machine
-        if moved || machine.status?.sessionID != sessionBefore { attributeProcesses() }
+        machines[worktree, default: [:]][key] = machine
+        if moved || before == nil { attributeProcesses() }
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
         if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
         watchForApprovals()
@@ -250,9 +274,11 @@ final class AgentHub {
 
     // MARK: Approvals
 
-    private var commandsAwaitingPermission: [(worktree: String, command: String, since: Date)] {
-        machines.compactMap { worktree, machine in
-            machine.status?.commandAwaitingPermission.map { (worktree, $0.command, $0.since) }
+    private var commandsAwaitingPermission: [(worktree: String, session: String, command: String, since: Date)] {
+        machines.flatMap { worktree, sessions in
+            sessions.compactMap { key, machine in
+                machine.status?.commandAwaitingPermission.map { (worktree, key, $0.command, $0.since) }
+            }
         }
     }
 
@@ -272,17 +298,22 @@ final class AgentHub {
                 let commands = Dictionary(waiting.map { ($0.command, $0.since) }, uniquingKeysWith: min)
                 let running = await Task.detached(priority: .utility) { ClaudeCommandProbe.running(commands) }.value
                 for item in waiting where running.contains(item.command) {
-                    self.noteApproved(in: item.worktree)
+                    self.noteApproved(in: item.worktree, session: item.session)
                 }
             }
             self?.approvalWatch = nil
         }
     }
 
-    private func noteApproved(in worktree: String) {
-        guard var machine = machines[worktree], machine.noteApproved() else { return }
-        machines[worktree] = machine
+    private func noteApproved(in worktree: String, session key: String) {
+        guard var machine = machines[worktree]?[key], machine.noteApproved() else { return }
+        machines[worktree]?[key] = machine
         schedulePublish(urgent: true)
+    }
+
+    private func remove(session key: String, from worktree: String) {
+        machines[worktree]?.removeValue(forKey: key)
+        if machines[worktree]?.isEmpty == true { machines.removeValue(forKey: worktree) }
     }
 
     /// The directory Hermes records for the event's session. A session's row is written when its
@@ -351,8 +382,71 @@ final class AgentHub {
 
     private func publishStatuses() {
         lastPublishedAt = Date()
-        let fresh = machines.compactMapValues(\.status)
+        let fresh = machines.compactMapValues { sessions -> [AgentStatus]? in
+            let list = sessions.values.compactMap(\.status).sorted(by: WorktreeAgents.morePressing)
+            return list.isEmpty ? nil : list
+        }
         if fresh != statuses { statuses = fresh }
+        updateAgents()
+    }
+
+    // MARK: Several agents
+
+    /// Works out who is in each worktree, and announces a second agent arriving and two agents
+    /// editing the same file, each once.
+    private func updateAgents() {
+        let now = Date()
+        var fresh: [String: WorktreeAgents] = [:]
+        for worktree in Set(statuses.keys).union(processes.keys) {
+            fresh[worktree] = WorktreeAgents(statuses: statuses[worktree] ?? [], processes: processes[worktree] ?? [],
+                                             established: establishedPIDs, now: now)
+        }
+        if fresh != agents { agents = fresh }
+
+        for (worktree, here) in fresh where here.isShared {
+            let present = Set(here.live.map(\.key) + here.unclaimed.map { "pid:\($0.pid)" })
+            if !present.isSubset(of: announcedAgents[worktree] ?? []) {
+                let kinds = here.live.map(\.agent) + here.unclaimed.map(\.kind)
+                onNotes(worktree, kinds[0], [AgentNote(kind: .sharedWorktree, title: "\(here.agentCount) agents are working here",
+                                                      detail: WorktreeAgents.describe(kinds))])
+            }
+            announcedAgents[worktree] = present
+
+            var announced = announcedCollisions[worktree] ?? []
+            let new = here.collisions.filter { announced.insert($0.path + "|" + $0.sessions.sorted().joined(separator: ",")).inserted }
+            announcedCollisions[worktree] = announced
+            if let latest = new.first {
+                let names = WorktreeAgents.describe(Array(new.flatMap(\.agents)))
+                let files = new.map { Self.relative($0.path, in: worktree) }
+                let title = files.count == 1 ? "\(names) both edited \((files[0] as NSString).lastPathComponent)"
+                    : "\(names) edited the same \(files.count) files"
+                onNotes(worktree, latest.agents.last ?? .unnamed,
+                        [AgentNote(kind: .collision, title: title, detail: files.joined(separator: ", "), filePath: latest.path)])
+            }
+        }
+        // Back to one agent: forget what was announced and dismissed there.
+        for worktree in Set(announcedAgents.keys).union(announcedCollisions.keys).union(dismissedCollisions.keys)
+        where fresh[worktree]?.isShared != true {
+            announcedAgents.removeValue(forKey: worktree)
+            announcedCollisions.removeValue(forKey: worktree)
+            if dismissedCollisions[worktree] != nil { dismissedCollisions.removeValue(forKey: worktree) }
+        }
+    }
+
+    /// Quiets the collision warning in `worktree` until the agents share another file.
+    func dismissCollision(in worktree: String) {
+        let paths = Set(agents[worktree]?.collisions.map(\.path) ?? [])
+        dismissedCollisions[worktree, default: []].formUnion(paths)
+    }
+
+    /// The collisions in a worktree you have not dismissed.
+    private func openCollisions(in worktree: String) -> [WorktreeAgents.Collision] {
+        let dismissed = dismissedCollisions[worktree] ?? []
+        return (agents[worktree]?.collisions ?? []).filter { !dismissed.contains($0.path) }
+    }
+
+    private static func relative(_ path: String, in worktree: String) -> String {
+        path.hasPrefix(worktree + "/") ? String(path.dropFirst(worktree.count + 1)) : path
     }
 
     /// What views show of agent processes. CPU readings differ on every scan; only a change
@@ -366,8 +460,10 @@ final class AgentHub {
     /// The worktree each session's status is in.
     private var sessionHomes: [String: String] {
         var homes: [String: String] = [:]
-        for (worktree, machine) in machines {
-            if let session = machine.status?.sessionID { homes[session] = worktree }
+        for (worktree, sessions) in machines {
+            for machine in sessions.values {
+                if let session = machine.status?.sessionID { homes[session] = worktree }
+            }
         }
         return homes
     }
@@ -379,6 +475,7 @@ final class AgentHub {
     }
 
     private func apply(scan: AgentScan) {
+        establishedPIDs = Set(lastScan.byWorktree.values.flatMap { $0.map(\.pid) } + lastScan.elsewhere.map(\.pid))
         lastScan = scan
         refreshHookState()
         var changed = adoptSessionRecords()
@@ -389,25 +486,38 @@ final class AgentHub {
         // counted in another worktree than before neither arrived nor left.
         let before = Set(previous.values.flatMap { $0.map(\.pid) })
         let running = Set(scan.byWorktree.values.flatMap { $0.map(\.pid) } + scan.elsewhere.map(\.pid))
-        for (worktree, list) in found where machines[worktree]?.status == nil {
+        for (worktree, list) in found where machines[worktree]?.isEmpty ?? true {
             for process in list where !before.contains(process.pid) {
                 onNotes(worktree, process.kind, [AgentNote(kind: .sessionStarted, title: "\(process.kind.displayName) is running here")])
             }
         }
-        for (worktree, list) in previous where machines[worktree]?.status == nil {
+        for (worktree, list) in previous where machines[worktree]?.isEmpty ?? true {
             for process in list where !running.contains(process.pid) {
                 onNotes(worktree, process.kind, [AgentNote(kind: .sessionEnded, title: "\(process.kind.displayName) exited")])
             }
         }
-        // Hook statuses outlive their process briefly; drop them once the agent is gone for a while.
-        // A status taken from Claude Code's record goes with the process.
-        let cutoff = Date().addingTimeInterval(-10 * 60)
-        for (worktree, machine) in machines where (found[worktree] ?? []).isEmpty {
-            guard let status = machine.status, status.fromSessionFile || status.lastEventAt < cutoff else { continue }
-            machines.removeValue(forKey: worktree)
-            changed = true
+        // Hook statuses outlive their process briefly; drop them once the agent is gone for a while,
+        // and an ended session soon after it ends. A status taken from Claude Code's record goes
+        // with the process.
+        let now = Date()
+        for (worktree, sessions) in machines {
+            let running = found[worktree] ?? []
+            for (key, machine) in sessions {
+                guard let status = machine.status else { continue }
+                let ownProcess = running.contains { process in
+                    process.claudeSession.map { $0.sessionID == status.sessionID } ?? (process.kind.id == status.agent.id)
+                }
+                let silence = now.timeIntervalSince(status.lastEventAt)
+                let gone = status.fromSessionFile ? !ownProcess
+                    : status.activity == .idle ? silence > 2 * 60
+                    : !ownProcess && silence > WorktreeAgents.liveWindow
+                if gone {
+                    remove(session: key, from: worktree)
+                    changed = true
+                }
+            }
         }
-        if changed { schedulePublish(urgent: true) }
+        if changed { schedulePublish(urgent: true) } else { updateAgents() }
     }
 
     /// Gives a worktree whose Claude Code sessions have not reported through hooks the status
@@ -418,31 +528,23 @@ final class AgentHub {
         let homes = sessionHomes
         var changed = false
         for (worktree, list) in lastScan.attributed(homes: homes) {
-            let current = machines[worktree]?.status
-            if let current, !current.fromSessionFile, current.activity != .idle { continue }
             let records = list.compactMap(\.claudeSession).filter { record in
                 record.activity != nil && (homes[record.sessionID] ?? worktree) == worktree
             }
-            // The session that needs you, then one at work, then the latest to change.
-            func rank(_ record: ClaudeSessionRecord) -> (Int, Date) {
-                let urgency = switch record.activity {
-                case .needsPermission?, .askedQuestion?: 2
-                case .working?: 1
-                default: 0
-                }
-                return (urgency, record.statusUpdatedAt ?? .distantPast)
+            // A status taken from a record that is gone goes with it.
+            for (key, machine) in machines[worktree] ?? [:]
+            where machine.status?.fromSessionFile == true && !records.contains(where: { $0.sessionID == key }) {
+                remove(session: key, from: worktree)
+                changed = true
             }
-            guard let record = records.max(by: { rank($0) < rank($1) }) else {
-                if current?.fromSessionFile == true {
-                    machines.removeValue(forKey: worktree)
+            // Each session its own status; one its hooks report on keeps theirs, unless it ended.
+            for record in records {
+                var machine = machines[worktree]?[record.sessionID] ?? AgentStatusMachine()
+                if let current = machine.status, !current.fromSessionFile, current.activity != .idle { continue }
+                if machine.adopt(record) {
+                    machines[worktree, default: [:]][record.sessionID] = machine
                     changed = true
                 }
-                continue
-            }
-            var machine = machines[worktree] ?? AgentStatusMachine()
-            if machine.adopt(record) {
-                machines[worktree] = machine
-                changed = true
             }
         }
         return changed
@@ -460,16 +562,45 @@ final class AgentHub {
 
     func presence(for worktree: String) -> AgentPresence? {
         let running = processes[worktree] ?? []
-        if let status = statuses[worktree], status.activity != .idle || !running.isEmpty {
-            return AgentPresence(kind: status.agent, source: .hooks, activity: status.activity, since: status.since,
-                                 processCount: running.count, isBusy: running.contains(where: \.isBusy),
-                                 lastToolCall: status.recentToolCalls.last, toolCallsThisTurn: status.toolCallsThisTurn,
-                                 task: status.task, turnSteps: status.turnToolCalls,
-                                 turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
-                                 processIDs: running.map(\.pid),
-                                 awaitingCallID: status.pendingPermission?.callID)
+        let here = agents[worktree]
+        let claims = here?.claims ?? [:]
+        let unclaimed = here?.unclaimed ?? []
+        let collision = Self.collision(openCollisions(in: worktree), in: worktree)
+
+        // The most pressing session leads; an ended one only while its process still runs.
+        if let status = statuses[worktree]?.first, status.activity != .idle || !running.isEmpty {
+            let others = (here?.live ?? []).filter { $0.key != status.key }
+            let elsewhere = Set(others.flatMap { claims[$0.key] ?? [] } + unclaimed.map(\.pid))
+            var presence = sessionPresence(status, processIDs: claims[status.key] ?? running.map(\.pid).filter { !elsewhere.contains($0) },
+                                           running: running)
+            presence.others = others.map { sessionPresence($0, processIDs: claims[$0.key] ?? [], running: running) }
+                + unclaimed.map { processPresence([$0]) }
+            presence.collision = collision
+            return presence
         }
-        guard let first = running.first else { return nil }
+        guard !running.isEmpty else { return nil }
+        // No session has reported: agents seen only as processes.
+        if unclaimed.count > 1 {
+            var presence = processPresence([unclaimed[0]])
+            presence.others = unclaimed.dropFirst().map { processPresence([$0]) }
+            return presence
+        }
+        return processPresence(running)
+    }
+
+    private func sessionPresence(_ status: AgentStatus, processIDs: [Int32], running: [AgentProcess]) -> AgentPresence {
+        let own = running.filter { processIDs.contains($0.pid) }
+        return AgentPresence(kind: status.agent, source: .hooks, activity: status.activity, since: status.since,
+                             processCount: own.count, isBusy: own.contains(where: \.isBusy),
+                             lastToolCall: status.recentToolCalls.last, toolCallsThisTurn: status.toolCallsThisTurn,
+                             task: status.task, turnSteps: status.turnToolCalls,
+                             turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
+                             processIDs: processIDs,
+                             awaitingCallID: status.pendingPermission?.callID)
+    }
+
+    private func processPresence(_ running: [AgentProcess]) -> AgentPresence {
+        let first = running[0]
         let earliest = running.map(\.startedAt).min() ?? first.startedAt
         return AgentPresence(kind: first.kind, source: .process, activity: .idle, since: earliest,
                              processCount: running.count, isBusy: running.contains(where: \.isBusy),
@@ -478,29 +609,56 @@ final class AgentHub {
                                 : contacts[first.kind.id] != nil ? true : nil)
     }
 
+    private static func collision(_ collisions: [WorktreeAgents.Collision], in worktree: String) -> AgentCollision? {
+        guard !collisions.isEmpty else { return nil }
+        var kinds: [AgentKind] = []
+        var seen = Set<String>()
+        for collision in collisions {
+            for (session, kind) in zip(collision.sessions, collision.agents) where seen.insert(session).inserted { kinds.append(kind) }
+        }
+        return AgentCollision(agents: WorktreeAgents.describe(kinds), files: collisions.map(\.path))
+    }
+
     var worktreesNeedingAttention: [String] {
-        statuses.filter { $0.value.activity.needsAttention }.keys.sorted()
+        let waiting = statuses.filter { $0.value.contains { $0.activity.needsAttention } }.keys
+        let colliding = agents.keys.filter { !openCollisions(in: $0).isEmpty }
+        return Set(waiting).union(colliding).sorted()
     }
 
     var activeWorktreeCount: Int {
-        Set(processes.filter { !$0.value.isEmpty }.keys).union(statuses.filter { $0.value.activity != .idle }.keys).count
+        Set(processes.filter { !$0.value.isEmpty }.keys)
+            .union(statuses.filter { $0.value.contains { $0.activity != .idle } }.keys).count
     }
 
     /// The tool call responsible for a change to `path` in `worktree` around `date`, if hooks know.
+    /// With several sessions there, a call naming the file wins; when two could have made it, the
+    /// change is credited to both rather than guessed.
     func attribution(for worktree: String, path: String, at date: Date) -> ChangeAttribution? {
-        // Straight from the machine: published statuses may lag by a moment.
-        guard let status = machines[worktree]?.status else { return nil }
+        // Straight from the machines: published statuses may lag by a moment.
+        let sessions = (machines[worktree] ?? [:]).values.compactMap(\.status)
+        guard !sessions.isEmpty else { return nil }
         let absolute = (worktree as NSString).appendingPathComponent(path)
-        let window = status.recentToolCalls.filter { call in
-            call.startedAt <= date.addingTimeInterval(1) && (call.finishedAt ?? .distantFuture) >= date.addingTimeInterval(-5)
+        let windows = sessions.map { status in
+            (status, status.recentToolCalls.filter { call in
+                call.startedAt <= date.addingTimeInterval(1) && (call.finishedAt ?? .distantFuture) >= date.addingTimeInterval(-5)
+            })
         }
-        let call = window.last { $0.filePath == absolute } ?? window.last { $0.isMutating } ?? window.last
-        if let call {
-            return ChangeAttribution(agent: status.agent.displayName, tool: call.toolName, detail: call.summary, at: call.startedAt)
+        func credit(_ status: AgentStatus, _ call: AgentToolCall) -> ChangeAttribution {
+            ChangeAttribution(agent: status.agent.displayName, tool: call.toolName, detail: call.summary, at: call.startedAt)
         }
-        if case .working = status.activity {
-            return ChangeAttribution(agent: status.agent.displayName, tool: "working", detail: nil, at: date)
+        func shared(_ statuses: [AgentStatus]) -> ChangeAttribution {
+            ChangeAttribution(agent: WorktreeAgents.describe(statuses.map(\.agent)).replacingOccurrences(of: " and ", with: " or "),
+                              tool: "working", detail: nil, at: date)
         }
-        return nil
+        let naming = windows.compactMap { status, calls in calls.last { $0.filePath == absolute }.map { (status, $0) } }
+        if let latest = naming.max(by: { $0.1.startedAt < $1.1.startedAt }) { return credit(latest.0, latest.1) }
+        for pick in [{ (calls: [AgentToolCall]) in calls.last { $0.isMutating } }, { (calls: [AgentToolCall]) in calls.last }] {
+            let found = windows.compactMap { status, calls in pick(calls).map { (status, $0) } }
+            if found.count == 1 { return credit(found[0].0, found[0].1) }
+            if found.count > 1 { return shared(found.map(\.0)) }
+        }
+        let working = sessions.filter { if case .working = $0.activity { true } else { false } }
+        if working.count == 1 { return ChangeAttribution(agent: working[0].agent.displayName, tool: "working", detail: nil, at: date) }
+        return working.count > 1 ? shared(working) : nil
     }
 }
