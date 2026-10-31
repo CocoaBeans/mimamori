@@ -632,30 +632,7 @@ final class AgentHub {
     /// change is credited to both rather than guessed.
     func attribution(for worktree: String, path: String, at date: Date) -> ChangeAttribution? {
         // Straight from the machines: published statuses may lag by a moment.
-        let sessions = (machines[worktree] ?? [:]).values.compactMap(\.status)
-        guard !sessions.isEmpty else { return nil }
-        let absolute = (worktree as NSString).appendingPathComponent(path)
-        let windows = sessions.map { status in
-            (status, status.recentToolCalls.filter { call in
-                call.startedAt <= date.addingTimeInterval(1) && (call.finishedAt ?? .distantFuture) >= date.addingTimeInterval(-5)
-            })
-        }
-        func credit(_ status: AgentStatus, _ call: AgentToolCall) -> ChangeAttribution {
-            ChangeAttribution(agent: status.agent.displayName, tool: call.toolName, detail: call.summary, at: call.startedAt)
-        }
-        func shared(_ statuses: [AgentStatus]) -> ChangeAttribution {
-            ChangeAttribution(agent: WorktreeAgents.describe(statuses.map(\.agent)).replacingOccurrences(of: " and ", with: " or "),
-                              tool: "working", detail: nil, at: date)
-        }
-        let naming = windows.compactMap { status, calls in calls.last { $0.filePath == absolute }.map { (status, $0) } }
-        if let latest = naming.max(by: { $0.1.startedAt < $1.1.startedAt }) { return credit(latest.0, latest.1) }
-        for pick in [{ (calls: [AgentToolCall]) in calls.last { $0.isMutating } }, { (calls: [AgentToolCall]) in calls.last }] {
-            let found = windows.compactMap { status, calls in pick(calls).map { (status, $0) } }
-            if found.count == 1 { return credit(found[0].0, found[0].1) }
-            if found.count > 1 { return shared(found.map(\.0)) }
-        }
-        let working = sessions.filter { if case .working = $0.activity { true } else { false } }
-        if working.count == 1 { return ChangeAttribution(agent: working[0].agent.displayName, tool: "working", detail: nil, at: date) }
-        return working.count > 1 ? shared(working) : nil
+        WorktreeAgents.attribution(among: (machines[worktree] ?? [:]).values.compactMap(\.status),
+                                   path: (worktree as NSString).appendingPathComponent(path), at: date)
     }
 }

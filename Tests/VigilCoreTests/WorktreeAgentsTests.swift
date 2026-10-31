@@ -105,6 +105,34 @@ struct WorktreeAgentsTests {
         #expect(!agents([hooks], [own, other], parents: [20: 15, 15: 10]).isShared)
     }
 
+    @Test func aChangeIsCreditedToTheSessionThatMadeIt() throws {
+        let at = now.addingTimeInterval(-60)
+        func calling(_ id: String, _ agent: AgentKind, _ tool: String, _ path: String?) -> AgentStatus {
+            AgentStatus(agent: agent, activity: .working(tool: tool, detail: nil), since: at, lastEventAt: at, sessionID: id,
+                        recentToolCalls: [AgentToolCall(id: id + "-call", toolName: tool, summary: path, filePath: path, startedAt: at)])
+        }
+        let claude = calling("s1", .claudeCode, "Edit", "/repo/a.swift")
+        let codex = calling("s2", .codex, "Bash", nil)
+        // The call that names the file wins, whoever else was busy.
+        let named = try #require(WorktreeAgents.attribution(among: [codex, claude], path: "/repo/a.swift", at: at))
+        #expect(named.agent == "Claude Code")
+        #expect(named.tool == "Edit")
+        // Another file: only Claude Code's edit and Codex's command could have made it; both change files.
+        let shared = try #require(WorktreeAgents.attribution(among: [claude, codex], path: "/repo/b.swift", at: at))
+        #expect(shared.agent == "Claude Code or Codex")
+        #expect(shared.tool == "working")
+        // With one session, its call is credited as before.
+        #expect(WorktreeAgents.attribution(among: [codex], path: "/repo/b.swift", at: at)?.tool == "Bash")
+        #expect(WorktreeAgents.attribution(among: [], path: "/repo/b.swift", at: at) == nil)
+    }
+
+    @Test func groupsOfAgentsReadNaturally() {
+        #expect(WorktreeAgents.describe([.claudeCode, .codex]) == "Claude Code and Codex")
+        #expect(WorktreeAgents.describe([.claudeCode, .codex, .gemini]) == "Claude Code, Codex and Gemini CLI")
+        #expect(WorktreeAgents.describe([.claudeCode, .claudeCode]) == "Two Claude Code sessions")
+        #expect(WorktreeAgents.describe([.cursor]) == "Cursor Agent")
+    }
+
     @Test func claudeCodeProcessesBelongToTheirOwnSessions() {
         let first = process(10, session: "s1")
         let second = process(11, session: "s2")

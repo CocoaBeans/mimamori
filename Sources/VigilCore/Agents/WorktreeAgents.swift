@@ -91,6 +91,36 @@ public struct WorktreeAgents: Sendable, Hashable {
         self.collisions = Self.collisions(among: live, now: now)
     }
 
+    /// The tool call responsible for a change to `path` (absolute) around `date`, among a
+    /// worktree's sessions. A call naming the file wins; when two sessions could have made the
+    /// change, it is credited to both ("Claude Code or Codex") rather than guessed.
+    public static func attribution(among sessions: [AgentStatus], path: String, at date: Date) -> ChangeAttribution? {
+        guard !sessions.isEmpty else { return nil }
+        let windows = sessions.map { status in
+            (status, status.recentToolCalls.filter { call in
+                call.startedAt <= date.addingTimeInterval(1) && (call.finishedAt ?? .distantFuture) >= date.addingTimeInterval(-5)
+            })
+        }
+        func credit(_ status: AgentStatus, _ call: AgentToolCall) -> ChangeAttribution {
+            ChangeAttribution(agent: status.agent.displayName, tool: call.toolName, detail: call.summary, at: call.startedAt)
+        }
+        func shared(_ statuses: [AgentStatus]) -> ChangeAttribution {
+            ChangeAttribution(agent: describe(statuses.map(\.agent)).replacingOccurrences(of: " and ", with: " or "),
+                              tool: "working", detail: nil, at: date)
+        }
+        let naming = windows.compactMap { status, calls in calls.last { $0.filePath == path }.map { (status, $0) } }
+        if let latest = naming.max(by: { $0.1.startedAt < $1.1.startedAt }) { return credit(latest.0, latest.1) }
+        // Then a call that changes files, then any call, then simply being at work.
+        for pick in [{ (calls: [AgentToolCall]) in calls.last { $0.isMutating } }, { (calls: [AgentToolCall]) in calls.last }] {
+            let found = windows.compactMap { status, calls in pick(calls).map { (status, $0) } }
+            if found.count == 1 { return credit(found[0].0, found[0].1) }
+            if found.count > 1 { return shared(found.map(\.0)) }
+        }
+        let working = sessions.filter { if case .working = $0.activity { true } else { false } }
+        if working.count == 1 { return ChangeAttribution(agent: working[0].agent.displayName, tool: "working", detail: nil, at: date) }
+        return working.count > 1 ? shared(working) : nil
+    }
+
     /// "Claude Code and Codex", "Claude Code, Codex and Gemini CLI", "Two Claude Code sessions".
     public static func describe(_ agents: [AgentKind]) -> String {
         guard let first = agents.first else { return "Agents" }
