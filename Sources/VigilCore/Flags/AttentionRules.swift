@@ -35,32 +35,46 @@ public enum AttentionRules {
             flags.append(AttentionFlag(rule: rule, severity: severity, message: message))
         }
 
+        // Deleting one of these files deserves the same look as editing it (a removed CI
+        // workflow or AGENTS.md is a change too), but the message should say it is gone.
+        let deleted = change.kind == .deleted
+        func worded(_ reason: String) -> String {
+            guard deleted else { return reason }
+            for suffix in [" changed", " edited"] where reason.hasSuffix(suffix) {
+                return reason.dropLast(suffix.count) + " deleted"
+            }
+            return reason + " deleted"
+        }
+
         if lockfileNames.contains(name) {
-            add(.lockfile, "Dependency lockfile changed")
+            add(.lockfile, worded("Dependency lockfile changed"))
         }
 
         if let secretReason = secretsFileReason(lowerName: lowerName, lowerPath: lowerPath, components: components) {
             if secretReason.isTemplate {
-                add(.secretsFile, secretReason.message, severity: .info)
+                add(.secretsFile, worded(secretReason.message), severity: .info)
+            } else if deleted {
+                // Usually cleanup, not a leak; but if it was ever committed, its secrets are out.
+                add(.secretsFile, "\(secretReason.message) deleted: rotate it if it was committed", severity: .warning)
             } else {
                 add(.secretsFile, secretReason.message)
             }
         }
 
         if let reason = ciConfigReason(lowerPath: lowerPath, lowerName: lowerName) {
-            add(.ciConfig, reason)
+            add(.ciConfig, worded(reason))
         }
 
         if let reason = agentConfigReason(lowerPath: lowerPath, lowerName: lowerName, components: components) {
-            add(.agentConfig, reason)
+            add(.agentConfig, worded(reason))
         }
 
         if let reason = gitConfigReason(lowerPath: lowerPath, lowerName: lowerName, components: components) {
-            add(.gitConfig, reason)
+            add(.gitConfig, worded(reason))
         }
 
         if let (reason, severity) = buildConfigReason(lowerPath: lowerPath, lowerName: lowerName) {
-            add(.buildConfig, reason, severity: severity)
+            add(.buildConfig, worded(reason), severity: severity)
         }
 
         if change.kind == .deleted {
@@ -270,7 +284,7 @@ public enum AttentionRules {
             "vercel.json", "netlify.toml", "serverless.yml", "tox.ini", "info.plist",
         ]
         if manifests.contains(lowerName) { return ("Project manifest changed", .info) }
-        if lowerName.hasPrefix("requirements") && lowerName.hasSuffix(".txt") { return ("Dependencies changed", .info) }
+        if lowerName.hasPrefix("requirements") && lowerName.hasSuffix(".txt") { return ("Dependency list changed", .info) }
         if lowerName.hasPrefix("build.gradle") || lowerName.hasPrefix("settings.gradle") { return ("Gradle configuration", .info) }
         if lowerName.hasPrefix("tsconfig") || lowerName.hasPrefix("webpack.config") || lowerName.hasPrefix("vite.config")
             || lowerName.hasPrefix("babel.config") || lowerName.hasPrefix(".eslintrc") || lowerName.hasPrefix("eslint.config")

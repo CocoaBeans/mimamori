@@ -36,6 +36,38 @@ struct AttentionRulesTests {
         #expect(flags.first?.severity == .info)
     }
 
+    @Test func deletedImportantFilesSayTheyAreGone() {
+        func messages(_ path: String) -> [String] {
+            AttentionRules.pathFlags(for: change(path, kind: .deleted, additions: 0, deletions: 10), config: config)
+                .filter { $0.rule != .massDeletion }.map(\.message)
+        }
+        #expect(messages("package-lock.json") == ["Dependency lockfile deleted"])
+        #expect(messages(".github/workflows/ci.yml") == ["GitHub Actions workflow deleted"])
+        #expect(messages("AGENTS.md") == ["Agent instructions deleted"])
+        #expect(messages(".gitignore") == ["Ignore rules deleted"])
+        #expect(messages("App.xcodeproj/project.pbxproj") == ["Xcode project file deleted"])
+        #expect(messages("requirements.txt") == ["Dependency list deleted"])
+        // Still flagged as before, at the same severity.
+        let workflow = AttentionRules.pathFlags(for: change(".github/workflows/ci.yml", kind: .deleted), config: config)
+        #expect(workflow.contains { $0.rule == .ciConfig && $0.severity == .warning })
+        // Edits keep their wording.
+        let edited = AttentionRules.pathFlags(for: change("package-lock.json"), config: config)
+        #expect(edited.map(\.message) == ["Dependency lockfile changed"])
+    }
+
+    @Test func aDeletedSecretsFileIsAWarningToRotate() {
+        let deleted = AttentionRules.pathFlags(for: change(".env", kind: .deleted, additions: 0, deletions: 3), config: config)
+        let secret = try? #require(deleted.first { $0.rule == .secretsFile })
+        #expect(secret?.severity == .warning)
+        #expect(secret?.message == "Environment file deleted: rotate it if it was committed")
+        let template = AttentionRules.pathFlags(for: change(".env.example", kind: .deleted), config: config)
+        #expect(template.first { $0.rule == .secretsFile }?.message == "Environment file template deleted")
+        #expect(template.first { $0.rule == .secretsFile }?.severity == .info)
+        // Adding one is still critical.
+        let added = AttentionRules.pathFlags(for: change(".env", kind: .added), config: config)
+        #expect(added.first { $0.rule == .secretsFile }?.severity == .critical)
+    }
+
     @Test func deletionsAndSizes() {
         #expect(rules(change("tests/test_app.py", kind: .deleted, additions: 0, deletions: 80)).isSuperset(of: [.testDeleted, .massDeletion]))
         let big = AttentionRules.pathFlags(for: change("src/a.py", deletions: 1200), config: config)
