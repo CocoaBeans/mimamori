@@ -216,6 +216,26 @@ public struct GitClient: Sendable {
         }
     }
 
+    /// Commits reachable from `revision` and not from `excluding`, newest first, each with its
+    /// size. A merge is measured against its first parent.
+    public func log(_ revision: String, excluding: String? = nil, limit: Int, skip: Int = 0,
+                    in worktree: URL) async throws -> [CommitRecord] {
+        var arguments = ["log", "--format=\(CommitLogParser.format)", "--shortstat", "--diff-merges=first-parent",
+                         "--no-ext-diff", "--no-color", "-n", String(limit)]
+        if skip > 0 { arguments.append("--skip=\(skip)") }
+        arguments.append(revision)
+        if let excluding { arguments.append("^" + excluding) }
+        arguments.append("--")
+        let result = try await run(arguments, in: worktree, options: Options(timeout: .seconds(60)))
+        return CommitLogParser.parse(result.stdoutText)
+    }
+
+    /// The full message of a commit: subject, blank line, body.
+    public func commitMessage(_ commit: String, in worktree: URL) async -> String? {
+        guard let result = try? await run(["log", "-1", "--format=%B", commit, "--"], in: worktree) else { return nil }
+        return result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public func commitDate(_ commit: String, in worktree: URL) async -> Date? {
         guard let result = try? await run(["log", "-1", "--format=%ct", commit], in: worktree) else { return nil }
         guard let seconds = TimeInterval(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
@@ -248,6 +268,30 @@ public struct GitClient: Sendable {
         let result = try await run(arguments, in: worktree,
                                    options: Options(indexFile: indexFile, timeout: .seconds(120)))
         return result.stdoutText
+    }
+
+    // MARK: Diffing two commits
+
+    public func treeRawDiff(from old: String, to new: String, in worktree: URL) async throws -> [RawDiffEntry] {
+        let result = try await run(["diff-tree", "-r", "-z", "-M", "--raw", "--no-abbrev", "--no-ext-diff", old, new],
+                                   in: worktree, options: Options(timeout: .seconds(120)))
+        return RawDiffParser.parse(result.stdout)
+    }
+
+    public func treeNumstat(from old: String, to new: String, in worktree: URL) async throws -> [NumstatEntry] {
+        let result = try await run(["diff-tree", "-r", "-z", "-M", "--numstat", "--no-ext-diff", old, new],
+                                   in: worktree, options: Options(timeout: .seconds(120)))
+        return NumstatParser.parse(result.stdout)
+    }
+
+    /// Unified diff between two commits for the given paths (all paths when empty).
+    public func treePatch(from old: String, to new: String, paths: [String], in worktree: URL, context: Int = 3) async throws -> String {
+        var arguments = ["diff", "-M", "--no-ext-diff", "--no-color", "-p", "--unified=\(context)", old, new]
+        if !paths.isEmpty {
+            arguments.append("--")
+            arguments += paths.map { ":(literal)\($0)" }
+        }
+        return try await run(arguments, in: worktree, options: Options(timeout: .seconds(120))).stdoutText
     }
 
     /// Unified diff between two blobs. Its paths are the blob ids; callers relabel them.

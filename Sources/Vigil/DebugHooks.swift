@@ -35,6 +35,7 @@ enum DebugHooks {
         let windowTitle = value("VIGIL_SCREENSHOT_WINDOW")
         var toggledReview = false
         var openedSummary = false
+        var openedCommit = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
             if let windowSize {
@@ -75,6 +76,24 @@ enum DebugHooks {
                    let selected = session.selectedPath, session.change(for: selected) != nil {
                     model.toggleReviewForSelection()
                     toggledReview = true
+                }
+                // "commits": show the Commits list, open its newest commit and then its first file;
+                // "commits:<id>": open that commit the way the activity feed does.
+                if let flag = model.debugFlags.first(where: { $0 == "commits" || $0.hasPrefix("commits:") }),
+                   let session = model.selectedSession, session.state != nil {
+                    if !openedCommit {
+                        openedCommit = true
+                        if flag.hasPrefix("commits:") {
+                            model.showCommit(String(flag.dropFirst("commits:".count)), in: session.id)
+                        } else {
+                            model.showCommits = true
+                        }
+                    } else if !flag.hasPrefix("commits:"), session.commitSelection == nil, let newest = session.history?.all.first {
+                        session.select(.commit(newest.oid))
+                    } else if !flag.hasPrefix("commits:"), case .commit(let oid)? = session.commitSelection,
+                              let first = session.openCommitChanges.first {
+                        session.select(.file(commit: oid, path: first.path))
+                    }
                 }
                 if model.debugFlags.contains("cycle") {
                     let ids = model.orderedSessions.map(\.id)
@@ -126,6 +145,18 @@ enum DebugHooks {
             }
             let note = row.presence.source == .process ? " hooksInstalled=\(row.presence.hooksInstalled.map(String.init) ?? "-")" : ""
             lines.append("  row \((row.session.id as NSString).lastPathComponent): status=\"\(row.presence.statusText)\"\(note) attention=\(row.presence.needsAttention) task=\"\(row.presence.task ?? "-")\" steps=\(steps) files=\(row.files.map(\.path)) goToAgent=\(app)")
+        }
+        if let session = model.selectedSession {
+            let history = session.history
+            lines.append("commits: shown=\(model.showCommits) reference=\(history?.reference ?? "-") since=\(history?.sinceBranchPoint.map(\.subject) ?? []) earlier=\(history?.earlier.count ?? 0) more=\(history?.hasMore ?? false) error=\(session.historyError ?? "-")")
+            let selection = session.commitSelection.map { selection -> String in
+                switch selection {
+                case .commit(let oid): "commit \(oid.prefix(7))"
+                case .file(let oid, let path): "file \(oid.prefix(7)) \(path)"
+                }
+            } ?? "-"
+            let files = session.openCommitChanges.map { "\($0.kind.glyph) \($0.path) +\($0.additions ?? 0) -\($0.deletions ?? 0) flags=\($0.flags.map(\.rule.rawValue))" }
+            lines.append("  open: \(session.openCommit.map { "\($0.shortOID) \($0.subject)" } ?? "-") selection=\(selection) files=\(files)")
         }
         for (worktree, list) in hub.processes.sorted(by: { $0.key < $1.key }) where !list.isEmpty {
             let processes = list.map { process in

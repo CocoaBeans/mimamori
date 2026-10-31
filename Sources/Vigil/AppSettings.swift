@@ -160,10 +160,11 @@ struct PersistedUIState: Codable, Hashable, Sendable {
     var hideReviewed: Bool = false
     var sidebarAgentsOnly: Bool = false
     var activityAgentFilter: ActivityAgentFilter = .all
+    var showCommits: Bool = false
 
     init(showActivity: Bool = true, flaggedOnly: Bool = false, sortOrder: ChangeSortOrder = .recent,
          selectedWorktree: String? = nil, activityScopeAll: Bool = false, hideReviewed: Bool = false,
-         sidebarAgentsOnly: Bool = false, activityAgentFilter: ActivityAgentFilter = .all) {
+         sidebarAgentsOnly: Bool = false, activityAgentFilter: ActivityAgentFilter = .all, showCommits: Bool = false) {
         self.showActivity = showActivity
         self.flaggedOnly = flaggedOnly
         self.sortOrder = sortOrder
@@ -172,6 +173,7 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         self.hideReviewed = hideReviewed
         self.sidebarAgentsOnly = sidebarAgentsOnly
         self.activityAgentFilter = activityAgentFilter
+        self.showCommits = showCommits
     }
 
     init(from decoder: Decoder) throws {
@@ -184,6 +186,7 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         hideReviewed = try c.decodeIfPresent(Bool.self, forKey: .hideReviewed) ?? false
         sidebarAgentsOnly = try c.decodeIfPresent(Bool.self, forKey: .sidebarAgentsOnly) ?? false
         activityAgentFilter = try c.decodeIfPresent(ActivityAgentFilter.self, forKey: .activityAgentFilter) ?? .all
+        showCommits = try c.decodeIfPresent(Bool.self, forKey: .showCommits) ?? false
     }
 }
 

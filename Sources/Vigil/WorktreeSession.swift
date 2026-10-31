@@ -2,6 +2,18 @@ import Foundation
 import Observation
 import VigilCore
 
+/// What the Commits list has selected: a commit, or one of its files.
+enum CommitSelection: Hashable {
+    case commit(String)
+    case file(commit: String, path: String)
+
+    var commitOID: String {
+        switch self {
+        case .commit(let oid), .file(let oid, _): oid
+        }
+    }
+}
+
 /// Live state for one watched worktree: owns the inspector, the file-system
 /// watcher, the debounce logic and the most recent refresh result.
 @MainActor
@@ -31,6 +43,17 @@ final class WorktreeSession: Identifiable {
     private(set) var attributions: [String: ChangeAttribution] = [:]
     private(set) var reviews: ReviewLedger
     var selectedPath: String?
+
+    /// The branch's commits, read when the Commits list first shows and kept current after.
+    private(set) var history: CommitHistory?
+    private(set) var historyError: String?
+    private(set) var loadingHistory = false
+    private(set) var commitSelection: CommitSelection?
+    /// The commit expanded in the Commits list, with its files and full message.
+    private(set) var openCommit: CommitRecord?
+    private(set) var openCommitChanges: [FileChange] = []
+    private(set) var openCommitMessage: String?
+    private(set) var openCommitError: String?
     /// Asked for every file event; answers with the agent tool call that caused it, when known.
     var attributionProvider: (@MainActor (String, Date) -> ChangeAttribution?)?
 
@@ -344,6 +367,7 @@ final class WorktreeSession: Identifiable {
             apply(fresh, events: events)
             phase = .idle
             lastError = nil
+            if history != nil, history?.head != fresh.branch.headOID { await reloadHistory() }
             await snapshotIfNeeded(fresh)
         } catch {
             if FileManager.default.fileExists(atPath: id) {
@@ -470,6 +494,83 @@ final class WorktreeSession: Identifiable {
     func diff(for change: FileChange) async throws -> FileDiff? {
         guard let inspector, let base = state?.baseline.treeish else { return nil }
         return try await inspector.diff(for: change, base: base)
+    }
+
+    // MARK: Commits
+
+    /// Reads the history when the Commits list shows and has none, or HEAD has moved since.
+    func loadHistoryIfNeeded() {
+        guard let state, !loadingHistory, history == nil || history?.head != state.branch.headOID else { return }
+        Task { await reloadHistory() }
+    }
+
+    func reloadHistory() async {
+        guard let inspector, let branch = state?.branch, !loadingHistory else { return }
+        loadingHistory = true
+        defer { loadingHistory = false }
+        do {
+            history = try await inspector.history(branch: branch)
+            historyError = nil
+        } catch {
+            historyError = error.localizedDescription
+        }
+    }
+
+    func loadMoreHistory() async {
+        guard let inspector, let history, history.hasMore, !loadingHistory else { return }
+        loadingHistory = true
+        defer { loadingHistory = false }
+        if let more = try? await inspector.loadingMore(of: history), self.history?.head == history.head {
+            self.history = more
+        }
+    }
+
+    /// Selects a commit or one of its files, opening the commit when it is not open yet.
+    func select(_ selection: CommitSelection?) {
+        commitSelection = selection
+        guard let oid = selection?.commitOID, openCommit?.oid != oid else { return }
+        Task {
+            if let commit = history?.commit(oid) {
+                await open(commit)
+            } else {
+                await openCommit(revision: oid)
+            }
+        }
+    }
+
+    /// Opens and selects a commit named any way git accepts, such as the short id in the activity
+    /// feed. It need not be in the loaded history.
+    func openCommit(revision: String) async {
+        var commit = history?.all.first { $0.oid.hasPrefix(revision) }
+        if commit == nil { commit = await inspector?.commit(revision) }
+        guard let commit else { return }
+        commitSelection = .commit(commit.oid)
+        if openCommit?.oid != commit.oid { await open(commit) }
+    }
+
+    private func open(_ commit: CommitRecord) async {
+        guard let inspector else { return }
+        openCommit = commit
+        openCommitChanges = []
+        openCommitMessage = nil
+        openCommitError = nil
+        async let message = inspector.message(of: commit)
+        do {
+            let changes = try await inspector.changes(in: commit)
+            guard openCommit?.oid == commit.oid else { return }
+            openCommitChanges = changes
+        } catch {
+            guard openCommit?.oid == commit.oid else { return }
+            openCommitError = error.localizedDescription
+        }
+        let text = await message
+        guard openCommit?.oid == commit.oid else { return }
+        openCommitMessage = text
+    }
+
+    func diff(for change: FileChange, in commit: CommitRecord) async throws -> FileDiff? {
+        guard let inspector else { return nil }
+        return try await inspector.diff(for: change, in: commit)
     }
 
     func commitsSinceBaseline() async -> [CommitSummary] {

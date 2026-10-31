@@ -50,6 +50,8 @@ final class AppModel {
     /// The sidebar lists only worktrees with an agent in them.
     var sidebarAgentsOnly: Bool
     var activityAgentFilter: ActivityAgentFilter
+    /// The middle column lists the worktree's commits instead of its changed files.
+    var showCommits: Bool
     var sortOrder: ChangeSortOrder
     var activityScopeAll: Bool
     var filterText = ""
@@ -70,6 +72,7 @@ final class AppModel {
         self.persisted = persisted
         self.settings = persisted.settings
         self.showActivity = persisted.ui.showActivity
+        self.showCommits = persisted.ui.showCommits
         self.flaggedOnly = persisted.ui.flaggedOnly
         self.hideReviewed = persisted.ui.hideReviewed
         self.sidebarAgentsOnly = persisted.ui.sidebarAgentsOnly
@@ -400,6 +403,14 @@ final class AppModel {
         rediscoverAll()
     }
 
+    /// Shows a commit in the Commits list: `revision` is any name git accepts, such as a short id.
+    func showCommit(_ revision: String, in worktree: String) {
+        select(worktree: worktree)
+        showCommits = true
+        guard let session = sessions[worktree] else { return }
+        Task { await session.openCommit(revision: revision) }
+    }
+
     func select(worktree id: String?, path: String? = nil) {
         selectedWorktreeID = id
         if let id, let path, let session = sessions[id] {
@@ -613,7 +624,7 @@ final class AppModel {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
-                                        activityAgentFilter: activityAgentFilter)
+                                        activityAgentFilter: activityAgentFilter, showCommits: showCommits)
         persistSoon()
     }
 
@@ -631,7 +642,7 @@ final class AppModel {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
-                                        activityAgentFilter: activityAgentFilter)
+                                        activityAgentFilter: activityAgentFilter, showCommits: showCommits)
         saveTask?.cancel()
         Persistence.save(persisted)
     }

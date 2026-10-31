@@ -88,6 +88,8 @@ struct VigilCommands: Commands {
                 .keyboardShortcut("2")
             Button("Compare Since Start") { model.selectedSession?.setBaseline(.start) }
                 .keyboardShortcut("3")
+            Toggle("Show Commits", isOn: Binding(get: { model.showCommits }, set: { model.showCommits = $0 }))
+                .keyboardShortcut("h", modifiers: [.command, .shift])
             Divider()
             Button("Filter Files") { model.filterFocusToken += 1 }
                 .keyboardShortcut("f")

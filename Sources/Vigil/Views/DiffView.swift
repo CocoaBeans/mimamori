@@ -5,6 +5,8 @@ struct DiffView: View {
     @Environment(AppModel.self) private var model
     let session: WorktreeSession
     let change: FileChange
+    /// Shows the change as one commit made it, against its parent, rather than in the working tree.
+    var commit: CommitRecord? = nil
 
     @State private var diff: FileDiff?
     @State private var errorText: String?
@@ -21,7 +23,7 @@ struct DiffView: View {
     /// Syntax colors and word emphasis for `diff`, worked out off the main thread.
     @State private var decorations = DiffDecorations.empty
 
-    private var review: ReviewStatus { session.reviewStatus(of: change) }
+    private var review: ReviewStatus { commit == nil ? session.reviewStatus(of: change) : .unreviewed }
 
     /// The blob you reviewed, when the file has changed since and a text diff against it makes sense.
     private var reviewedBlob: String? {
@@ -39,16 +41,16 @@ struct DiffView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
                     DiffHeaderView(change: change, diff: diff, worktreePath: session.id,
-                                   attribution: session.attributions[change.path],
+                                   attribution: commit == nil ? session.attributions[change.path] : nil,
                                    review: review, sinceReview: sinceReviewInfo,
-                                   onToggleReviewed: { model.toggleReviewForSelection() }) { lineNumber in
+                                   onToggleReviewed: commit == nil ? { model.toggleReviewForSelection() } : nil) { lineNumber in
                         jump(toNewLine: lineNumber)
                     }
                     Divider()
                 }
                 .background(.bar)
             }
-            .task(id: "\(change.contentKey)|\(reviewedBlob ?? "")|\(wantsSinceReview)|\(model.settings.syntaxHighlighting)") {
+            .task(id: "\(commit?.oid ?? "")|\(change.contentKey)|\(reviewedBlob ?? "")|\(wantsSinceReview)|\(model.settings.syntaxHighlighting)") {
                 showAll = false
                 targetLineID = nil
                 await load()
@@ -152,7 +154,11 @@ struct DiffView: View {
                 }
                 missingReviewBlob = blob
             }
-            let full = try await session.diff(for: change)
+            let full = if let commit {
+                try await session.diff(for: change, in: commit)
+            } else {
+                try await session.diff(for: change)
+            }
             loadedSinceReview = false
             await show(full)
             if full == nil { errorText = "git produced no diff for this file." }

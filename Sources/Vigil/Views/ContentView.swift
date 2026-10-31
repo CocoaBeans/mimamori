@@ -29,6 +29,7 @@ struct ContentView: View {
         }
         .toolbar { toolbarItems }
         .onChange(of: model.showActivity) { model.persistUISoon() }
+        .onChange(of: model.showCommits) { model.persistUISoon() }
         .onChange(of: model.flaggedOnly) { model.persistUISoon() }
         .onChange(of: model.hideReviewed) { model.persistUISoon() }
         .onChange(of: model.sidebarAgentsOnly) { model.persistUISoon() }
@@ -56,7 +57,9 @@ struct ContentView: View {
         if let session = model.selectedSession {
             VStack(spacing: 0) {
                 AgentBannerSlot(worktree: session.id)
-                if let path = session.selectedPath, let change = session.change(for: path) {
+                if model.showCommits {
+                    commitDetail(session)
+                } else if let path = session.selectedPath, let change = session.change(for: path) {
                     DiffView(session: session, change: change)
                 } else {
                     ContentUnavailableView("Select a File", systemImage: "doc.text.magnifyingglass",
@@ -66,6 +69,24 @@ struct ContentView: View {
             }
         } else {
             Color.clear
+        }
+    }
+
+    @ViewBuilder
+    private func commitDetail(_ session: WorktreeSession) -> some View {
+        if let commit = session.openCommit, let selection = session.commitSelection, selection.commitOID == commit.oid {
+            if case .file(_, let path) = selection, let change = session.openCommitChanges.first(where: { $0.path == path }) {
+                DiffView(session: session, change: change, commit: commit)
+            } else {
+                CommitOverviewView(session: session, commit: commit)
+            }
+        } else if session.commitSelection != nil {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ContentUnavailableView("Select a Commit", systemImage: "point.topleft.down.to.point.bottomright.curvepath",
+                                   description: Text("Pick a commit to see what it changed."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

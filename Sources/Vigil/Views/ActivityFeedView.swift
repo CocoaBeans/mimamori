@@ -126,7 +126,11 @@ struct ActivityRow: View {
 
     var body: some View {
         Button {
-            model.select(worktree: entry.worktreePath, path: entry.path)
+            if entry.kind == .committed, let commit = entry.detail {
+                model.showCommit(commit, in: entry.worktreePath)
+            } else {
+                model.select(worktree: entry.worktreePath, path: entry.path)
+            }
         } label: {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: entry.kind.systemImage)
@@ -159,6 +163,7 @@ struct ActivityRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(Format.dateTime.string(from: entry.date))
+        .help(entry.kind == .committed ? "\(Format.dateTime.string(from: entry.date)) · Show this commit"
+                                        : Format.dateTime.string(from: entry.date))
     }
 }

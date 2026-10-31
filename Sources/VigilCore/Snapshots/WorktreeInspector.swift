@@ -32,6 +32,8 @@ public actor WorktreeInspector {
     private var defaultBranchFetchedAt: Date?
     private var diffCache: [String: FileDiff] = [:]
     private var contentFlagCache: [String: [AttentionFlag]] = [:]
+    /// A commit's files with their flags; commits never change, so only new rules clear it.
+    private var commitChangesCache: [String: [FileChange]] = [:]
     private var lastSnapshotTree: String?
     private var loadedSnapshotsOnce = false
 
@@ -56,6 +58,7 @@ public actor WorktreeInspector {
     public func setConfiguration(_ configuration: InspectorConfiguration) {
         if configuration.rules != self.configuration.rules {
             contentFlagCache.removeAll()
+            commitChangesCache.removeAll()
         }
         self.configuration = configuration
     }
@@ -169,6 +172,103 @@ public actor WorktreeInspector {
         diffCache[key] = diff
         trimCaches()
         return diff
+    }
+
+    // MARK: Commits
+
+    /// The branch's history for the Commits list: what it added since it left the default branch
+    /// (or, on that branch, since its upstream), then up to `limit` earlier commits.
+    public func history(branch: BranchInfo, limit: Int = 100) async throws -> CommitHistory {
+        guard let head = branch.headOID else { return CommitHistory() }
+        var reference: String? = nil
+        var base: String? = nil
+        if let defaultBranch = await cachedDefaultBranch() {
+            let onDefault = branch.branch == defaultBranch || branch.branch.map { "origin/\($0)" == defaultBranch } == true
+            if let candidate = onDefault ? branch.upstream : defaultBranch,
+               let mergeBase = await git.mergeBase(candidate, head, in: worktree) {
+                reference = candidate
+                base = mergeBase
+            }
+        }
+        var since: [CommitRecord] = []
+        if let base { since = try await git.log(head, excluding: base, limit: 500, in: worktree) }
+        let from = base ?? head
+        let earlier = try await git.log(from, limit: limit, in: worktree)
+        return CommitHistory(head: head, reference: reference, sinceBranchPoint: since, earlier: earlier,
+                             earlierFrom: from, hasMore: earlier.count == limit)
+    }
+
+    /// `history` with up to `limit` more of its earlier commits.
+    public func loadingMore(of history: CommitHistory, limit: Int = 100) async throws -> CommitHistory {
+        guard let from = history.earlierFrom, history.hasMore else { return history }
+        let more = try await git.log(from, limit: limit, skip: history.earlier.count, in: worktree)
+        var extended = history
+        extended.earlier += more
+        extended.hasMore = more.count == limit
+        return extended
+    }
+
+    /// One commit, for a revision such as an abbreviated id; nil when it does not resolve.
+    public func commit(_ revision: String) async -> CommitRecord? {
+        try? await git.log(revision, limit: 1, in: worktree).first
+    }
+
+    public func message(of commit: CommitRecord) async -> String? {
+        await git.commitMessage(commit.oid, in: worktree)
+    }
+
+    /// The files a commit changed against its first parent (an empty tree for the first commit),
+    /// with the same flags a working-tree change gets, except for file size.
+    public func changes(in commit: CommitRecord) async throws -> [FileChange] {
+        if let cached = commitChangesCache[commit.oid] { return cached }
+        let parent = try await parentTreeish(of: commit)
+        async let rawTask = git.treeRawDiff(from: parent, to: commit.oid, in: worktree)
+        async let numstatTask = git.treeNumstat(from: parent, to: commit.oid, in: worktree)
+        let (raw, numstats) = try await (rawTask, numstatTask)
+        var numstatByPath: [String: NumstatEntry] = [:]
+        for entry in numstats { numstatByPath[entry.path] = entry }
+        var changes = raw.map { entry in
+            let numstat = numstatByPath[entry.path]
+            return FileChange(
+                path: entry.path,
+                oldPath: entry.oldPath,
+                kind: ChangeKind(rawStatus: entry.status),
+                oldMode: entry.oldMode,
+                newMode: entry.newMode,
+                oldOID: entry.isNullOld ? nil : entry.oldOID,
+                newOID: entry.isNullNew ? nil : entry.newOID,
+                additions: numstat?.additions,
+                deletions: numstat?.deletions,
+                isBinary: numstat?.isBinary ?? false)
+        }
+        let commitOID = commit.oid
+        try await applyFlags(to: &changes, sizeOnDisk: false) { paths in
+            try await self.git.treePatch(from: parent, to: commitOID, paths: paths, in: self.worktree)
+        }
+        commitChangesCache[commit.oid] = changes
+        if commitChangesCache.count > 200 { commitChangesCache.removeAll() }
+        return changes
+    }
+
+    /// A file's diff in a commit, against the commit's first parent.
+    public func diff(for change: FileChange, in commit: CommitRecord) async throws -> FileDiff? {
+        let key = change.contentKey
+        if let cached = diffCache[key] { return cached }
+        var paths = [change.path]
+        if let old = change.oldPath { paths.append(old) }
+        let patch = try await git.treePatch(from: try await parentTreeish(of: commit), to: commit.oid, paths: paths, in: worktree)
+        let diffs = DiffParser.parse(patch)
+        let diff = diffs.first { $0.path == change.path } ?? diffs.first
+        if let diff {
+            diffCache[key] = diff
+            trimCaches()
+        }
+        return diff
+    }
+
+    private func parentTreeish(of commit: CommitRecord) async throws -> String {
+        if let parent = commit.parents.first { return parent }
+        return try await emptyTreeOID()
     }
 
     // MARK: Snapshots
@@ -349,13 +449,22 @@ public actor WorktreeInspector {
     }
 
     private func applyFlags(to changes: inout [FileChange], base: String) async throws {
+        try await applyFlags(to: &changes, sizeOnDisk: true) { paths in
+            try await self.git.patch(base: base, paths: paths, indexFile: self.shadowIndexURL, in: self.worktree)
+        }
+    }
+
+    /// Flags `changes` by path and content. `patch` gives the unified diff for some paths;
+    /// `sizeOnDisk` reads file sizes from the working tree, which only fits working-tree changes.
+    private func applyFlags(to changes: inout [FileChange], sizeOnDisk: Bool,
+                            patch: ([String]) async throws -> String) async throws {
         let rules = configuration.rules
         var pending: [(index: Int, key: String)] = []
 
         for index in changes.indices {
             let change = changes[index]
             var size: Int64? = nil
-            if change.newOID != nil, !change.isSubmodule {
+            if sizeOnDisk, change.newOID != nil, !change.isSubmodule {
                 let url = worktree.appendingPathComponent(change.path)
                 if let values = try? url.resourceValues(forKeys: [.fileSizeKey]), let fileSize = values.fileSize {
                     size = Int64(fileSize)
@@ -384,9 +493,8 @@ public actor WorktreeInspector {
             paths.append(changes[item.index].path)
             if let old = changes[item.index].oldPath { paths.append(old) }
         }
-        let patch = try await git.patch(base: base, paths: paths, indexFile: shadowIndexURL, in: worktree)
         var diffsByPath: [String: FileDiff] = [:]
-        for diff in DiffParser.parse(patch) { diffsByPath[diff.path] = diff }
+        for diff in DiffParser.parse(try await patch(paths)) { diffsByPath[diff.path] = diff }
 
         for item in batch {
             let change = changes[item.index]

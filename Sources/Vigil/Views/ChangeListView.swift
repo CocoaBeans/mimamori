@@ -6,14 +6,27 @@ struct ChangeListView: View {
     @Bindable var session: WorktreeSession
 
     var body: some View {
+        @Bindable var model = model
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
+                    Picker("Show", selection: $model.showCommits) {
+                        Text("Changes").tag(false)
+                        Text("Commits").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 9)
+                    .help("Changed files in the working tree, or the branch's commits (⇧⌘H)")
                     WorktreeHeaderView(session: session)
                     HStack(spacing: 8) {
                         FilterField()
-                        ListControls()
+                        if !model.showCommits {
+                            ListControls()
+                        }
                         Divider().frame(height: 16)
                         SessionControls(session: session)
                     }
@@ -43,6 +56,15 @@ struct ChangeListView: View {
 
     @ViewBuilder
     private var content: some View {
+        if model.showCommits {
+            CommitListView(session: session)
+        } else {
+            changeList
+        }
+    }
+
+    @ViewBuilder
+    private var changeList: some View {
         if session.state == nil {
             switch session.phase {
             case .failed, .missing:
@@ -342,17 +364,19 @@ struct WorktreeHeaderView: View {
                         .lineLimit(1)
                 }
             }
-            HStack(spacing: 8) {
-                BaselinePicker(session: session)
-                    .controlSize(.small)
-                if let state = session.state, state.baseline.baseline != .head {
-                    Text(state.baseline.label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+            if !model.showCommits {
+                HStack(spacing: 8) {
+                    BaselinePicker(session: session)
+                        .controlSize(.small)
+                    if let state = session.state, state.baseline.baseline != .head {
+                        Text(state.baseline.label)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
             if let start = session.startSnapshot {
                 HStack(spacing: 6) {
@@ -394,7 +418,7 @@ struct FilterField: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Filter files", text: $model.filterText)
+            TextField(model.showCommits ? "Filter commits" : "Filter files", text: $model.filterText)
                 .textFieldStyle(.plain)
                 .focused($focused)
                 .onExitCommand {
