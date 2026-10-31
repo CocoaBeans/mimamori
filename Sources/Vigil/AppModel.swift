@@ -577,7 +577,8 @@ final class AppModel {
             let kind: ActivityKind
             var severity: Severity? = nil
             switch note.kind {
-            case .sessionStarted, .sessionEnded, .notification: kind = .agentSession
+            case .sessionStarted, .sessionEnded, .notification, .sharedWorktree: kind = .agentSession
+            case .collision: kind = .agentAttention; severity = .warning
             case .turnStarted, .turnFinished: kind = .agentTurn
             case .toolCall:
                 switch settings.agentToolCallsInFeed {

@@ -19,6 +19,16 @@ public enum AgentActivity: Sendable, Hashable, Codable {
         }
     }
 
+    /// Lower is more pressing: waiting on you, then working, then ready, then ended.
+    public var urgency: Int {
+        switch self {
+        case .needsPermission, .askedQuestion: 0
+        case .working: 1
+        case .ready: 2
+        case .idle: 3
+        }
+    }
+
     public var title: String {
         switch self {
         case .working(let tool, _): tool.map { "working · \($0)" } ?? "working"
@@ -130,6 +140,14 @@ public struct AgentStatus: Sendable, Hashable, Codable {
         self.recentToolCalls = recentToolCalls
     }
 
+    /// What tells this session apart from others in its worktree: its id, or for an agent whose
+    /// hooks send none, the agent itself.
+    public var key: String { Self.key(session: sessionID, agent: agent) }
+
+    public static func key(session: String?, agent: AgentKind) -> String {
+        session.flatMap { $0.isEmpty ? nil : $0 } ?? "agent:" + agent.id
+    }
+
     /// The current turn's tool calls, or the last turn's once it has ended, oldest first.
     public var turnToolCalls: [AgentToolCall] {
         guard let start = turnStartedAt ?? lastTurnStartedAt else { return Array(recentToolCalls.suffix(10)) }
@@ -152,7 +170,13 @@ public struct AgentStatus: Sendable, Hashable, Codable {
 
 /// A feed-worthy consequence of applying a hook event.
 public struct AgentNote: Sendable, Hashable {
-    public enum Kind: String, Sendable { case sessionStarted, sessionEnded, turnStarted, turnFinished, needsPermission, waiting, toolCall, notification }
+    public enum Kind: String, Sendable {
+        case sessionStarted, sessionEnded, turnStarted, turnFinished, needsPermission, waiting, toolCall, notification
+        /// A second agent started working in the same worktree.
+        case sharedWorktree
+        /// Two agents edited the same file.
+        case collision
+    }
     public var kind: Kind
     public var title: String
     public var detail: String?
