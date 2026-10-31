@@ -39,7 +39,7 @@ cask. These items gate it.
 
 - [ ] A privacy statement: no network access, no telemetry, what is written to disk and where
       (expanding the README's "Privacy and footprint").
-- [ ] Choose and confirm the open-source license; add CONTRIBUTING and a security contact.
+- [ ] Add CONTRIBUTING and a security contact (the code is already MIT licensed).
 - [ ] Screenshots and a short demo for the README and release page.
 
 ## Later
