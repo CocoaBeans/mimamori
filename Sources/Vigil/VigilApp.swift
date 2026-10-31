@@ -95,7 +95,8 @@ struct VigilCommands: Commands {
                 .keyboardShortcut("f")
             Toggle("Flagged Only", isOn: Binding(get: { model.flaggedOnly }, set: { model.flaggedOnly = $0 }))
                 .keyboardShortcut("f", modifiers: [.command, .shift])
-            Toggle("Hide Reviewed Files", isOn: Binding(get: { model.hideReviewed }, set: { model.hideReviewed = $0 }))
+            Toggle("Only Files to Review", isOn: Binding(get: { model.hideReviewed }, set: { model.hideReviewed = $0 }))
+                .keyboardShortcut("r", modifiers: [.command, .option])
             Toggle("Only Worktrees with Agents", isOn: Binding(get: { model.sidebarAgentsOnly }, set: { model.sidebarAgentsOnly = $0 }))
             Toggle("Wrap Diff Lines", isOn: Binding(
                 get: { model.settings.wrapDiffLines },

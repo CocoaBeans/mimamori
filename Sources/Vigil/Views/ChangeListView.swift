@@ -108,6 +108,9 @@ struct ChangeListView: View {
                 }
                 .listStyle(.inset)
                 .animation(.default, value: rows.map(\.id))
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    HiddenChangesBar(hidden: model.hiddenChanges(in: session))
+                }
             }
         }
     }
@@ -118,22 +121,118 @@ struct ChangeListView: View {
 
     @ViewBuilder
     private var emptyList: some View {
+        let hidden = model.hiddenChanges(in: session)
         if session.changes.isEmpty {
             ContentUnavailableView("No Changes", systemImage: "checkmark.circle",
                                    description: Text("The working tree matches \(session.state?.baseline.label ?? "the baseline")."))
-        } else if !model.filterText.trimmingCharacters(in: .whitespaces).isEmpty {
+        } else if hidden.reasons == [.search] {
             ContentUnavailableView.search(text: model.filterText)
-        } else if model.hideReviewed && session.unreviewedCount == 0 {
+        } else if hidden.reasons == [.reviewed] {
             ContentUnavailableView {
-                Label("Everything Reviewed", systemImage: "checkmark.circle")
+                Label("Nothing Left to Review", systemImage: "checkmark.circle")
             } description: {
-                Text("You have reviewed all \(session.changes.count) changed files. Files an agent edits again come back here.")
+                Text("You have reviewed all \(session.changes.count) changed files, and To review hides them. Files an agent edits again come back here.")
             } actions: {
                 Button("Show Reviewed Files") { model.hideReviewed = false }
             }
         } else {
-            ContentUnavailableView("Nothing to Show", systemImage: "line.3.horizontal.decrease.circle",
-                                   description: Text(emptyFilterDescription))
+            ContentUnavailableView {
+                Label("Nothing to Show", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text(emptyFilterDescription + " " + hidden.summary(searchText: model.filterText) + ".")
+            } actions: {
+                Button("Show All Files") { model.showAllChanges() }
+            }
+        }
+    }
+}
+
+/// The header's review count, which doubles as the To review filter: on, the list shows only
+/// files you have not reviewed yet.
+struct ToReviewToggle: View {
+    @Environment(AppModel.self) private var model
+    let session: WorktreeSession
+
+    var body: some View {
+        @Bindable var model = model
+        let left = session.unreviewedCount
+        Toggle(isOn: $model.hideReviewed) {
+            if left == 0 {
+                Label("All reviewed", systemImage: "checkmark.circle.fill")
+            } else {
+                Label("\(left) to review", systemImage: model.hideReviewed
+                      ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+            }
+        }
+        .toggleStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(model.hideReviewed ? .accentColor : nil)
+        .fixedSize()
+        .help(model.hideReviewed
+              ? "Showing only files to review. Click to show reviewed files too (⌥⌘R)."
+              : "\(session.reviewedCount) of \(session.changes.count) reviewed. Click to show only files to review (⌥⌘R); ⌘↩ marks the selected file reviewed and moves to the next.")
+    }
+}
+
+/// Says how many files the list's filters hide, and brings them back.
+struct HiddenChangesBar: View {
+    @Environment(AppModel.self) private var model
+    let hidden: HiddenChanges
+
+    var body: some View {
+        if hidden.total > 0 {
+            VStack(spacing: 0) {
+                Divider()
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                    Text(hidden.summary(searchText: model.filterText))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 8)
+                    Button(hidden.reasons.count == 1 ? "Show" : "Show All") { model.showAllChanges() }
+                        .buttonStyle(.borderless)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            .background(.bar)
+        }
+    }
+}
+
+/// How many changed files the list's filters hide, each counted under the first filter that hides it.
+struct HiddenChanges: Equatable {
+    enum Reason: Hashable { case reviewed, unflagged, search }
+    var reviewed = 0
+    var unflagged = 0
+    var search = 0
+
+    var total: Int { reviewed + unflagged + search }
+    var reasons: Set<Reason> {
+        var reasons = Set<Reason>()
+        if reviewed > 0 { reasons.insert(.reviewed) }
+        if unflagged > 0 { reasons.insert(.unflagged) }
+        if search > 0 { reasons.insert(.search) }
+        return reasons
+    }
+
+    /// "4 reviewed files hidden", or for several filters "6 files hidden by To review and Flagged only".
+    func summary(searchText: String) -> String {
+        func files(_ count: Int) -> String { count == 1 ? "1 file" : "\(count) files" }
+        switch reasons {
+        case [.reviewed]: return reviewed == 1 ? "1 reviewed file hidden" : "\(reviewed) reviewed files hidden"
+        case [.unflagged]: return "\(files(unflagged)) without flags hidden"
+        case [.search]: return "\(files(search)) not matching “\(searchText.trimmingCharacters(in: .whitespaces))”"
+        default:
+            var names: [String] = []
+            if reviewed > 0 { names.append("To review") }
+            if unflagged > 0 { names.append("Flagged only") }
+            if search > 0 { names.append("the filter") }
+            let joined = names.count > 1 ? names.dropLast().joined(separator: ", ") + " and " + names.last! : names.joined()
+            return "\(files(total)) hidden by \(joined)"
         }
     }
 }
@@ -147,6 +246,29 @@ struct ListedChange: Identifiable, Hashable {
 }
 
 extension AppModel {
+    /// What the list's filters hide in `session`, for saying so under the list.
+    func hiddenChanges(in session: WorktreeSession) -> HiddenChanges {
+        let filter = filterText.trimmingCharacters(in: .whitespaces).lowercased()
+        var hidden = HiddenChanges()
+        for change in session.changes {
+            if hideReviewed && session.reviewStatus(of: change).isReviewed {
+                hidden.reviewed += 1
+            } else if flaggedOnly && !change.isFlagged {
+                hidden.unflagged += 1
+            } else if !filter.isEmpty && !change.path.lowercased().contains(filter) && !(change.oldPath?.lowercased().contains(filter) ?? false) {
+                hidden.search += 1
+            }
+        }
+        return hidden
+    }
+
+    /// Turns off every filter on the change list.
+    func showAllChanges() {
+        hideReviewed = false
+        flaggedOnly = false
+        filterText = ""
+    }
+
     /// The session's changes as the list shows them: filtered and sorted.
     func listedChanges(in session: WorktreeSession) -> [ListedChange] {
         let now = self.now
@@ -326,15 +448,10 @@ struct WorktreeHeaderView: View {
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 8) {
-                    let reviewed = session.reviewedCount
-                    if reviewed > 0 {
-                        Label("\(reviewed) of \(session.changes.count) reviewed",
-                              systemImage: reviewed == session.changes.count ? "checkmark.circle.fill" : "checkmark.circle")
-                            .foregroundStyle(.secondary)
-                            .help("Files you have marked reviewed. ⌘↩ marks the selected file and moves to the next.")
-                    } else {
-                        Text("\(session.changes.count) files")
-                            .foregroundStyle(.secondary)
+                    Text("\(session.changes.count) files")
+                        .foregroundStyle(.secondary)
+                    if !model.showCommits && !session.changes.isEmpty {
+                        ToReviewToggle(session: session)
                     }
                     DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions)
                     AttentionBadgeButton(sessions: [session], arrowEdge: .top, debugID: "header")
@@ -444,7 +561,7 @@ struct FilterField: View {
     }
 }
 
-/// Flagged-only and hide-reviewed toggles and the sort menu for the change list.
+/// The flagged-only toggle and the sort menu for the change list.
 struct ListControls: View {
     @Environment(AppModel.self) private var model
 
@@ -458,13 +575,6 @@ struct ListControls: View {
             .buttonStyle(.borderless)
             .tint(.orange)
             .help("Show only files that need attention (⇧⌘F)")
-
-            Toggle(isOn: $model.hideReviewed) {
-                Image(systemName: model.hideReviewed ? "eye.slash.fill" : "eye.slash")
-            }
-            .toggleStyle(.button)
-            .buttonStyle(.borderless)
-            .help(model.hideReviewed ? "Reviewed files are hidden. Click to show them." : "Hide files you have reviewed")
 
             Menu {
                 Picker("Sort By", selection: $model.sortOrder) {
