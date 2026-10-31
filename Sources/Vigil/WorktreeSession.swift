@@ -68,6 +68,8 @@ final class WorktreeSession: Identifiable {
 
     private var watcher: FSEventsWatcher?
     private var pendingPaths: Set<String> = []
+    /// Folders git ignores, as the inspector learned them: changes inside need no refresh.
+    private var ignoredFolders: Set<String> = []
     private var pendingGitChange = false
     private var pendingForced = false
     private var pendingQuiet = false
@@ -181,7 +183,7 @@ final class WorktreeSession: Identifiable {
             Task { await inspector?.setConfiguration(inspectorConfiguration) }
             requestRefresh(force: true)
         }
-        if previous.safetyPollSeconds != settings.safetyPollSeconds {
+        if previous.backstopPollSeconds != settings.backstopPollSeconds {
             startSafetyPolling()
         }
     }
@@ -245,6 +247,7 @@ final class WorktreeSession: Identifiable {
         var touchedWorktree = false
         var touchedGit = false
         var forced = false
+        var rulesChanged = false
 
         for event in events {
             if event.rootChanged {
@@ -261,6 +264,7 @@ final class WorktreeSession: Identifiable {
             if path.hasSuffix(".lock") { continue }
 
             if let relative = relativePath(path, under: gitDir) ?? relativePath(path, under: commonDir) {
+                if relative == "info/exclude" { rulesChanged = true }
                 if Self.interestingGitFiles.contains(relative)
                     || relative.hasPrefix("refs/heads/") || relative.hasPrefix("refs/remotes/")
                     || relative.hasPrefix("refs/tags/") || relative == "refs/stash" || relative.hasPrefix("rebase-") {
@@ -270,11 +274,19 @@ final class WorktreeSession: Identifiable {
             }
             if let relative = relativePath(path, under: topLevel) {
                 if relative == ".git" || relative.hasPrefix(".git/") { continue }
+                // A build in an ignored folder sends thousands of these; none needs git. Nor does a
+                // .gitignore in there (node_modules is full of them): git never reads it.
+                if WorktreeInspector.isInside(relative, ignoredFolders) { continue }
+                if relative == ".gitignore" || relative.hasSuffix("/.gitignore") { rulesChanged = true }
                 if pendingPaths.count < 2000 { pendingPaths.insert(relative) } else { forced = true }
                 touchedWorktree = true
             }
         }
 
+        if rulesChanged, !ignoredFolders.isEmpty {
+            ignoredFolders = []
+            Task { await inspector?.forgetIgnoredFolders() }
+        }
         guard touchedWorktree || touchedGit || forced else { return }
         if touchedGit { pendingGitChange = true }
         if forced { pendingForced = true }
@@ -291,7 +303,7 @@ final class WorktreeSession: Identifiable {
 
     private func startSafetyPolling() {
         pollTask?.cancel()
-        let interval = watcherActive ? settings.safetyPollSeconds : 3
+        let interval = watcherActive ? settings.backstopPollSeconds : 3
         guard interval > 0 else { return }
         // Stagger sessions so a safety sweep never lights up every row at once.
         let initialDelay = Double.random(in: 0...interval)
@@ -346,8 +358,10 @@ final class WorktreeSession: Identifiable {
             pendingForced = false
             pendingQuiet = false
 
-            if !forced, !gitChanged, !paths.isEmpty, let inspector, await inspector.allIgnored(Array(paths)) {
-                continue
+            if !forced, !gitChanged, !paths.isEmpty, let inspector {
+                let skip = await inspector.allIgnored(Array(paths))
+                ignoredFolders = await inspector.ignoredFolders
+                if skip { continue }
             }
             await performRefresh(quiet: quiet)
         }

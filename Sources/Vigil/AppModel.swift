@@ -60,6 +60,7 @@ final class AppModel {
     private var persisted: PersistedState
     private var saveTask: Task<Void, Never>?
     private var tickerTask: Task<Void, Never>?
+    @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     private var repositoryWatchers: [UUID: FSEventsWatcher] = [:]
     private var rediscoverTasks: [UUID: Task<Void, Never>] = [:]
     private let notifier = Notifier()
@@ -82,6 +83,7 @@ final class AppModel {
         self.activityLog = ActivityLog(url: Persistence.activityURL,
                                        retention: Double(persisted.settings.activityRetentionDays) * 86_400)
         startTicker()
+        refreshAfterWaking()
         agentHub.resolveWorktree = { [weak self] cwd in self?.worktree(containing: cwd) }
         agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
         DebugHooks.start(model: self)
@@ -191,6 +193,23 @@ final class AppModel {
             gitError = nil
         } else {
             gitError = "No usable git binary was found. Install Xcode Command Line Tools or Homebrew git, or set a path in Settings."
+        }
+    }
+
+    /// File events can go missing while the Mac sleeps, and the backstop poll is rare, so look
+    /// at every worktree once after waking: quietly, spread over a few seconds rather than at once.
+    private func refreshAfterWaking() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                for session in self?.sessions.values.map({ $0 }) ?? [] {
+                    let delay = Double.random(in: 1...10)
+                    Task { @MainActor [weak session] in
+                        try? await Task.sleep(for: .seconds(delay))
+                        session?.requestRefresh(quiet: true)
+                    }
+                }
+            }
         }
     }
 

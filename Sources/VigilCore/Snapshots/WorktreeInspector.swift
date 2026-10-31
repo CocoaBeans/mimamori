@@ -125,11 +125,56 @@ public actor WorktreeInspector {
         return await git.commits(from: base, to: head, in: worktree, limit: limit).map { CommitSummary(oid: $0.oid, subject: $0.subject) }
     }
 
+    /// Folders git ignores with nothing tracked inside (`.build`, `node_modules`), learned from
+    /// changes in them, so later changes there need no git at all. Forgotten when ignore rules change.
+    public private(set) var ignoredFolders: Set<String> = []
+
     /// True when every path is ignored by git, so a refresh can be skipped.
     public func allIgnored(_ relativePaths: [String]) async -> Bool {
         guard !relativePaths.isEmpty else { return false }
-        let ignored = await git.ignoredPaths(among: relativePaths, in: worktree)
-        return relativePaths.allSatisfy { ignored.contains($0) }
+        let unknown = relativePaths.filter { !Self.isInside($0, ignoredFolders) }
+        if unknown.isEmpty { return true }
+        // Ask about each path's folders too: the shallowest one ignored is the folder to remember.
+        var asked = Set(unknown)
+        for path in unknown.prefix(200) {
+            for folder in Self.folders(of: path).prefix(4) { asked.insert(folder + "/") }
+        }
+        let ignored = await git.ignoredPaths(among: Array(asked), in: worktree)
+        var learned = Set<String>()
+        for path in unknown where ignored.contains(path) {
+            if let folder = Self.folders(of: path).first(where: { ignored.contains($0 + "/") }) { learned.insert(folder) }
+        }
+        if !learned.isEmpty {
+            // A folder git still tracks files in keeps being watched.
+            let tracked = await git.trackedFiles(under: Array(learned), in: worktree)
+            learned = learned.filter { folder in !tracked.contains { $0.hasPrefix(folder + "/") } }
+            if ignoredFolders.count + learned.count > 500 { ignoredFolders = [] }
+            ignoredFolders.formUnion(learned)
+        }
+        return unknown.allSatisfy { ignored.contains($0) }
+    }
+
+    /// Ignore rules changed (a `.gitignore` or `info/exclude` was edited): learn the folders again.
+    public func forgetIgnoredFolders() {
+        ignoredFolders = []
+    }
+
+    /// Whether `path` (relative) is one of `ignored` or inside one.
+    public nonisolated static func isInside(_ path: String, _ ignored: Set<String>) -> Bool {
+        guard !ignored.isEmpty else { return false }
+        if ignored.contains(path) { return true }
+        return folders(of: path).contains { ignored.contains($0) }
+    }
+
+    /// The folders a relative path sits in, outermost first: "a/b/c.o" → ["a", "a/b"].
+    nonisolated static func folders(of path: String) -> [String] {
+        var result: [String] = []
+        var index = path.startIndex
+        while let slash = path[index...].firstIndex(of: "/") {
+            result.append(String(path[..<slash]))
+            index = path.index(after: slash)
+        }
+        return result
     }
 
     // MARK: Diffs
@@ -536,6 +581,12 @@ public struct RefRecord: Sendable, Hashable {
 }
 
 extension GitClient {
+    /// Tracked files under the given folders, relative to the worktree.
+    public func trackedFiles(under folders: [String], in worktree: URL) async -> [String] {
+        guard !folders.isEmpty, let result = try? await run(["ls-files", "-z", "--"] + folders, in: worktree) else { return [] }
+        return result.stdout.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
+    }
+
     /// Refs with their commit, tree and committer date in one call.
     public func refRecords(withPrefix prefix: String, in worktree: URL) async throws -> [RefRecord] {
         let result = try await run(

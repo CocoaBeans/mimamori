@@ -5,7 +5,10 @@ struct AppSettings: Codable, Hashable, Sendable {
     var gitPathOverride: String = ""
     var refreshDebounceMilliseconds: Int = 400
     var maxRefreshLatencySeconds: Double = 2.5
-    var safetyPollSeconds: Double = 45
+    /// How often a worktree is refreshed with no file event to prompt it. File events are reliable,
+    /// so this is a rare backstop; it was `safetyPollSeconds`, every 45 s, which with dozens of
+    /// worktrees ran git every second or two. The new name leaves that saved value behind.
+    var backstopPollSeconds: Double = 600
     var snapshotsEnabled: Bool = true
     var snapshotMinimumIntervalSeconds: Double = 15
     var maxSnapshotsPerWorktree: Int = 200
@@ -44,7 +47,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         gitPathOverride = try c.decodeIfPresent(String.self, forKey: .gitPathOverride) ?? defaults.gitPathOverride
         refreshDebounceMilliseconds = try c.decodeIfPresent(Int.self, forKey: .refreshDebounceMilliseconds) ?? defaults.refreshDebounceMilliseconds
         maxRefreshLatencySeconds = try c.decodeIfPresent(Double.self, forKey: .maxRefreshLatencySeconds) ?? defaults.maxRefreshLatencySeconds
-        safetyPollSeconds = try c.decodeIfPresent(Double.self, forKey: .safetyPollSeconds) ?? defaults.safetyPollSeconds
+        backstopPollSeconds = try c.decodeIfPresent(Double.self, forKey: .backstopPollSeconds) ?? defaults.backstopPollSeconds
         snapshotsEnabled = try c.decodeIfPresent(Bool.self, forKey: .snapshotsEnabled) ?? defaults.snapshotsEnabled
         snapshotMinimumIntervalSeconds = try c.decodeIfPresent(Double.self, forKey: .snapshotMinimumIntervalSeconds) ?? defaults.snapshotMinimumIntervalSeconds
         maxSnapshotsPerWorktree = try c.decodeIfPresent(Int.self, forKey: .maxSnapshotsPerWorktree) ?? defaults.maxSnapshotsPerWorktree

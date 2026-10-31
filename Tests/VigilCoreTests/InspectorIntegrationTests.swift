@@ -150,6 +150,36 @@ struct InspectorIntegrationTests {
         #expect(await inspector.snapshotDiskUsage() == 0)
     }
 
+    @Test func ignoredFoldersAreLearnedSoTheirChangesNeedNoGit() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        try box.write(".gitignore", "ignored/\n.build/\nlogs/\n*.o\n")
+        try box.write("logs/keep.txt", "kept\n")
+        try await box.sh(["add", "-A"])
+        try await box.sh(["add", "-f", "logs/keep.txt"])
+        try await box.sh(["commit", "-q", "-m", "Ignore rules"])
+        try box.write(".build/debug/obj/a.o", "x")
+        try box.write("pkg/Foo/.build/z", "x")
+        try box.write("logs/new.log", "x")
+        let inspector = try await WorktreeInspector(git: box.git, worktree: box.repo, shadowIndexDirectory: box.indexDir)
+
+        #expect(await inspector.allIgnored([".build/debug/obj/a.o", "pkg/Foo/.build/z"]))
+        #expect(await inspector.ignoredFolders == [".build", "pkg/Foo/.build"])
+        // Ignored, but git tracks a file in there: the folder stays watched.
+        #expect(await inspector.allIgnored(["logs/new.log"]))
+        #expect(await inspector.ignoredFolders.contains("logs") == false)
+        #expect(await inspector.allIgnored(["src/app.py"]) == false)
+        #expect(await inspector.allIgnored([".build/debug/obj/a.o", "src/app.py"]) == false)
+        // Known folders answer without asking git; a path that merely starts the same does not count.
+        #expect(WorktreeInspector.isInside(".build/release/b.o", await inspector.ignoredFolders))
+        #expect(WorktreeInspector.isInside(".build", await inspector.ignoredFolders))
+        #expect(!WorktreeInspector.isInside(".buildrc", await inspector.ignoredFolders))
+        #expect(!WorktreeInspector.isInside("pkg/Foo/Sources/a.swift", await inspector.ignoredFolders))
+
+        await inspector.forgetIgnoredFolders()
+        #expect(await inspector.ignoredFolders.isEmpty)
+    }
+
     @Test func linkedWorktreeIsDiscovered() async throws {
         let box = try await makeSandbox()
         defer { box.cleanup() }
