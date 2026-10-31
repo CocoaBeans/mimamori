@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Testing
 @testable import VigilCore
 
@@ -442,6 +443,74 @@ struct SessionPlacementTests {
         var placement = SessionPlacement()
         #expect(placement.place(session: nil, cwdMatch: nil, pathMatch: "/p/a", changesFiles: false).worktree == "/p/a")
         #expect(placement.place(session: nil, cwdMatch: nil, pathMatch: nil, changesFiles: true).worktree == nil)
+    }
+
+    @Test func theRecordedDirectoryPlacesASessionBeforeAnyTool() {
+        var placement = SessionPlacement()
+        // A turn starts: no path yet, but Hermes records the session working in harbor.
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: "/p/harbor").worktree == "/p/harbor")
+        // A read elsewhere does not move it.
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: false, homeMatch: "/p/harbor").worktree == "/p/harbor")
+        // A change elsewhere does, and sticks.
+        let write = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: true, homeMatch: "/p/harbor")
+        #expect(write == .init(worktree: "/p/ledger", movedFrom: "/p/harbor"))
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: "/p/harbor").worktree == "/p/ledger")
+    }
+
+    @Test func theRecordedDirectoryIsLookedUpOnlyWhenNeeded() {
+        var placement = SessionPlacement()
+        var lookups = 0
+        func home() -> String? { lookups += 1; return "/p/harbor" }
+        _ = placement.place(session: "h1", cwdMatch: "/p/vigil", pathMatch: nil, changesFiles: false, homeMatch: home())
+        _ = placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: home())
+        #expect(lookups == 0)
+        // Nor for events that name no session.
+        #expect(placement.place(session: nil, cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: home()).worktree == nil)
+        #expect(lookups == 0)
+        _ = placement.place(session: "h2", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: home())
+        #expect(lookups == 1)
+    }
+}
+
+@Suite("Hermes session records")
+struct HermesSessionTests {
+    /// A database shaped like Hermes's state.db, as far as Vigil reads it.
+    private func database(_ statements: [String]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("vigil-hermes-\(UUID().uuidString).db")
+        var db: OpaquePointer?
+        try #require(sqlite3_open(url.path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        for statement in statements {
+            try #require(sqlite3_exec(db, statement, nil, nil, nil) == SQLITE_OK, "\(statement)")
+        }
+        return url
+    }
+
+    @Test func readsWhereASessionWorks() throws {
+        let url = try database([
+            "PRAGMA journal_mode=WAL",
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, cwd TEXT, git_repo_root TEXT)",
+            "INSERT INTO sessions VALUES ('20260903_173947_d73992', 'tui', '/Users/x/Projects/harbor', '/Users/x/Projects/harbor')",
+            "INSERT INTO sessions VALUES ('repo-only', 'cli', NULL, '/Users/x/Projects/ledger')",
+            "INSERT INTO sessions VALUES ('nowhere', 'local', '', NULL)",
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(HermesSessions.directory(forSession: "20260903_173947_d73992", in: url) == "/Users/x/Projects/harbor")
+        #expect(HermesSessions.directory(forSession: "repo-only", in: url) == "/Users/x/Projects/ledger")
+        #expect(HermesSessions.directory(forSession: "nowhere", in: url) == nil)
+        // Not written yet: its first turn has not started.
+        #expect(HermesSessions.directory(forSession: "new", in: url) == nil)
+        // Quotes in an id are data, not SQL.
+        #expect(HermesSessions.directory(forSession: "x' OR '1'='1", in: url) == nil)
+    }
+
+    @Test func anUnexpectedDatabaseReadsAsUnknown() throws {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("vigil-missing-\(UUID().uuidString).db")
+        #expect(HermesSessions.directory(forSession: "s", in: missing) == nil)
+        #expect(!FileManager.default.fileExists(atPath: missing.path))
+        let other = try database(["CREATE TABLE sessions (id TEXT PRIMARY KEY, title TEXT)", "INSERT INTO sessions VALUES ('s', 't')"])
+        defer { try? FileManager.default.removeItem(at: other) }
+        #expect(HermesSessions.directory(forSession: "s", in: other) == nil)
     }
 }
 

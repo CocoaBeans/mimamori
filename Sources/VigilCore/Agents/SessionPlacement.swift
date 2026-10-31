@@ -6,7 +6,8 @@ import Foundation
 /// as Hermes report their own process directory instead, so the paths a tool touches have to
 /// stand in. Those differ in weight: changing a file or running a command somewhere is firm
 /// evidence the session works there, while reading a file elsewhere is not. A read only places
-/// a session that has nothing firmer yet.
+/// a session that has nothing firmer yet. The directory the agent records for the session (see
+/// `HermesSessions`) places it before any tool runs, and gives way to a change made elsewhere.
 public struct SessionPlacement: Sendable {
     public struct Decision: Equatable, Sendable {
         public var worktree: String?
@@ -27,13 +28,18 @@ public struct SessionPlacement: Sendable {
     ///   - cwdMatch: the worktree containing the event's working directory.
     ///   - pathMatch: the worktree containing a path the tool touches or mentions.
     ///   - changesFiles: whether the tool changes files or runs commands.
-    public mutating func place(session: String?, cwdMatch: String?, pathMatch: String?, changesFiles: Bool) -> Decision {
+    ///   - homeMatch: the worktree containing the directory the agent records for the session;
+    ///     looked up only when nothing firmer places it.
+    public mutating func place(session: String?, cwdMatch: String?, pathMatch: String?, changesFiles: Bool,
+                               homeMatch: @autoclosure () -> String? = nil) -> Decision {
         let previous = session.flatMap { bySession[$0] }
         let chosen: Entry?
         if let firm = cwdMatch ?? (changesFiles ? pathMatch : nil) {
             chosen = Entry(worktree: firm, firm: true)
         } else if let previous, previous.firm {
             chosen = previous
+        } else if session != nil, let home = homeMatch() {
+            chosen = Entry(worktree: home, firm: true)
         } else if let pathMatch {
             chosen = Entry(worktree: pathMatch, firm: false)
         } else {

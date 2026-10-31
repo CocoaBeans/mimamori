@@ -87,6 +87,8 @@ final class AgentHub {
     @ObservationIgnored private var lastPublishedAt = Date.distantPast
     /// Runs only while a Claude Code shell command waits on your permission.
     @ObservationIgnored private var approvalWatch: Task<Void, Never>?
+    /// Where Hermes says each of its sessions works, and when that was looked up.
+    @ObservationIgnored private var hermesDirectories: [String: (directory: String?, at: Date)] = [:]
 
     /// A busy agent sends several hook events a second, and every change to `statuses` repaints
     /// each window that shows an agent. A change of state (to waiting on you, ready, ended)
@@ -193,7 +195,8 @@ final class AgentHub {
             }
         }
         let decision = placement.place(session: event.sessionID, cwdMatch: event.cwd.flatMap(resolveWorktree),
-                                       pathMatch: pathMatch, changesFiles: event.isMutatingTool)
+                                       pathMatch: pathMatch, changesFiles: event.isMutatingTool,
+                                       homeMatch: self.hermesDirectory(for: event).flatMap(self.resolveWorktree))
         guard let worktree = decision.worktree else {
             eventsUnmatched += 1
             hold(event)
@@ -259,6 +262,22 @@ final class AgentHub {
         guard var machine = machines[worktree], machine.noteApproved() else { return }
         machines[worktree] = machine
         schedulePublish(urgent: true)
+    }
+
+    /// The directory Hermes records for the event's session. A session's row is written when its
+    /// first turn starts, so a miss is asked again a few seconds later.
+    private func hermesDirectory(for event: HookEvent) -> String? {
+        guard event.agent == .hermes, let session = event.sessionID, !session.isEmpty else { return nil }
+        let now = Date()
+        if let known = hermesDirectories[session], now.timeIntervalSince(known.at) < (known.directory == nil ? 5 : 60) {
+            return known.directory
+        }
+        let directory = HermesSessions.directory(forSession: session, in: HermesHookInstaller.stateDatabaseURL)
+        hermesDirectories[session] = (directory, now)
+        if hermesDirectories.count > 200 {
+            hermesDirectories = hermesDirectories.filter { now.timeIntervalSince($0.value.at) < 600 }
+        }
+        return directory
     }
 
     private func hold(_ event: HookEvent) {

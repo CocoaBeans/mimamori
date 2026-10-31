@@ -13,6 +13,8 @@ enum HermesHookInstaller {
     static var scriptPathForConfig: String { "~/.hermes/" + HermesHooksConfig.scriptRelativePath }
 
     static var allowlistURL: URL { hermesHome.appendingPathComponent(HermesHooksConfig.allowlistFileName) }
+    /// Hermes's session database, which records where each session works.
+    static var stateDatabaseURL: URL { hermesHome.appendingPathComponent("state.db") }
 
     /// Vigil's hook events Hermes has not been allowed to run yet.
     static func unapprovedEvents() -> [String] {
