@@ -229,6 +229,28 @@ struct AgentStatusBanner: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Across the whole banner: it is about every agent here, not the one below.
+            if let collision = presence.collision {
+                AgentCollisionNote(collision: collision, worktree: details?.worktree, onDismiss: details?.onDismissCollision)
+                Divider()
+            }
+            agentBody
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(presence.alertTint.opacity(presence.needsAttention ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(presence.alertTint.opacity(presence.needsAttention ? 0.5 : 0.2), lineWidth: 1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .help(presence.source == .hooks ? "Reported by the agent's hooks" : "An agent process has this worktree as its working directory. Install hooks for live status.")
+    }
+
+    private var agentBody: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: presence.systemImage)
                 .font(.title2)
@@ -236,10 +258,6 @@ struct AgentStatusBanner: View {
                 .frame(width: 28)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 4) {
-                if let collision = presence.collision {
-                    AgentCollisionNote(collision: collision, worktree: details?.worktree, onDismiss: details?.onDismissCollision)
-                        .padding(.bottom, 4)
-                }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     // Shorten the words before truncating them, so a narrow column still reads.
                     ViewThatFits(in: .horizontal) {
@@ -267,17 +285,6 @@ struct AgentStatusBanner: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(presence.alertTint.opacity(presence.needsAttention ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(presence.alertTint.opacity(presence.needsAttention ? 0.5 : 0.2), lineWidth: 1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
-        .help(presence.source == .hooks ? "Reported by the agent's hooks" : "An agent process has this worktree as its working directory. Install hooks for live status.")
     }
 
     /// The clock, the step count, and small buttons for the agent's app, the summary and collapsing.
@@ -378,21 +385,14 @@ struct AgentCollisionNote: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(collision.title)
-                    .fontWeight(.semibold)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                if collision.files.count > 2 {
-                    Text(files)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Text("Agents in one folder can undo each other's work. Stop one, or give it a worktree of its own.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Warning")
+                warning
             }
+            // Read as one warning; Dismiss stays a button of its own.
+            .accessibilityElement(children: .combine)
             Spacer(minLength: 6)
             if let onDismiss {
                 Button("Dismiss", action: onDismiss)
@@ -401,7 +401,25 @@ struct AgentCollisionNote: View {
             }
         }
         .font(.callout)
-        .accessibilityElement(children: .combine)
+    }
+
+    private var warning: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(collision.title)
+                .fontWeight(.semibold)
+                .foregroundStyle(.orange)
+            if collision.files.count > 2 {
+                Text(files)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            // A line limit, not a fixed size: measured at a narrow width, a fixed-size text grows
+            // tall enough to push the whole window's content out of view.
+            Text("Agents in one folder can undo each other's work. Stop one, or give it a worktree of its own.")
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
+        }
     }
 }
 

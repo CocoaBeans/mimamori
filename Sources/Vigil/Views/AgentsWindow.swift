@@ -225,13 +225,14 @@ struct AgentDashboardRow: View {
                 if let collision = presence.collision {
                     AgentCollisionNote(collision: collision, worktree: row.session.id, onDismiss: onDismissCollision)
                 }
-                if !presence.others.isEmpty {
-                    OtherAgentsList(others: presence.others, now: now, worktree: row.session.id)
-                }
                 if detailed {
                     details
                 } else {
                     compactFooter
+                }
+                // After this agent's own steps and files, so none of them reads as another's.
+                if !presence.others.isEmpty {
+                    OtherAgentsList(others: presence.others, now: now, worktree: row.session.id)
                 }
             }
         }
