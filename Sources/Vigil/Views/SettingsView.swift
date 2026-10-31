@@ -1,13 +1,21 @@
 import SwiftUI
 import VigilCore
 
+/// The panes of the Settings window, so a button elsewhere can open the one it is about.
+enum SettingsTab: String, Hashable, CaseIterable {
+    case general, snapshots, attention, agents
+}
+
 struct SettingsView: View {
+    @Environment(AppModel.self) private var model
+
     var body: some View {
-        TabView {
-            Tab("General", systemImage: "gear") { GeneralSettingsView() }
-            Tab("Snapshots", systemImage: "camera") { SnapshotSettingsView() }
-            Tab("Attention", systemImage: "exclamationmark.triangle") { AttentionSettingsView() }
-            Tab("Agents", systemImage: "sparkles") { AgentSettingsView() }
+        @Bindable var model = model
+        TabView(selection: $model.settingsTab) {
+            Tab("General", systemImage: "gear", value: .general) { GeneralSettingsView() }
+            Tab("Snapshots", systemImage: "camera", value: .snapshots) { SnapshotSettingsView() }
+            Tab("Attention", systemImage: "exclamationmark.triangle", value: .attention) { AttentionSettingsView() }
+            Tab("Agents", systemImage: "sparkles", value: .agents) { AgentSettingsView() }
         }
         .frame(width: 560, height: 560)
     }

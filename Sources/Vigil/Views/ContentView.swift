@@ -4,6 +4,7 @@ import VigilCore
 struct ContentView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         @Bindable var model = model
@@ -37,6 +38,11 @@ struct ContentView: View {
         .frame(minHeight: 480)
         .onAppear {
             if model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
+            // "settings:<pane>": open Settings on that pane, as the attention popover's button does.
+            if let tab = SettingsTab.allCases.first(where: { model.debugFlags.contains("settings:" + $0.rawValue) }) {
+                model.settingsTab = tab
+                openSettings()
+            }
         }
         .sheet(item: $model.summaryRequest) { request in
             if let session = model.sessions[request.id] {

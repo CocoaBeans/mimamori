@@ -35,6 +35,8 @@ final class AppModel {
     var selectedWorktreeID: String?
     /// The worktree whose session summary sheet is open.
     var summaryRequest: SummaryRequest?
+    /// The pane the Settings window shows; set it before opening Settings to land on that pane.
+    var settingsTab: SettingsTab = .general
     let launchedAt = Date()
     /// Where the activity record begins: the oldest entry kept on disk, or this launch.
     private(set) var activityHistoryStart = Date()

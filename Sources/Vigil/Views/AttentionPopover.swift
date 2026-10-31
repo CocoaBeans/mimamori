@@ -94,6 +94,7 @@ struct AttentionPopover: View {
             Divider()
             HStack {
                 Button("Rules in Settings…") {
+                    model.settingsTab = .attention
                     openSettings()
                     dismiss()
                 }
