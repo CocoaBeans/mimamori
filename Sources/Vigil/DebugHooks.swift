@@ -37,23 +37,11 @@ enum DebugHooks {
         var openedSummary = false
         var openedCommit = false
         Task { @MainActor [weak model] in
-            /// Resizes the window once it is open; Settings opens a moment after the main window.
-            var resized = windowSize == nil
-            func resize() {
-                guard !resized, let windowSize else { return }
-                let parts = windowSize.lowercased().split(separator: "x").compactMap { Double($0) }
-                if parts.count == 2, let window = NSApp.windows.first(where: {
-                    $0.styleMask.contains(.titled) && $0.isVisible && (windowTitle == nil || $0.title == windowTitle)
-                }) {
-                    window.setContentSize(NSSize(width: parts[0], height: parts[1]))
-                    window.center()
-                    resized = true
-                }
-            }
             try? await Task.sleep(for: .seconds(1.5))
-            resize()
+            let resized = windowSize.map { resizeWindow(to: $0, titled: windowTitle) } ?? true
             try? await Task.sleep(for: .seconds(1.5))
-            resize()
+            // Settings opens a moment after the main window.
+            if !resized, let windowSize { _ = resizeWindow(to: windowSize, titled: windowTitle) }
             try? await Task.sleep(for: .seconds(2))
             repeat {
                 guard let model else { return }
@@ -115,6 +103,17 @@ enum DebugHooks {
                 try? await Task.sleep(for: .seconds(interval))
             } while !Task.isCancelled
         }
+    }
+
+    /// Resizes the window titled `title` (or the first one) to `size` ("1000x640"); false when it is not open yet.
+    private static func resizeWindow(to size: String, titled title: String?) -> Bool {
+        let parts = size.lowercased().split(separator: "x").compactMap { Double($0) }
+        guard parts.count == 2, let window = NSApp.windows.first(where: {
+            $0.styleMask.contains(.titled) && $0.isVisible && (title == nil || $0.title == title)
+        }) else { return false }
+        window.setContentSize(NSSize(width: parts[0], height: parts[1]))
+        window.center()
+        return true
     }
 
     static func writeDump(model: AppModel, to path: String) {
