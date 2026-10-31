@@ -79,10 +79,14 @@ struct CommitListView: View {
                         .controlSize(.small)
                         .padding(.leading, 22)
                 }
-                ForEach(session.openCommitChanges) { change in
+                ForEach(session.shownCommitChanges) { change in
                     ChangeRow(change: change, recency: 0, lastChanged: nil, now: model.now, worktreePath: session.id)
                         .padding(.leading, 22)
                         .tag(CommitSelection.file(commit: commit.oid, path: change.path))
+                }
+                if session.hiddenCommitChangeCount > 0 {
+                    MoreCommitFilesButton(session: session)
+                        .padding(.leading, 22)
                 }
             }
         }
@@ -157,6 +161,24 @@ struct CommitRow: View {
     }
 }
 
+/// Shows more of a large commit's files: they come a page at a time.
+struct MoreCommitFilesButton: View {
+    let session: WorktreeSession
+
+    var body: some View {
+        let hidden = session.hiddenCommitChangeCount
+        Button {
+            session.showMoreCommitFiles()
+        } label: {
+            Label("Show \(min(hidden, session.openCommitFileLimit)) more of \(hidden) remaining files",
+                  systemImage: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("This commit changed \(session.openCommitChanges.count) files; they are listed a page at a time, files needing attention first.")
+    }
+}
+
 /// The detail pane for a selected commit: its message, author and files.
 struct CommitOverviewView: View {
     let session: WorktreeSession
@@ -213,11 +235,13 @@ struct CommitOverviewView: View {
                     if flagged > 0 {
                         Label("\(flagged) \(flagged == 1 ? "needs" : "need") attention", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                 }
                 .font(.callout)
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(session.openCommitChanges) { change in
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(session.shownCommitChanges) { change in
                         Button {
                             session.select(.file(commit: commit.oid, path: change.path))
                         } label: {
@@ -225,6 +249,9 @@ struct CommitOverviewView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                    }
+                    if session.hiddenCommitChangeCount > 0 {
+                        MoreCommitFilesButton(session: session)
                     }
                 }
                 if let error = session.openCommitError {

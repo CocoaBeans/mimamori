@@ -155,8 +155,8 @@ enum DebugHooks {
                 case .file(let oid, let path): "file \(oid.prefix(7)) \(path)"
                 }
             } ?? "-"
-            let files = session.openCommitChanges.map { "\($0.kind.glyph) \($0.path) +\($0.additions ?? 0) -\($0.deletions ?? 0) flags=\($0.flags.map(\.rule.rawValue))" }
-            lines.append("  open: \(session.openCommit.map { "\($0.shortOID) \($0.subject)" } ?? "-") selection=\(selection) files=\(files)")
+            let files = session.shownCommitChanges.prefix(5).map { "\($0.kind.glyph) \($0.path) +\($0.additions ?? 0) -\($0.deletions ?? 0) flags=\($0.flags.map(\.rule.rawValue))" }
+            lines.append("  open: \(session.openCommit.map { "\($0.shortOID) \($0.subject)" } ?? "-") selection=\(selection) files=\(session.openCommitChanges.count) shown=\(session.shownCommitChanges.count) hidden=\(session.hiddenCommitChangeCount) first=\(files)")
         }
         for (worktree, list) in hub.processes.sorted(by: { $0.key < $1.key }) where !list.isEmpty {
             let processes = list.map { process in

@@ -51,9 +51,14 @@ final class WorktreeSession: Identifiable {
     private(set) var commitSelection: CommitSelection?
     /// The commit expanded in the Commits list, with its files and full message.
     private(set) var openCommit: CommitRecord?
+    /// Its files, those needing attention first.
     private(set) var openCommitChanges: [FileChange] = []
     private(set) var openCommitMessage: String?
     private(set) var openCommitError: String?
+    /// How many of the open commit's files are shown. A commit can touch thousands of files;
+    /// showing them a page at a time keeps the list and the overview responsive.
+    private(set) var openCommitFileLimit = WorktreeSession.commitFilePage
+    static let commitFilePage = 100
     /// Asked for every file event; answers with the agent tool call that caused it, when known.
     var attributionProvider: (@MainActor (String, Date) -> ChangeAttribution?)?
 
@@ -554,11 +559,12 @@ final class WorktreeSession: Identifiable {
         openCommitChanges = []
         openCommitMessage = nil
         openCommitError = nil
+        openCommitFileLimit = Self.commitFilePage
         async let message = inspector.message(of: commit)
         do {
             let changes = try await inspector.changes(in: commit)
             guard openCommit?.oid == commit.oid else { return }
-            openCommitChanges = changes
+            openCommitChanges = changes.filter(\.isFlagged) + changes.filter { !$0.isFlagged }
         } catch {
             guard openCommit?.oid == commit.oid else { return }
             openCommitError = error.localizedDescription
@@ -566,6 +572,15 @@ final class WorktreeSession: Identifiable {
         let text = await message
         guard openCommit?.oid == commit.oid else { return }
         openCommitMessage = text
+    }
+
+    /// The open commit's files as the list and overview show them.
+    var shownCommitChanges: ArraySlice<FileChange> { openCommitChanges.prefix(openCommitFileLimit) }
+    var hiddenCommitChangeCount: Int { max(0, openCommitChanges.count - openCommitFileLimit) }
+
+    /// Shows twice as many of the open commit's files, so even a huge commit takes few clicks.
+    func showMoreCommitFiles() {
+        openCommitFileLimit *= 2
     }
 
     func diff(for change: FileChange, in commit: CommitRecord) async throws -> FileDiff? {
