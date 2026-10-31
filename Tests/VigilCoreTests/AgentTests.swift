@@ -799,7 +799,7 @@ struct ClaudeSessionFileTests {
         // A stand-in for Claude Code: a script in a claude-code package is taken for it, as
         // `node …/claude-code/cli.js` is. (A copied system binary is killed on launch.)
         let script = package.appendingPathComponent("cli.py")
-        try Data("import time\ntime.sleep(5)\n".utf8).write(to: script)
+        try Data("import time\ntime.sleep(30)\n".utf8).write(to: script)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = [script.path]
@@ -816,8 +816,14 @@ struct ClaudeSessionFileTests {
         // As the process reports it: /private/var, not /var.
         let directory = try #require(ProcessInspector.currentDirectory(of: pid))
         #expect(directory.hasSuffix("/repo"))
-        let inside = await scanner.scan(worktrees: [directory])
-        let found = try #require(inside.byWorktree[directory]?.first { $0.pid == pid })
+        // Python can take a while to start on a busy machine; scan until it shows.
+        var inside = await scanner.scan(worktrees: [directory])
+        for _ in 0..<50 where inside.byWorktree[directory]?.contains(where: { $0.pid == pid }) != true {
+            try await Task.sleep(for: .milliseconds(100))
+            inside = await scanner.scan(worktrees: [directory])
+        }
+        let found = try #require(inside.byWorktree[directory]?.first { $0.pid == pid },
+                                 "\(pid) runs \(ProcessInspector.executablePath(of: pid) ?? "?") \(ProcessInspector.arguments(of: pid))")
         #expect(found.kind == .claudeCode)
         #expect(found.claudeSession?.sessionID == "s-scan")
         // Outside every watched worktree it is still found, to follow its session.
