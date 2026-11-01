@@ -27,8 +27,11 @@ rm -rf "$APP"
 ditto "$BUILT" "$APP"
 
 # xcodebuild registers what it builds with Launch Services, so macOS would run the desktop widget
-# from the DerivedData copy, which breaks when that folder is cleaned. Register this copy instead.
+# from a DerivedData copy (this build's, or a Debug build's), which breaks when that folder is
+# cleaned and may be older code. Unregister them all and register this copy instead.
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-"$LSREGISTER" -u "$PWD/$BUILT" >/dev/null 2>&1 || true
+for built in "$PWD"/build/DerivedData/Build/Products/*/Vigil.app(N); do
+  "$LSREGISTER" -u "$built" >/dev/null 2>&1 || true
+done
 "$LSREGISTER" -f "$PWD/$APP" >/dev/null 2>&1 || true
 echo "$PWD/$APP"

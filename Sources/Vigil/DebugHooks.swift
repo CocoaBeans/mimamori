@@ -149,7 +149,7 @@ enum DebugHooks {
         ("small", .systemSmall, CGSize(width: 170, height: 170)),
         ("medium", .systemMedium, CGSize(width: 364, height: 170)),
         ("large", .systemLarge, CGSize(width: 364, height: 382)),
-        ("extralarge", .systemExtraLarge, CGSize(width: 776, height: 382)),
+        ("extralarge", .systemExtraLarge, CGSize(width: 704, height: 344)),
     ]
 
     /// Draws the Agents widget in every size, light and dark, as `<path>.widget-<size>-<scheme>.png`.

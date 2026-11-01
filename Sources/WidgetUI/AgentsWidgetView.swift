@@ -80,7 +80,9 @@ struct AgentsWidgetView: View {
                 // Three agents fit with their tasks and steps, four without.
                 case .systemLarge: AgentListView(snapshot: snapshot, agents: agents, limit: options.showDetails ? 3 : 4,
                                                  detailed: options.showDetails)
-                default: AgentGridView(snapshot: snapshot, agents: agents, limit: 8, detailed: options.showDetails)
+                // Three rows of two fit with their tasks and steps, four without.
+                default: AgentGridView(snapshot: snapshot, agents: agents, limit: options.showDetails ? 6 : 8,
+                                       detailed: options.showDetails)
                 }
             }
         } else {
@@ -328,7 +330,8 @@ struct AgentListView: View {
     }
 }
 
-/// Extra large: two columns.
+/// Extra large: two columns. A `Grid`, not a `LazyVGrid`: WidgetKit draws nothing in lazy
+/// containers, though `ImageRenderer` previews do.
 struct AgentGridView: View {
     let snapshot: AgentWidgetSnapshot
     let agents: [AgentWidgetSnapshot.Agent]
@@ -336,13 +339,18 @@ struct AgentGridView: View {
     let detailed: Bool
 
     var body: some View {
+        let shown = Array(agents.prefix(limit))
         VStack(alignment: .leading, spacing: 10) {
             WidgetHeader(snapshot: snapshot)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 18, alignment: .top), GridItem(.flexible(), spacing: 18, alignment: .top)],
-                      alignment: .leading, spacing: 12) {
-                ForEach(agents.prefix(limit)) { agent in
-                    AgentLink(agent: agent) {
-                        AgentRowView(agent: agent, detailed: detailed)
+            Grid(alignment: .topLeading, horizontalSpacing: 18, verticalSpacing: 12) {
+                ForEach(Array(stride(from: 0, to: shown.count, by: 2)), id: \.self) { index in
+                    GridRow {
+                        cell(shown[index])
+                        if index + 1 < shown.count {
+                            cell(shown[index + 1])
+                        } else {
+                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        }
                     }
                 }
             }
@@ -353,6 +361,13 @@ struct AgentGridView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func cell(_ agent: AgentWidgetSnapshot.Agent) -> some View {
+        AgentLink(agent: agent) {
+            AgentRowView(agent: agent, detailed: detailed)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
