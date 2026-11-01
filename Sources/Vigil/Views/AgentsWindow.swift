@@ -66,33 +66,20 @@ struct AgentsWindowView: View {
                 // A plain stack rather than a List: a table view keeps its scroll offset when a row
                 // sorts to the top, which pushed the agent waiting on you under the title bar.
                 ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(rows) { row in
-                            AgentCard(presence: row.presence) {
-                                AgentDashboardRow(
-                                    row: row, now: model.agentNow, detailed: detailed,
-                                    canGoToAgent: AgentApps.canGo(to: row.presence),
-                                    onGoToAgent: { goToAgent(row) },
-                                    onSummary: { summary(row) },
-                                    onOpenFile: { path in show(row, path: path) },
-                                    onDismissCollision: { model.agentHub.dismissCollision(in: row.id) })
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture { show(row) }
-                            .contextMenu {
-                                Button("Show in Vigil") { show(row) }
-                                Button("Go to Agent") { goToAgent(row) }
-                                Button("Session Summary…") { summary(row) }
-                                Divider()
-                                Button("Reveal in Finder") {
-                                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: row.session.id)])
+                    LazyVStack(spacing: 8, pinnedViews: [.sectionHeaders]) {
+                        ForEach(AgentSection.group(rows), id: \.section) { group in
+                            Section {
+                                // Keyed by section too: a lazy stack kept showing a card's old state
+                                // after it moved to another section.
+                                ForEach(group.rows) { row in
+                                    card(row, detailed: detailed).id("\(group.section.rawValue) \(row.id)")
                                 }
-                                Button("Open in Terminal") { Workspace.openTerminal(at: row.session.id) }
+                            } header: {
+                                AgentSectionHeader(section: group.section, count: group.rows.count)
                             }
-                            .help("Show \(row.session.displayName) in the main window")
                         }
                     }
-                    .padding(10)
+                    .padding([.horizontal, .bottom], 10)
                     .animation(.default, value: rows.map(\.id))
                 }
             }
@@ -112,6 +99,31 @@ struct AgentsWindowView: View {
                 .help(model.settings.agentsWindowFloats ? "Floating above other windows. Click to stop." : "Keep this window above other windows")
             }
         }
+    }
+
+    private func card(_ row: AgentRow, detailed: Bool) -> some View {
+        AgentCard(presence: row.presence) {
+            AgentDashboardRow(
+                row: row, now: model.agentNow, detailed: detailed,
+                canGoToAgent: AgentApps.canGo(to: row.presence),
+                onGoToAgent: { goToAgent(row) },
+                onSummary: { summary(row) },
+                onOpenFile: { path in show(row, path: path) },
+                onDismissCollision: { model.agentHub.dismissCollision(in: row.id) })
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { show(row) }
+        .contextMenu {
+            Button("Show in Vigil") { show(row) }
+            Button("Go to Agent") { goToAgent(row) }
+            Button("Session Summary…") { summary(row) }
+            Divider()
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: row.session.id)])
+            }
+            Button("Open in Terminal") { Workspace.openTerminal(at: row.session.id) }
+        }
+        .help("Show \(row.session.displayName) in the main window")
     }
 
     private func setting(_ keyPath: WritableKeyPath<AppSettings, Bool>) -> Binding<Bool> {
@@ -183,18 +195,15 @@ struct AgentDashboardRow: View {
         return relative(presence.statusText)
     }
 
-    private var timing: String {
-        let base = presence.timing(now: now)
-        guard detailed, presence.isWorking, presence.toolCallsThisTurn > 0 else { return base }
-        return base + " · " + (presence.toolCallsThisTurn == 1 ? "1 step" : "\(presence.toolCallsThisTurn) steps")
+    /// "4 steps", beside the timer while the agent works.
+    private var steps: String? {
+        guard detailed, presence.isWorking, presence.toolCallsThisTurn > 0 else { return nil }
+        return presence.toolCallsThisTurn == 1 ? "1 step" : "\(presence.toolCallsThisTurn) steps"
     }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            AgentGlyph(presence: presence)
-                .font(.title3)
-                .frame(width: 24)
-                .padding(.top, 1)
+            AgentBadge(presence: presence, size: 28)
             VStack(alignment: .leading, spacing: detailed ? 5 : 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     // Project first, then the branch: the project is what you recognize at a glance.
@@ -209,11 +218,13 @@ struct AgentDashboardRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 6)
-                    Text(timing)
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .help(presence.timingHelp)
+                    if let steps {
+                        Text(steps)
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
+                    AgentTimerPill(presence: presence, now: now)
                 }
                 Text("\(presence.kind.displayName) · \(statusText)")
                     .foregroundStyle(presence.source == .hooks && presence.activity.needsAttention ? presence.tint : .primary)
@@ -297,6 +308,61 @@ struct AgentDashboardRow: View {
         .controlSize(.small)
         .buttonStyle(.bordered)
         .padding(.top, 2)
+    }
+}
+
+/// The Agents window's groups, in the order it lists them.
+enum AgentSection: Int, Hashable, CaseIterable {
+    case needsYou, working, ready, ended
+
+    init(_ presence: AgentPresence) {
+        self = AgentSection(rawValue: min(presence.urgency, AgentSection.ended.rawValue)) ?? .ended
+    }
+
+    var title: String {
+        switch self {
+        case .needsYou: "Needs you"
+        case .working: "Working"
+        case .ready: "Ready"
+        case .ended: "Ended"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .needsYou: .orange
+        case .working: .blue
+        case .ready: .green
+        case .ended: .secondary
+        }
+    }
+
+    /// `rows` in their sections, keeping their order; empty sections left out.
+    static func group(_ rows: [AgentRow]) -> [(section: AgentSection, rows: [AgentRow])] {
+        let bySection = Dictionary(grouping: rows) { AgentSection($0.presence) }
+        return allCases.compactMap { section in bySection[section].map { (section, $0) } }
+    }
+}
+
+/// "Needs you 2", pinned above its agents while they scroll.
+private struct AgentSectionHeader: View {
+    let section: AgentSection
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(section.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(section.tint)
+            CountBadge(count: count, tint: section.tint)
+            Spacer()
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

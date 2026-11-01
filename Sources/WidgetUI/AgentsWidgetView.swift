@@ -128,17 +128,20 @@ struct StateBadge: View {
     var symbol: String? = nil
     var collision = false
     var size: CGFloat = 26
+    /// In place of the state's colour: the app colours a busy agent seen only from its process blue.
+    var tint: Color? = nil
 
     private var mark: String? {
         collision ? "exclamationmark.triangle.fill" : state == .needsYou ? "hand.raised.fill" : nil
     }
 
     var body: some View {
+        let color = tint ?? state.tint
         Image(systemName: symbol ?? state.symbol)
             .font(.system(size: size * 0.46, weight: .semibold))
-            .foregroundStyle(state.tint)
+            .foregroundStyle(color)
             .frame(width: size, height: size)
-            .background(state.tint.opacity(0.18), in: Circle())
+            .background(color.opacity(0.18), in: Circle())
             .overlay(alignment: .bottomTrailing) {
                 if let mark {
                     Image(systemName: mark)

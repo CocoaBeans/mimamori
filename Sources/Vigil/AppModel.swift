@@ -588,13 +588,7 @@ final class AppModel {
         let details = details ?? settings.showTasksInWidgets
         return agentRows.map { row in
             let presence = row.presence
-            let state: AgentWidgetSnapshot.State = switch (presence.source, presence.activity) {
-            case (.process, _): .running
-            case (.hooks, .needsPermission), (.hooks, .askedQuestion): .needsYou
-            case (.hooks, .working): .working
-            case (.hooks, .ready): .ready
-            case (.hooks, .idle): .ended
-            }
+            let state = presence.widgetState
             let steps = details ? presence.turnSteps.suffix(3).reversed().map { step in
                 AgentWidgetSnapshot.Step(tool: step.toolName, target: step.summary.map { AgentText.shortenPaths($0, in: row.session.id) },
                                          running: step.finishedAt == nil)

@@ -42,6 +42,17 @@ extension AgentPresence {
         }
     }
 
+    /// The state the desktop widgets name it by.
+    var widgetState: AgentWidgetSnapshot.State {
+        switch (source, activity) {
+        case (.process, _): .running
+        case (.hooks, .needsPermission), (.hooks, .askedQuestion): .needsYou
+        case (.hooks, .working): .working
+        case (.hooks, .ready): .ready
+        case (.hooks, .idle): .ended
+        }
+    }
+
     var timingHelp: String {
         switch source {
         case .process: "Time since the oldest agent process in this worktree started. Install hooks to see what it is doing."
@@ -119,6 +130,37 @@ struct AgentGlyph: View {
                 }
             }
             .accessibilityHidden(true)
+    }
+}
+
+/// The widget's badge for an agent: its glyph in a disc the colour of its state, with a hand
+/// while it waits on you and a triangle while it collides with another agent.
+struct AgentBadge: View {
+    let presence: AgentPresence
+    var size: CGFloat = 28
+
+    var body: some View {
+        StateBadge(state: presence.widgetState, symbol: presence.kind.symbolName, collision: presence.collision != nil,
+                   size: size, tint: presence.tint)
+            .accessibilityHidden(true)
+    }
+}
+
+/// "Waiting 2:03" in a capsule the colour of the agent's state.
+struct AgentTimerPill: View {
+    let presence: AgentPresence
+    let now: Date
+
+    var body: some View {
+        let text = presence.timing(now: now)
+        Text(text.prefix(1).uppercased() + text.dropFirst())
+            .font(.callout.weight(.medium).monospacedDigit())
+            .foregroundStyle(presence.tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(presence.tint.opacity(0.16), in: Capsule())
+            .fixedSize()
+            .help(presence.timingHelp)
     }
 }
 
@@ -296,10 +338,8 @@ struct AgentStatusBanner: View {
 
     private var agentBody: some View {
         HStack(alignment: .top, spacing: 12) {
-            AgentGlyph(presence: presence)
-                .font(.title2)
-                .frame(width: 28)
-                .padding(.top, 1)
+            AgentBadge(presence: presence, size: 30)
+                .padding(.top, -3)
             VStack(alignment: .leading, spacing: 4) {
                 // One row while the headline fits beside the clock and buttons, in full or in
                 // shorter words. Narrower than that, the clock and buttons move to a row of their

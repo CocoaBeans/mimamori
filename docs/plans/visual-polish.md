@@ -88,3 +88,29 @@ Spanning the window can come later as a status pill in the toolbar (see the list
 9. **A real app icon** in place of the emoji candle.
 10. **A status pill in the toolbar:** the most pressing agent across the window, like Xcode's
     activity view, with the banner's details in a popover.
+
+## The Agents window
+
+Every row had the same weight, divided by hairlines, with urgency only in the colour of the
+status text. Done first:
+
+1. **Sections by state:** Needs you, Working, Ready and Ended, each under a header with a count
+   that stays pinned while its agents scroll. The sort order already put them in this order.
+2. **Cards and badges:** each agent is a card with the banner's tint (one `agentCard` modifier
+   draws both), and the widget's badge, its glyph in a disc the colour of its state, replaces the
+   bare glyph in the window and the banner.
+3. **Timer pills:** "Waiting 2:03" in a capsule the colour of the state, instead of grey text.
+
+Later:
+
+4. **Buttons on hover:** Go to agent and Summary as icon buttons on the right that appear under
+   the pointer. Agents that need you keep a visible, tinted Go to agent, since that is where you
+   answer them.
+5. **A turn timeline:** a thin strip with one tick per tool call, coloured by kind (edit,
+   command, read, search). It shows a turn's rhythm, and a long gap at the end shows an agent
+   gone quiet. It changes once per step and never animates on a loop.
+6. **"Quiet for 4m":** a hint on an agent still working that has made no tool call for a while;
+   usually it is stuck, or thinking hard.
+7. **Two columns when wide:** widen the window and agents flow into two columns, like the
+   extra-large widget.
+8. **Mini diff bars on file chips:** with the changed-file diff bars (4 above).
