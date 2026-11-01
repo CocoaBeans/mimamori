@@ -298,6 +298,13 @@ public struct AgentStatusMachine: Sendable {
 
         case .preToolUse:
             let tool = event.toolName ?? "tool"
+            // A call with no turn under way: Vigil started (or restarted) mid-turn and never saw
+            // the prompt. The turn starts here, so its steps, files and timeline still show.
+            if current.turnStartedAt == nil {
+                current.turnStartedAt = now
+                current.lastTurnStartedAt = now
+                current.toolCallsThisTurn = 0
+            }
             current.toolCallsThisTurn += 1
             let call = AgentToolCall(id: event.toolUseID ?? UUID().uuidString, toolName: tool, summary: event.summary,
                                      filePath: event.filePath, startedAt: now)

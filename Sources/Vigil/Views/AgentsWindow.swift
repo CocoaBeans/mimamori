@@ -215,13 +215,14 @@ struct AgentDashboardRow: View {
     /// The turn's tool calls along its time: the current turn up to now, or the last one as it
     /// ended. Only hooks report calls.
     private var timeline: TurnTimeline? {
-        guard presence.source == .hooks, let started = presence.turnStartedAt else { return nil }
+        guard presence.source == .hooks else { return nil }
         let underway: Bool = switch presence.activity {
         case .working, .needsPermission, .askedQuestion: true
         case .ready, .idle: false
         }
-        guard underway || !presence.turnSteps.isEmpty else { return nil }
-        return TurnTimeline(calls: presence.turnSteps, turnStartedAt: started, end: underway ? now : presence.since,
+        // With no turn start known, the strip starts at the first step it has.
+        guard presence.turnStartedAt != nil ? underway || !presence.turnSteps.isEmpty : !presence.turnSteps.isEmpty else { return nil }
+        return TurnTimeline(calls: presence.turnSteps, turnStartedAt: presence.turnStartedAt, end: underway ? now : presence.since,
                             totalCalls: underway ? presence.toolCallsThisTurn : nil, waitingCallID: presence.awaitingCallID)
     }
 

@@ -543,6 +543,28 @@ struct AgentTurnTests {
         #expect(status.turnToolCalls.map(\.toolName) == ["Edit", "Bash"])
     }
 
+    @Test func joinsATurnAlreadyUnderWay() {
+        // Vigil (re)started mid-turn: no prompt, just tool calls.
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.preToolUse, tool: "Read", id: "r1", path: "/repo/a.swift", at: 5))
+        _ = machine.apply(event(.postToolUse, tool: "Read", id: "r1", at: 6))
+        _ = machine.apply(event(.preToolUse, tool: "Edit", id: "e1", path: "/repo/a.swift", at: 7))
+        var status = machine.status!
+        #expect(status.turnStartedAt == Date(timeIntervalSince1970: 1005))
+        #expect(status.toolCallsThisTurn == 2)
+        #expect(status.turnToolCalls.map(\.toolName) == ["Read", "Edit"])
+        #expect(status.task == nil)
+
+        // The next prompt starts a turn of its own.
+        _ = machine.apply(event(.stop, at: 8))
+        _ = machine.apply(event(.userPromptSubmit, message: "next", at: 10))
+        _ = machine.apply(event(.preToolUse, tool: "Bash", id: "b1", at: 11))
+        status = machine.status!
+        #expect(status.turnStartedAt == Date(timeIntervalSince1970: 1010))
+        #expect(status.toolCallsThisTurn == 1)
+        #expect(status.turnToolCalls.map(\.toolName) == ["Bash"])
+    }
+
     @Test func repeatedModelCallsKeepTheTask() {
         var machine = AgentStatusMachine()
         _ = machine.apply(event(.userPromptSubmit, message: "theme the checkout", agent: .hermes, at: 0))
