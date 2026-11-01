@@ -18,6 +18,7 @@ import WidgetKit
 ///     VIGIL_DEBUG_FLAGS=open-runs            open every agent run in the activity feed
 ///     VIGIL_DEBUG_FLAGS=menu-bar             open the menu-bar popover (captured as <screenshot>.extra1.png)
 ///     VIGIL_DEBUG_FLAGS=status-pill          open the toolbar's agent status popover
+///     VIGIL_DEBUG_FLAGS=sidebar              render the sidebar rows with agents or changes, light and dark
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -102,6 +103,22 @@ enum DebugHooks {
                               let first = session.openCommitChanges.first {
                         session.select(.file(commit: oid, path: first.path))
                     }
+                }
+                if model.debugFlags.contains("sidebar"), let dump {
+                    // The sidebar's vibrant material loses its colours in the live capture.
+                    let rows = model.repositories.flatMap(\.worktrees).filter { worktree in
+                        model.agentHub.presence(for: worktree.path) != nil || !(model.sessions[worktree.path]?.changes.isEmpty ?? true)
+                    }
+                    let view = VStack(alignment: .leading, spacing: 6) {
+                        ForEach(rows, id: \.path) { worktree in
+                            WorktreeRow(info: worktree, session: model.sessions[worktree.path], now: model.now,
+                                        recencyWindow: model.settings.recencyWindowSeconds,
+                                        presence: model.agentHub.presence(for: worktree.path))
+                        }
+                    }
+                    .padding(10)
+                    .frame(width: 240)
+                    writePreviews(of: view, named: "sidebar", model: model, to: dump)
                 }
                 if model.debugFlags.contains("status-pill"), !renderedPillPopover, !model.agentRows.isEmpty, let dump {
                     // The live popover loses its vibrant colours too.

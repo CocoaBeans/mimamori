@@ -188,9 +188,16 @@ struct WorktreeRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: info.isMain ? "shippingbox" : "arrow.triangle.branch")
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
+            // The agent at work here, else what kind of worktree it is.
+            Group {
+                if let presence {
+                    AgentBadge(presence: presence, size: 22)
+                } else {
+                    Image(systemName: info.isMain ? "shippingbox" : "arrow.triangle.branch")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(session?.displayName ?? info.branch ?? info.name)
                     .lineLimit(1)
@@ -219,7 +226,8 @@ struct WorktreeRow: View {
                     }
                 }
                 if session.flaggedCount > 0 {
-                    CountBadge(count: session.flaggedCount, tint: .orange)
+                    CountChip(symbol: "exclamationmark.triangle.fill", count: session.flaggedCount, tint: .orange)
+                        .help(session.flaggedCount == 1 ? "1 file needs a look" : "\(session.flaggedCount) files need a look")
                 }
                 ReviewCountBadge(session: session)
             }
@@ -229,8 +237,8 @@ struct WorktreeRow: View {
     }
 }
 
-/// Changed-file count for a worktree. Once you start reviewing it counts what is left
-/// to review instead, and turns into a checkmark when nothing is.
+/// Changed-file count for a worktree (±). Once you start reviewing it counts what is left
+/// to review instead (an eye), and turns into a checkmark when nothing is.
 struct ReviewCountBadge: View {
     let session: WorktreeSession
 
@@ -240,15 +248,13 @@ struct ReviewCountBadge: View {
         if total == 0 {
             EmptyView()
         } else if left == total {
-            CountBadge(count: total)
+            CountChip(symbol: "plusminus", count: total)
                 .help(total == 1 ? "1 changed file" : "\(total) changed files")
         } else if left == 0 {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            CountChip(symbol: "checkmark", count: total)
                 .help(total == 1 ? "1 changed file, reviewed" : "All \(total) changed files reviewed")
         } else {
-            CountBadge(count: left, tint: .accentColor)
+            CountChip(symbol: "eye", count: left, tint: .accentColor)
                 .help("\(left) of \(total) changed files left to review")
         }
     }

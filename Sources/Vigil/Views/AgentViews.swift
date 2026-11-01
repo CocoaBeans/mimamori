@@ -169,15 +169,12 @@ struct AgentPresenceBadge: View {
     let presence: AgentPresence
 
     var body: some View {
-        HStack(spacing: 4) {
-            AgentGlyph(presence: presence)
-                .font(.caption2)
-            Text(summary)
-                .font(.caption)
-                .foregroundStyle(presence.needsAttention ? presence.alertTint : .secondary)
-                .lineLimit(1)
-        }
-        .help(help)
+        // The row's badge says which agent; this says what it is doing, so it stays short.
+        Text(summary)
+            .font(.caption)
+            .foregroundStyle(presence.needsAttention ? presence.alertTint : .secondary)
+            .lineLimit(1)
+            .help(help)
     }
 
     private var help: String {
@@ -188,19 +185,19 @@ struct AgentPresenceBadge: View {
 
     private var summary: String {
         guard presence.others.isEmpty else {
-            return "\(presence.agentCount) agents · " + (presence.collision != nil ? "editing the same files" : single)
+            return "\(presence.agentCount) agents · " + (presence.collision != nil ? "same files" : single.lowercased())
         }
         return single
     }
 
     private var single: String {
         switch (presence.source, presence.activity) {
-        case (.hooks, .working(let tool, _)): tool.map { "\(presence.kind.displayName) · \($0)" } ?? "\(presence.kind.displayName) · working"
-        case (.hooks, .needsPermission): "\(presence.kind.displayName) · needs permission"
-        case (.hooks, .askedQuestion): "\(presence.kind.displayName) · has a question"
-        case (.hooks, .ready): "\(presence.kind.displayName) · ready"
-        case (.hooks, .idle): "\(presence.kind.displayName) · ended"
-        case (.process, _): "\(presence.kind.displayName) · \(presence.isBusy ? "busy" : "running")"
+        case (.hooks, .working(let tool, _)): tool.map { "Working · \($0)" } ?? "Working"
+        case (.hooks, .needsPermission): "Needs permission"
+        case (.hooks, .askedQuestion): "Has a question"
+        case (.hooks, .ready): "Ready"
+        case (.hooks, .idle): "Ended"
+        case (.process, _): presence.isBusy ? "Busy" : "Running"
         }
     }
 }

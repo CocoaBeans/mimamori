@@ -60,6 +60,27 @@ struct CountBadge: View {
     }
 }
 
+/// A count with a symbol that says what it counts, in a capsule: "⚠ 2", "± 7", "👁 3".
+struct CountChip: View {
+    let symbol: String
+    let count: Int
+    var tint: Color = .secondary
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: symbol)
+                .imageScale(.small)
+            Text(count, format: .number)
+        }
+        .font(.caption2.monospacedDigit().weight(.semibold))
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .background(tint.opacity(0.16), in: Capsule())
+        .foregroundStyle(tint)
+        .fixedSize()
+    }
+}
+
 /// "+12 −3" and its diff bar.
 struct DeltaText: View {
     let additions: Int?
