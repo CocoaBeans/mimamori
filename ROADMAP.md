@@ -71,7 +71,7 @@ state, never on a loop.
 - [x] A turn timeline: one tick per tool call, coloured by kind, so a turn's rhythm and a long
       silence show at a glance.
 - [x] "Quiet for 4m" on an agent still working that has made no tool call for a while.
-- [ ] Two columns when the window is wide, like the extra-large widget.
+- [x] Two columns when the window is wide, like the extra-large widget.
 - [x] Mini diff bars on the file chips, with the changed-file diff bars above.
 
 ## Later

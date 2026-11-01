@@ -51,6 +51,11 @@ extension AppModel {
 struct AgentsWindowView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    /// The list's width: wide enough for two cards side by side, the agents take two columns.
+    @State private var width: CGFloat = 0
+
+    /// Two cards of about 440 pt each, with the gaps around them.
+    private static let twoColumnWidth: CGFloat = 900
 
     var body: some View {
         let rows = model.agentRows
@@ -63,10 +68,13 @@ struct AgentsWindowView: View {
                     Text("Agents appear here while one is running in a watched worktree. Install hooks in Settings › Agents to see what each one is doing.")
                 }
             } else {
-                // A plain stack rather than a List: a table view keeps its scroll offset when a row
+                // A plain grid rather than a List: a table view keeps its scroll offset when a row
                 // sorts to the top, which pushed the agent waiting on you under the title bar.
+                // Each section's heading spans the grid; its cards take one column, or two when wide.
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top),
+                                    count: width >= Self.twoColumnWidth ? 2 : 1)
                 ScrollView {
-                    LazyVStack(spacing: 8) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                         let collapsed = Set(model.settings.agentsWindowCollapsed)
                         ForEach(AgentSection.group(rows), id: \.section) { group in
                             let isCollapsed = collapsed.contains(group.section.key)
@@ -87,7 +95,9 @@ struct AgentsWindowView: View {
                     }
                     .padding([.horizontal, .bottom], 10)
                     .animation(.default, value: rows.map(\.id))
+                    .animation(.default, value: columns.count)
                 }
+                .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
             }
         }
         .frame(minWidth: 360, minHeight: 180)
