@@ -67,6 +67,20 @@ extension AgentPresence {
     }
 }
 
+extension View {
+    /// An agent's card, as the banner above the diff and the Agents window draw it: a soft wash
+    /// and an edge in the colour of its state, stronger while it needs you.
+    func agentCard(_ presence: AgentPresence, highlighted: Bool = false) -> some View {
+        let strong = presence.needsAttention
+        return background(presence.alertTint.opacity((strong ? 0.16 : 0.09) + (highlighted ? 0.05 : 0)),
+                          in: RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(presence.alertTint.opacity(strong ? 0.5 : 0.2), lineWidth: 1)
+            }
+    }
+}
+
 /// An agent at a glance: its own glyph in the colour of its state, with a hand when it is
 /// waiting on you and a triangle when it is colliding with another agent. The glyph says who,
 /// the colour how it is doing.
@@ -273,11 +287,7 @@ struct AgentStatusBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(presence.alertTint.opacity(presence.needsAttention ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(presence.alertTint.opacity(presence.needsAttention ? 0.5 : 0.2), lineWidth: 1)
-        }
+        .agentCard(presence)
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 4)

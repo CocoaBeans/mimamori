@@ -66,9 +66,9 @@ struct AgentsWindowView: View {
                 // A plain stack rather than a List: a table view keeps its scroll offset when a row
                 // sorts to the top, which pushed the agent waiting on you under the title bar.
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    LazyVStack(spacing: 8) {
                         ForEach(rows) { row in
-                            HoverRow {
+                            AgentCard(presence: row.presence) {
                                 AgentDashboardRow(
                                     row: row, now: model.agentNow, detailed: detailed,
                                     canGoToAgent: AgentApps.canGo(to: row.presence),
@@ -90,10 +90,9 @@ struct AgentsWindowView: View {
                                 Button("Open in Terminal") { Workspace.openTerminal(at: row.session.id) }
                             }
                             .help("Show \(row.session.displayName) in the main window")
-                            if row.id != rows.last?.id { Divider().padding(.leading, 48) }
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(10)
                     .animation(.default, value: rows.map(\.id))
                 }
             }
@@ -301,15 +300,18 @@ struct AgentDashboardRow: View {
     }
 }
 
-/// A row with a light highlight under the pointer.
-private struct HoverRow<Content: View>: View {
+/// An agent's row as a card tinted by its state, like the banner above the diff; a little
+/// stronger under the pointer.
+private struct AgentCard<Content: View>: View {
+    let presence: AgentPresence
     @ViewBuilder let content: Content
     @State private var hovering = false
 
     var body: some View {
         content
-            .padding(.horizontal, 14)
-            .background(hovering ? Color.primary.opacity(0.05) : .clear)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 3)
+            .agentCard(presence, highlighted: hovering)
             .onHover { hovering = $0 }
     }
 }
