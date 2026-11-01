@@ -44,6 +44,22 @@ cask. These items gate it.
 - [ ] A short in-app guide under Help › Vigil Help (⌘?): what Vigil does and how to use it.
       Planned in [docs/plans/help-window.md](docs/plans/help-window.md).
 
+## Visual polish
+
+Planned in [docs/plans/visual-polish.md](docs/plans/visual-polish.md). Animate only on a change of
+state, never on a loop.
+
+- [ ] One look per agent: a glyph per agent kind, colour for state only, one attention language.
+- [ ] Group the activity feed by turn, with day separators.
+- [ ] An agent banner that fits its column: two rows when narrow, never a bare "…".
+- [ ] A mini diff bar and file-type icons on each changed file.
+- [ ] Compact sidebar rows: agent glyph and chips for changed, flagged and to-review files.
+- [ ] A menu-bar popover that reuses the widget's views.
+- [ ] A change overview beside the diff, and hunk headers that stay put.
+- [ ] Settings › Agents split into tabs.
+- [ ] A real app icon.
+- [ ] A status pill in the toolbar for the most pressing agent.
+
 ## Later
 
 - [x] Desktop widgets showing the running agents, who needs you, and optionally each task
