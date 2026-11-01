@@ -582,8 +582,10 @@ final class AppModel {
         widgets.update(widgetAgents())
     }
 
-    func widgetAgents() -> [AgentWidgetSnapshot.Agent] {
-        let details = settings.showTasksInWidgets
+    /// The agents as the widgets draw them. `details` adds each one's task and latest steps;
+    /// the desktop widgets include them only when the settings allow.
+    func widgetAgents(details: Bool? = nil) -> [AgentWidgetSnapshot.Agent] {
+        let details = details ?? settings.showTasksInWidgets
         return agentRows.map { row in
             let presence = row.presence
             let state: AgentWidgetSnapshot.State = switch (presence.source, presence.activity) {

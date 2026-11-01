@@ -390,7 +390,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Vigil;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) XCODE_APP";
 			};
 			name = Debug;
 		};
@@ -408,7 +407,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Vigil;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) XCODE_APP";
 			};
 			name = Release;
 		};

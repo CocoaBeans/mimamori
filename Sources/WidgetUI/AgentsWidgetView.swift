@@ -2,8 +2,8 @@ import SwiftUI
 import VigilCore
 import WidgetKit
 
-// The Agents widget's views. Compiled into the widget extension and, for rendering previews
-// headlessly (VIGIL_DEBUG_FLAGS=widgets), into the app built by Xcode.
+// The Agents widget's views. Compiled into the widget extension and into the app, which draws
+// its menu-bar popover with them and renders widget previews (VIGIL_DEBUG_FLAGS=widgets).
 
 /// What a widget instance is set to show (its configuration, in the extension).
 struct AgentsWidgetOptions: Hashable, Sendable {
@@ -94,17 +94,24 @@ struct AgentsWidgetView: View {
 extension EnvironmentValues {
     /// Drawing a preview with `ImageRenderer`, which cannot draw links.
     @Entry var isRenderingWidgetPreview = false
+    /// Inside Vigil, what clicking an agent does, in place of following its `vigil://` link.
+    @Entry var openAgent: (@MainActor (AgentWidgetSnapshot.Agent) -> Void)? = nil
 }
 
 /// An agent's row, opening Vigil on its worktree when clicked.
 struct AgentLink<Content: View>: View {
     @Environment(\.isRenderingWidgetPreview) private var isPreview
+    @Environment(\.openAgent) private var openAgent
     let agent: AgentWidgetSnapshot.Agent
     @ViewBuilder let content: Content
 
     var body: some View {
         if isPreview {
             content
+        } else if let openAgent {
+            Button { openAgent(agent) } label: { content }
+                .accessibilityLabel("\(agent.worktree), \(agent.agent), \(agent.status)")
+                .help("Show \(agent.worktree) in Vigil")
         } else {
             Link(destination: agent.link) { content }
         }

@@ -1,10 +1,8 @@
 import AppKit
 import Foundation
-import VigilCore
-#if XCODE_APP
 import SwiftUI
+import VigilCore
 import WidgetKit
-#endif
 
 /// Developer-only hooks driven by environment variables; inert otherwise.
 ///
@@ -18,6 +16,7 @@ import WidgetKit
 ///     VIGIL_SCREENSHOT_WINDOW=Agents         capture the window with this title instead of the largest
 ///     VIGIL_DEBUG_FLAGS=summary              open the session summary (and write it to <dump>.summary.md)
 ///     VIGIL_DEBUG_FLAGS=open-runs            open every agent run in the activity feed
+///     VIGIL_DEBUG_FLAGS=menu-bar             open the menu-bar popover (captured as <screenshot>.extra1.png)
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -42,6 +41,7 @@ enum DebugHooks {
         var openedSummary = false
         var renderedWidgets = false
         var openedCommit = false
+        var openedMenuBar = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
             let resized = windowSize.map { resizeWindow(to: $0, titled: windowTitle) } ?? true
@@ -62,13 +62,11 @@ enum DebugHooks {
                         toReview.subtract(ready)
                     }
                 }
-                #if XCODE_APP
                 // "widgets": render every widget size, light and dark, next to the dump.
                 if model.debugFlags.contains("widgets"), !renderedWidgets, let dump {
                     renderedWidgets = true
                     writeWidgetPreviews(agents: model.widgetAgents(), to: dump)
                 }
-                #endif
                 // "summary": open the session summary for the selected worktree once.
                 if model.debugFlags.contains("summary"), !openedSummary, let session = model.selectedSession, session.state != nil {
                     model.summaryWindowRequest = session.id
@@ -103,6 +101,11 @@ enum DebugHooks {
                         session.select(.file(commit: oid, path: first.path))
                     }
                 }
+                if model.debugFlags.contains("menu-bar"), !openedMenuBar {
+                    openedMenuBar = clickStatusItem()
+                    // The live capture loses the popover's vibrant colours; render it as well.
+                    if let dump { writeMenuBarPreviews(model: model, to: dump) }
+                }
                 if model.debugFlags.contains("cycle") {
                     let ids = model.orderedSessions.map(\.id)
                     if !ids.isEmpty {
@@ -118,6 +121,18 @@ enum DebugHooks {
         }
     }
 
+    /// Clicks Vigil's menu-bar item, as if from the menu bar; false when it is not there yet.
+    private static func clickStatusItem() -> Bool {
+        func button(in view: NSView?) -> NSStatusBarButton? {
+            guard let view else { return nil }
+            if let button = view as? NSStatusBarButton { return button }
+            return view.subviews.lazy.compactMap { button(in: $0) }.first
+        }
+        guard let item = NSApp.windows.lazy.compactMap({ button(in: $0.contentView) }).first else { return false }
+        item.performClick(nil)
+        return true
+    }
+
     /// Resizes the window titled `title` (or the first one) to `size` ("1000x640"); false when it is not open yet.
     private static func resizeWindow(to size: String, titled title: String?) -> Bool {
         let parts = size.lowercased().split(separator: "x").compactMap { Double($0) }
@@ -129,7 +144,6 @@ enum DebugHooks {
         return true
     }
 
-    #if XCODE_APP
     /// The widget sizes on a Mac's desktop, in points.
     private static let widgetSizes: [(name: String, family: WidgetFamily, size: CGSize)] = [
         ("small", .systemSmall, CGSize(width: 170, height: 170)),
@@ -159,7 +173,22 @@ enum DebugHooks {
             }
         }
     }
-    #endif
+
+    /// The menu-bar popover in light and dark, next to the dump.
+    private static func writeMenuBarPreviews(model: AppModel, to path: String) {
+        for scheme in [ColorScheme.light, .dark] {
+            let view = MenuBarPanel()
+                .environment(model)
+                .background(scheme == .dark ? Color(white: 0.17) : Color(white: 0.95))
+                .environment(\.colorScheme, scheme)
+                .environment(\.isRenderingWidgetPreview, true)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+                  let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { continue }
+            try? png.write(to: URL(fileURLWithPath: "\(path).menubar-\(scheme == .dark ? "dark" : "light").png"))
+        }
+    }
 
     static func writeDump(model: AppModel, to path: String) {
         var lines: [String] = []
@@ -167,6 +196,9 @@ enum DebugHooks {
         lines.append("git: \(model.gitVersion ?? "none") error=\(model.gitError ?? "-")")
         lines.append("selected: \(model.selectedWorktreeID ?? "-") showActivity=\(model.showActivity) sort=\(model.sortOrder.rawValue) flaggedOnly=\(model.flaggedOnly)")
         lines.append("settings updates: requested=\(model.settingsUpdateRequests) applied=\(model.settingsUpdatesApplied) hideReviewed=\(model.hideReviewed)")
+        for window in NSApp.windows {
+            lines.append("window \(type(of: window)) \"\(window.title)\" number=\(window.windowNumber) visible=\(window.isVisible) key=\(window.isKeyWindow) frame=\(window.frame)")
+        }
         for repo in model.repositories {
             lines.append("repo \(repo.displayName) [\(repo.rootPath)] error=\(repo.error ?? "-")")
             for worktree in repo.worktrees {

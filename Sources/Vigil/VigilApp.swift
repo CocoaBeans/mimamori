@@ -60,12 +60,13 @@ struct VigilApp: App {
                 copy.showMenuBarExtra = value
                 model.updateSettings(copy)
             })) {
-            MenuBarMenu()
+            MenuBarPanel()
                 .environment(model)
         } label: {
             MenuBarLabel()
                 .environment(model)
         }
+        .menuBarExtraStyle(.window)
     }
 }
 

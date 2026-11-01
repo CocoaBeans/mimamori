@@ -54,7 +54,7 @@ state, never on a loop.
 - [x] An agent banner that fits its column: two rows when narrow, never a bare "…".
 - [ ] A mini diff bar and file-type icons on each changed file.
 - [ ] Compact sidebar rows: agent glyph and chips for changed, flagged and to-review files.
-- [ ] A menu-bar popover that reuses the widget's views.
+- [x] A menu-bar popover that reuses the widget's views.
 - [ ] A change overview beside the diff, and hunk headers that stay put.
 - [ ] Settings › Agents split into tabs.
 - [ ] A real app icon.
