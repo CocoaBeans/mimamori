@@ -216,6 +216,14 @@ struct DiffHeaderView: View {
         var shown: FileDiff?
     }
 
+    /// "Claude Code · Edit", then what the call acted on when that is not this file, which the
+    /// header already names: "Claude Code · Bash · npm run format".
+    private func attributionText(_ attribution: ChangeAttribution) -> String {
+        guard let detail = attribution.detail.map({ AgentText.shortenPaths($0, in: worktreePath) }),
+              detail != change.path else { return attribution.label }
+        return attribution.label + " · " + detail
+    }
+
     private var wrapBinding: Binding<Bool> {
         Binding(
             get: { model.settings.wrapDiffLines },
@@ -321,7 +329,7 @@ struct DiffHeaderView: View {
                     Tag("deleted")
                 }
                 if let attribution {
-                    Label(attribution.label + (attribution.detail.map { " · \($0)" } ?? ""), systemImage: "sparkles")
+                    Label(attributionText(attribution), systemImage: "sparkles")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

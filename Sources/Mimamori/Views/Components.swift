@@ -101,6 +101,8 @@ struct DeltaText: View {
             }
         }
         .font(.caption.monospacedDigit())
+        // Squeezed in a narrow column, the counts would wrap a character a line and vanish.
+        .fixedSize()
     }
 }
 

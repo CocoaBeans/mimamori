@@ -184,6 +184,7 @@ struct AgentRunRow: View {
                             Spacer(minLength: 4)
                             Text(Format.relative(run.latestAt, to: now))
                                 .monospacedDigit()
+                                .fixedSize()
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -277,6 +278,7 @@ struct ActivityRow: View {
                         Spacer(minLength: 4)
                         Text(Format.relative(entry.date, to: now))
                             .monospacedDigit()
+                            .fixedSize()
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
