@@ -21,7 +21,14 @@ fi
 xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration "$CONFIG" \
   -derivedDataPath build/DerivedData "${SIGNING[@]}" -quiet build
 
+BUILT="build/DerivedData/Build/Products/$CONFIG/Vigil.app"
 APP="build/Vigil.app"
 rm -rf "$APP"
-ditto "build/DerivedData/Build/Products/$CONFIG/Vigil.app" "$APP"
+ditto "$BUILT" "$APP"
+
+# xcodebuild registers what it builds with Launch Services, so macOS would run the desktop widget
+# from the DerivedData copy, which breaks when that folder is cleaned. Register this copy instead.
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+"$LSREGISTER" -u "$PWD/$BUILT" >/dev/null 2>&1 || true
+"$LSREGISTER" -f "$PWD/$APP" >/dev/null 2>&1 || true
 echo "$PWD/$APP"
