@@ -19,6 +19,7 @@ import WidgetKit
 ///     VIGIL_DEBUG_FLAGS=menu-bar             open the menu-bar popover (captured as <screenshot>.extra1.png)
 ///     VIGIL_DEBUG_FLAGS=status-pill          open the toolbar's agent status popover
 ///     VIGIL_DEBUG_FLAGS=sidebar              render the sidebar rows with agents or changes, light and dark
+///     VIGIL_DEBUG_FLAGS=diff-line:120        scroll the selected file's diff to new-file line 120
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.

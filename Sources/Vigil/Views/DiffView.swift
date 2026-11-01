@@ -54,6 +54,11 @@ struct DiffView: View {
                 showAll = false
                 targetLineID = nil
                 await load()
+                // VIGIL_DEBUG_FLAGS=diff-line:<n>: jump to new-file line n, as a flag's link does.
+                if let flag = model.debugFlags.first(where: { $0.hasPrefix("diff-line:") }),
+                   let number = Int(flag.dropFirst("diff-line:".count)) {
+                    jump(toNewLine: number)
+                }
             }
     }
 
@@ -469,6 +474,13 @@ struct DiffContentView: View {
     private static let initialLimit = 2500
     /// Narrower than this, two columns are too cramped to read; show one instead.
     private static let minimumSplitWidth: CGFloat = 560
+    /// The change overview beside the diff, for diffs longer than a screen or so.
+    private static let overviewWidth: CGFloat = 12
+    private static let overviewMinimumRows = 50
+
+    /// What part of the diff is on screen, for the overview's box. Kept out of this view's
+    /// state so that scrolling redraws only the box, not the diff.
+    @State private var viewport = DiffViewport()
 
     private struct Visible {
         var hunks: [DiffHunk]
@@ -514,54 +526,88 @@ struct DiffContentView: View {
     var body: some View {
         let visible = visible
         GeometryReader { geometry in
-            let split = sideBySide && geometry.size.width >= Self.minimumSplitWidth
+            let showsOverview = visible.lineCount + visible.hunks.count >= Self.overviewMinimumRows
+            let width = geometry.size.width - (showsOverview ? Self.overviewWidth : 0)
+            let split = sideBySide && width >= Self.minimumSplitWidth
             let horizontal = !split && !wrap
             ScrollViewReader { proxy in
-                ScrollView(horizontal ? [.vertical, .horizontal] : .vertical) {
-                    Group {
-                        if horizontal {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                rows(visible: visible, wrap: false)
-                            }
-                            .frame(width: max(unwrappedWidth, geometry.size.width), alignment: .leading)
-                        } else if split {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                splitRows(visible: visible)
-                            }
-                        } else {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                rows(visible: visible, wrap: true)
+                HStack(spacing: 0) {
+                    ScrollView(horizontal ? [.vertical, .horizontal] : .vertical) {
+                        Group {
+                            // Each hunk's header stays at the top while its lines scroll under it.
+                            if horizontal {
+                                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                                    rows(visible: visible, wrap: false)
+                                }
+                                .frame(width: max(unwrappedWidth, width), alignment: .leading)
+                            } else if split {
+                                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                                    splitRows(visible: visible)
+                                }
+                            } else {
+                                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                                    rows(visible: visible, wrap: true)
+                                }
                             }
                         }
+                        .padding(.vertical, 4)
+                        // A two-axis scroll view centers content smaller than itself; fill the
+                        // viewport so short diffs stay pinned to the top-leading corner.
+                        .frame(minWidth: horizontal ? width : nil,
+                               maxWidth: .infinity,
+                               minHeight: horizontal ? geometry.size.height : nil,
+                               alignment: .topLeading)
                     }
-                    .padding(.vertical, 4)
-                    // A two-axis scroll view centers content smaller than itself; fill the
-                    // viewport so short diffs stay pinned to the top-leading corner.
-                    .frame(minWidth: horizontal ? geometry.size.width : nil,
-                           maxWidth: .infinity,
-                           minHeight: horizontal ? geometry.size.height : nil,
-                           alignment: .topLeading)
-                }
-                .onChange(of: targetLineID) { _, id in
-                    guard let id else { return }
-                    withAnimation { proxy.scrollTo(id, anchor: .center) }
-                }
-                .onAppear {
-                    if let id = targetLineID { proxy.scrollTo(id, anchor: .center) }
+                    .onScrollGeometryChange(for: ClosedRange<Double>.self) { scroll in
+                        let height = max(scroll.contentSize.height, 1)
+                        let top = min(1, max(0, scroll.visibleRect.minY / height))
+                        return top...max(top, min(1, scroll.visibleRect.maxY / height))
+                    } action: { _, shown in
+                        viewport.shown = shown
+                    }
+                    .onChange(of: targetLineID) { _, id in
+                        guard let id, let key = key(forLine: id, in: visible.hunks, split: split) else { return }
+                        withAnimation { proxy.scrollTo(key, anchor: .center) }
+                    }
+                    .onAppear {
+                        if let id = targetLineID, let key = key(forLine: id, in: visible.hunks, split: split) {
+                            proxy.scrollTo(key, anchor: .center)
+                        }
+                    }
+                    if showsOverview {
+                        DiffOverviewStrip(overview: DiffOverview(hunks: visible.hunks, sideBySide: split), viewport: viewport) { row in
+                            if let id = row.id { proxy.scrollTo(DiffRowKey(hunk: row.hunk, row: id), anchor: .center) }
+                        }
+                        .frame(width: Self.overviewWidth)
+                    }
                 }
             }
         }
     }
 
+    /// The row showing a line: its own, or in two columns the pair it is in.
+    private func key(forLine id: Int, in hunks: [DiffHunk], split: Bool) -> DiffRowKey? {
+        guard let hunk = hunks.first(where: { $0.lines.contains { $0.id == id } }) else { return nil }
+        guard split else { return DiffRowKey(hunk: hunk.id, row: id) }
+        let row = SideBySide.rows(for: hunk).first { $0.left?.id == id || $0.right?.id == id }
+        return row.map { DiffRowKey(hunk: hunk.id, row: $0.id) }
+    }
+
+    // Rows are keyed by their hunk as well as their line: line ids count up through the file,
+    // so after the diff reloads a line id can belong to another hunk, and a lazy stack kept
+    // drawing a row's old content when its id moved to another section.
     @ViewBuilder
     private func rows(visible: Visible, wrap: Bool) -> some View {
         ForEach(visible.hunks) { hunk in
-            HunkHeaderRow(hunk: hunk, fontSize: fontSize)
-            ForEach(hunk.lines) { line in
-                DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
-                            syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
-                            isTarget: line.id == targetLineID)
-                    .id(line.id)
+            Section {
+                ForEach(hunk.lines) { line in
+                    DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
+                                syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
+                                isTarget: line.id == targetLineID)
+                        .id(DiffRowKey(hunk: hunk.id, row: line.id))
+                }
+            } header: {
+                HunkHeaderRow(hunk: hunk, fontSize: fontSize)
             }
         }
         truncationFooter(visible)
@@ -570,11 +616,14 @@ struct DiffContentView: View {
     @ViewBuilder
     private func splitRows(visible: Visible) -> some View {
         ForEach(visible.hunks) { hunk in
-            HunkHeaderRow(hunk: hunk, fontSize: fontSize)
-            ForEach(SideBySide.rows(for: hunk)) { row in
-                SplitLineRow(row: row, decorations: decorations, fontSize: fontSize, numberWidth: numberWidth,
-                             isTarget: targetLineID != nil && (row.left?.id == targetLineID || row.right?.id == targetLineID))
-                    .id(row.id)
+            Section {
+                ForEach(SideBySide.rows(for: hunk)) { row in
+                    SplitLineRow(row: row, decorations: decorations, fontSize: fontSize, numberWidth: numberWidth,
+                                 isTarget: targetLineID != nil && (row.left?.id == targetLineID || row.right?.id == targetLineID))
+                        .id(DiffRowKey(hunk: hunk.id, row: row.id))
+                }
+            } header: {
+                HunkHeaderRow(hunk: hunk, fontSize: fontSize)
             }
         }
         truncationFooter(visible)
@@ -594,6 +643,18 @@ struct DiffContentView: View {
     }
 }
 
+/// A diff row's identity: its hunk and its line (or, in two columns, its pair).
+struct DiffRowKey: Hashable {
+    let hunk: Int
+    let row: Int
+}
+
+/// What part of the diff is on screen, as fractions of its height.
+@MainActor @Observable
+final class DiffViewport {
+    var shown: ClosedRange<Double>?
+}
+
 struct HunkHeaderRow: View {
     let hunk: DiffHunk
     let fontSize: Double
@@ -607,6 +668,74 @@ struct HunkHeaderRow: View {
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.secondary.opacity(0.09))
+            // Pinned at the top, it covers the lines scrolling under it.
+            .background(.bar)
+    }
+}
+
+/// The whole diff at a glance, beside it: a mark for each run of added (green) or removed (red)
+/// lines, half and half for a pair side by side, a tick where each hunk starts, and a box around
+/// what is on screen. Click or drag to go there.
+struct DiffOverviewStrip: View {
+    let overview: DiffOverview
+    let viewport: DiffViewport
+    let onJump: (DiffOverview.Row) -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            Canvas { context, size in
+                let inset: CGFloat = 3
+                let width = size.width - inset * 2
+                for start in overview.hunkStarts {
+                    context.fill(Path(CGRect(x: inset, y: start * size.height, width: width, height: 1)), with: .style(.tertiary))
+                }
+                for mark in overview.marks {
+                    let rect = CGRect(x: inset, y: mark.start * size.height, width: width, height: max(2, mark.length * size.height))
+                    switch mark.kind {
+                    case .addition:
+                        context.fill(Path(rect), with: .color(.green.opacity(0.85)))
+                    case .deletion:
+                        context.fill(Path(rect), with: .color(.red.opacity(0.85)))
+                    case .change:
+                        let halves = rect.divided(atDistance: width / 2, from: .minXEdge)
+                        context.fill(Path(halves.slice), with: .color(.red.opacity(0.85)))
+                        context.fill(Path(halves.remainder), with: .color(.green.opacity(0.85)))
+                    }
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                ViewportBox(viewport: viewport, height: geometry.size.height)
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                if let row = overview.row(at: drag.location.y / max(geometry.size.height, 1)) { onJump(row) }
+            })
+        }
+        .padding(.vertical, 4)
+        .background(.quaternary.opacity(0.25))
+        .overlay(alignment: .leading) { Divider() }
+        .help("Where this diff's changes are. Click or drag to go there.")
+        .accessibilityElement()
+        .accessibilityLabel("Change overview")
+        .accessibilityValue("\(overview.marks.count) runs of changed lines in \(overview.hunkStarts.count) hunks")
+    }
+}
+
+/// The overview's box around what is on screen; its own view, so scrolling redraws only it.
+private struct ViewportBox: View {
+    let viewport: DiffViewport
+    let height: CGFloat
+
+    var body: some View {
+        if let shown = viewport.shown, shown.upperBound - shown.lowerBound < 0.999 {
+            RoundedRectangle(cornerRadius: 2)
+                .strokeBorder(.secondary, lineWidth: 1)
+                .background(RoundedRectangle(cornerRadius: 2).fill(.primary.opacity(0.06)))
+                .frame(height: max(6, (shown.upperBound - shown.lowerBound) * height))
+                .offset(y: shown.lowerBound * height)
+                .padding(.horizontal, 1)
+                .allowsHitTesting(false)
+        }
     }
 }
 
