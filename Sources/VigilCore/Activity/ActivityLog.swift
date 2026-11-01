@@ -11,7 +11,7 @@ public final class ActivityLog: @unchecked Sendable {
     }
     public let maxEntries: Int
 
-    private let queue = DispatchQueue(label: "dev.vigil.activity-log")
+    private let queue = DispatchQueue(label: "com.kevinross.Vigil.activity-log")
     private var _retention: TimeInterval
     /// Lines in the file, so compaction can be triggered without reading it.
     private var lineCount = 0

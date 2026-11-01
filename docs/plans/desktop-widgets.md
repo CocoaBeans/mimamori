@@ -82,7 +82,7 @@ the snapshot at all.
   - **Not recommended:** compiling the extension with `swiftc`, assembling the bundle and its
     Info.plist by hand, and signing it. Possible, but fragile.
 - **Shared data needs an App Group.** Both the app and the extension need the App Group
-  entitlement. Use the team-prefixed form, `<TEAMID>.dev.vigil`, which works with Developer ID
+  entitlement. Use the team-prefixed form, `555LXJXR4U.com.kevinross.Vigil`, which works with Developer ID
   signing without a provisioning profile; check this in the spike below.
   - The extension is sandboxed (`com.apple.security.app-sandbox`).
   - The app stays unsandboxed, and reaches the container with

@@ -25,7 +25,7 @@ public final class FSEventsWatcher: @unchecked Sendable {
     private let exclusions: [String]
     private let latency: TimeInterval
     private let handler: Handler
-    private let queue = DispatchQueue(label: "dev.vigil.fsevents", qos: .utility)
+    private let queue = DispatchQueue(label: "com.kevinross.Vigil.fsevents", qos: .utility)
     private var stream: FSEventStreamRef?
     private let lock = NSLock()
 

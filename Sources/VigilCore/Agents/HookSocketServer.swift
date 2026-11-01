@@ -37,10 +37,10 @@ public final class HookSocketServer: @unchecked Sendable {
 
     public let path: String
     private let handler: Handler
-    private let acceptQueue = DispatchQueue(label: "dev.vigil.hooks", qos: .userInitiated)
-    private let connectionQueue = DispatchQueue(label: "dev.vigil.hooks.connections", qos: .userInitiated, attributes: .concurrent)
+    private let acceptQueue = DispatchQueue(label: "com.kevinross.Vigil.hooks", qos: .userInitiated)
+    private let connectionQueue = DispatchQueue(label: "com.kevinross.Vigil.hooks.connections", qos: .userInitiated, attributes: .concurrent)
     /// Hands events over one at a time, in the order their requests completed.
-    private let deliveryQueue = DispatchQueue(label: "dev.vigil.hooks.delivery", qos: .userInitiated)
+    private let deliveryQueue = DispatchQueue(label: "com.kevinross.Vigil.hooks.delivery", qos: .userInitiated)
     private let lock = NSLock()
     private var source: DispatchSourceRead?
     private var listening = false
