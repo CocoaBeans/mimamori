@@ -37,6 +37,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var agentsWindowFloats: Bool = false
     /// Rows show the task, recent steps and files; off for one-line-per-agent rows.
     var agentsWindowDetailed: Bool = true
+    /// Sections of the Agents window folded to their headers (`AgentSection.key`).
+    var agentsWindowCollapsed: [String] = []
     /// The agent banner above the diff shows the task, steps and files; off for one line.
     var agentBannerExpanded: Bool = true
 
@@ -74,6 +76,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
         agentsWindowFloats = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowFloats) ?? defaults.agentsWindowFloats
         agentsWindowDetailed = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowDetailed) ?? defaults.agentsWindowDetailed
+        agentsWindowCollapsed = try c.decodeIfPresent([String].self, forKey: .agentsWindowCollapsed) ?? defaults.agentsWindowCollapsed
         agentBannerExpanded = try c.decodeIfPresent(Bool.self, forKey: .agentBannerExpanded) ?? defaults.agentBannerExpanded
     }
 }

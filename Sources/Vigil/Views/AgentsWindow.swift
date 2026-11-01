@@ -67,15 +67,21 @@ struct AgentsWindowView: View {
                 // sorts to the top, which pushed the agent waiting on you under the title bar.
                 ScrollView {
                     LazyVStack(spacing: 8, pinnedViews: [.sectionHeaders]) {
+                        let collapsed = Set(model.settings.agentsWindowCollapsed)
                         ForEach(AgentSection.group(rows), id: \.section) { group in
+                            let isCollapsed = collapsed.contains(group.section.key)
                             Section {
-                                // Keyed by section too: a lazy stack kept showing a card's old state
-                                // after it moved to another section.
-                                ForEach(group.rows) { row in
-                                    card(row, detailed: detailed).id("\(group.section.rawValue) \(row.id)")
+                                if !isCollapsed {
+                                    // Keyed by section too: a lazy stack kept showing a card's old
+                                    // state after it moved to another section.
+                                    ForEach(group.rows) { row in
+                                        card(row, detailed: detailed).id("\(group.section.rawValue) \(row.id)")
+                                    }
                                 }
                             } header: {
-                                AgentSectionHeader(section: group.section, count: group.rows.count)
+                                AgentSectionHeader(section: group.section, rows: group.rows, collapsed: isCollapsed) {
+                                    toggle(group.section)
+                                }
                             }
                         }
                     }
@@ -124,6 +130,17 @@ struct AgentsWindowView: View {
             Button("Open in Terminal") { Workspace.openTerminal(at: row.session.id) }
         }
         .help("Show \(row.session.displayName) in the main window")
+    }
+
+    /// Folds a section to its header, or opens it; remembered across launches.
+    private func toggle(_ section: AgentSection) {
+        var copy = model.settings
+        if let index = copy.agentsWindowCollapsed.firstIndex(of: section.key) {
+            copy.agentsWindowCollapsed.remove(at: index)
+        } else {
+            copy.agentsWindowCollapsed.append(section.key)
+        }
+        withAnimation(.easeOut(duration: 0.2)) { model.updateSettings(copy) }
     }
 
     private func setting(_ keyPath: WritableKeyPath<AppSettings, Bool>) -> Binding<Bool> {
@@ -319,6 +336,9 @@ enum AgentSection: Int, Hashable, CaseIterable {
         self = AgentSection(rawValue: min(presence.urgency, AgentSection.ended.rawValue)) ?? .ended
     }
 
+    /// What the settings remember a collapsed section by.
+    var key: String { String(describing: self) }
+
     var title: String {
         switch self {
         case .needsYou: "Needs you"
@@ -344,24 +364,53 @@ enum AgentSection: Int, Hashable, CaseIterable {
     }
 }
 
-/// "Needs you 2", pinned above its agents while they scroll.
+/// "Needs you 2" on a rounded tab of the section's colour, pinned above its agents while they
+/// scroll. Click it to fold the section to its header, which then shows who is in it.
 private struct AgentSectionHeader: View {
     let section: AgentSection
-    let count: Int
+    let rows: [AgentRow]
+    let collapsed: Bool
+    let onToggle: () -> Void
+    @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(section.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(section.tint)
-            CountBadge(count: count, tint: section.tint)
-            Spacer()
+        Button(action: onToggle) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .rotationEffect(.degrees(collapsed ? 0 : 90))
+                Text(section.title)
+                    .font(.subheadline.weight(.semibold))
+                CountBadge(count: rows.count, tint: section.tint)
+                Spacer(minLength: 6)
+                if collapsed {
+                    HStack(spacing: 3) {
+                        ForEach(rows.prefix(8)) { row in
+                            AgentBadge(presence: row.presence, size: 18)
+                        }
+                        if rows.count > 8 {
+                            Text("+\(rows.count - 8)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .foregroundStyle(section.tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(section.tint.opacity(hovering ? 0.2 : 0.13), in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
-        .padding(.horizontal, 4)
-        .padding(.top, 8)
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .padding(.top, 6)
         .padding(.bottom, 2)
+        // Pinned, it hides the cards scrolling under it.
         .background(Color(nsColor: .windowBackgroundColor))
-        .accessibilityElement(children: .combine)
+        .help(collapsed ? "Show these agents" : "Fold these agents away")
+        .accessibilityLabel("\(section.title), \(rows.count == 1 ? "1 agent" : "\(rows.count) agents")")
+        .accessibilityValue(collapsed ? "collapsed" : "expanded")
         .accessibilityAddTraits(.isHeader)
     }
 }
