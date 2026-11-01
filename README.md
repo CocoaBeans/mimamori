@@ -165,10 +165,10 @@ swift build                     # the same app as a Swift package, for `swift ru
 
 ### App icon
 
-The icon is an emoji rendered onto a macOS-style rounded background by `Scripts/make-icon.swift`. Change it with any emoji and rebuild:
+The icon, a vigil flame keeping watch over a branch graph, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes get bolder lines. After changing the drawing, regenerate it and rebuild:
 
 ```bash
-swift Scripts/make-icon.swift "🕯️"
+swift Scripts/make-icon.swift
 ```
 
 ### Debug hooks
