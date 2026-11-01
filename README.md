@@ -11,7 +11,7 @@ A small, native macOS app that keeps watch over git worktrees while coding agent
 
 Mimamori is strictly read-only. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
 
-![Mimamori watching a worktree: change list with flags, a diff with word-level emphasis, and the activity feed](docs/mimamori-main.png)
+![Mimamori watching a worktree while agents work: the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars, a diff, and the activity feed](docs/mimamori-main.png)
 
 ## Why
 
@@ -58,6 +58,9 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - Under each agent, a thin strip lays its turn's tool calls along time, coloured by kind (blue edits, green commands, grey reads and searches, red failures, orange waiting on you), so you can see the turn's rhythm and when an agent has gone quiet. After three minutes without a tool call, the strip ends with "quiet 4m".
   - **Go to agent** brings the app the agent runs in (Terminal, iTerm, VS Code, the Claude or Hermes app) to the front. It appears, with Summary, in place of the step count when you point at a card; an agent waiting on you keeps a tinted Go to agent button, since that is where you answer it.
   - Click a card to jump to that worktree, switch off Details for one line per agent, widen the window past about 900 points for two columns, or pin the window above everything else.
+
+<p align="center"><img src="docs/mimamori-agents.png" width="460" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through ten steps, and Gemini CLI ready for its next prompt, each with its task, turn timeline, latest steps and files"></p>
+
 - **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you. Click it for a popover drawn like the desktop widget: each agent at work with a live timer, its task and latest steps, then every repository and worktree with what changed. Click an agent or a worktree to open it in Mimamori.
 
 
