@@ -56,7 +56,7 @@ state, never on a loop.
 - [x] Compact sidebar rows: agent glyph and chips for changed, flagged and to-review files.
 - [x] A menu-bar popover that reuses the widget's views.
 - [x] A change overview beside the diff, and hunk headers that stay put.
-- [ ] Settings › Agents split into tabs.
+- [x] Settings › Agents split into tabs.
 - [x] A real app icon.
 - [x] A status pill in the toolbar for the most pressing agent.
 

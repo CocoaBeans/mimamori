@@ -606,9 +606,30 @@ struct AttentionNeededButton: View {
     }
 }
 
-/// Settings tab: hooks, detection, feed and notifications.
+/// The parts of Settings › Agents, each a pane of its own.
+enum AgentSettingsSection: String, CaseIterable, Identifiable {
+    case hooks
+    case otherAgents = "other"
+    case feedAndWidgets = "widgets"
+    case notifications
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .hooks: "Hooks"
+        case .otherAgents: "Other Agents"
+        case .feedAndWidgets: "Feed & Widgets"
+        case .notifications: "Notifications"
+        }
+    }
+}
+
+/// Settings tab: hooks, other agents and detection, the feed and widgets, and notifications,
+/// each on a pane of its own.
 struct AgentSettingsView: View {
     @Environment(AppModel.self) private var model
+    @State private var section: AgentSettingsSection = .hooks
     @State private var hooksInstalled = HookInstaller.isInstalled()
     @State private var confirmInstall = false
     @State private var confirmUninstall = false
@@ -638,142 +659,23 @@ struct AgentSettingsView: View {
     }
 
     var body: some View {
-        let settings = SettingsBinding.make(model)
-        let hub = model.agentHub
-        Form {
-            Section {
-                LabeledContent("Socket") {
-                    HStack(spacing: 6) {
-                        Circle().fill(hub.isListening ? .green : .red).frame(width: 8, height: 8)
-                        Text(hub.isListening ? "listening" : (hub.socketError ?? "not listening"))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                LabeledContent("Events received", value: "\(hub.eventsReceived)" + (hub.lastEventAt.map { " · last \(Format.relative($0, to: model.now))" } ?? ""))
-                heardFrom
-            } header: {
-                Text("Hooks")
-            } footer: {
-                Text("Hooks are commands an agent runs whenever something happens: a prompt, a tool call, a permission request. Vigil's post each event to its local socket, so it knows what the agent is doing. Vigil installs them for Claude Code and Hermes with one click; any other agent takes a setup you paste into its own settings (see Other agents).")
+        VStack(spacing: 0) {
+            Picker("Section", selection: $section) {
+                ForEach(AgentSettingsSection.allCases) { Text($0.title).tag($0) }
             }
-            Section {
-                LabeledContent("Hooks") {
-                    Text(hooksInstalled ? "Installed" : "Not installed")
-                        .foregroundStyle(hooksInstalled ? .green : .secondary)
-                }
-                HStack {
-                    Button("Install Hooks…") { confirmInstall = true }
-                        .help("Add Vigil's hooks to ~/.claude/settings.json. A backup is saved first and your own hooks are kept.")
-                        .disabled(hooksInstalled)
-                    Button("Uninstall Hooks…") { confirmUninstall = true }
-                        .help("Remove only Vigil's hooks from ~/.claude/settings.json. A backup is saved first.")
-                        .disabled(!hooksInstalled)
-                    Spacer()
-                    Button("Reveal settings.json") {
-                        NSWorkspace.shared.activateFileViewerSelecting([HookInstaller.settingsURL])
-                    }
-                    .help("Show Claude Code's settings file in Finder")
-                }
-                if let lastMessage {
-                    Text(lastMessage).font(.callout).foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Claude Code")
-            } footer: {
-                Text("Hooks let Claude Code tell Vigil exactly what it is doing: when a turn starts and ends, every tool call, and when it needs your permission or asks you a question. Installing adds entries to ~/.claude/settings.json that post each event to Vigil's local socket with curl; a backup is saved first and your other hooks are left untouched. If Vigil is not running the command fails silently in under a second.")
-            }
-            if hermesState != .notPresent {
-                Section {
-                    LabeledContent("Hooks") {
-                        Text(hermesStatusText)
-                            .foregroundStyle(hermesAwaitingApproval ? .orange : hermesState == .installed ? .green : .secondary)
-                    }
-                    if hermesAwaitingApproval {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Hermes runs a hook only after you approve it, and its gateway cannot ask, so until then it skips Vigil's hooks without a word. Run this once in Terminal, quit with /exit, then open a new Hermes session:")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            HStack {
-                                Text(Self.hermesApproveCommand)
-                                    .font(.callout.monospaced())
-                                    .textSelection(.enabled)
-                                Spacer()
-                                Button("Copy") { Workspace.copy(Self.hermesApproveCommand) }
-                                    .help("Copy the command that approves Vigil's hooks in Hermes")
-                                Button("Check Again") { refreshHermes() }
-                                    .help("Read Hermes's hook approvals again")
-                            }
-                            Text("Or run plain hermes and approve each hook when it asks. --accept-hooks approves every hook in config.yaml, so look there first if you have hooks of your own.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    HStack {
-                        Button("Install Hermes Hooks…") { confirmHermesInstall = true }
-                            .help("Write Vigil's hook script and add its hooks to ~/.hermes/config.yaml. A backup is saved first.")
-                            .disabled(hermesState == .installed)
-                        Button("Uninstall Hermes Hooks…") { confirmHermesUninstall = true }
-                            .help("Remove Vigil's hook script and its block from ~/.hermes/config.yaml. A backup is saved first.")
-                            .disabled(hermesState != .installed)
-                        Spacer()
-                        Button("Copy YAML") { Workspace.copy(HermesHookInstaller.snippet) }
-                            .help("The entries to put under hooks: in ~/.hermes/config.yaml")
-                    }
-                    if let hermesMessage {
-                        Text(hermesMessage).font(.callout).foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Hermes Agent")
-                } footer: {
-                    Text((hermesState == .manualMergeNeeded
-                         ? "Your config.yaml already has a hooks: block, so Vigil will not edit it. Install writes the script to ~/.hermes/agent-hooks/vigil.sh; then paste the copied YAML entries under your existing hooks: key."
-                         : "Install writes a small script to ~/.hermes/agent-hooks/vigil.sh and appends a delimited hooks: block to ~/.hermes/config.yaml (backup first). Hermes then needs you to approve the hooks once from a terminal; sessions opened after that report to Vigil.")
-                         + " Hermes gets an installer of its own because it runs hooks without a shell, which needs the script, and skips any you have not approved; this section shows which are still waiting.")
-                }
-                .onAppear { refreshHermes() }
-            }
-            otherAgents
-            Section {
-                Toggle("Detect agent processes", isOn: settings.agentScanEnabled)
-                    .help("Look for agent processes in your worktrees, so an agent shows even without hooks")
-                Stepper("Scan every \(Int(settings.wrappedValue.agentScanIntervalSeconds)) s",
-                        value: settings.agentScanIntervalSeconds, in: 1...30, step: 1)
-                    .disabled(!settings.wrappedValue.agentScanEnabled)
-                TextField("Additional executable names", text: $customNames, prompt: Text("myagent, otheragent"))
-                    .onSubmit { commitNames() }
-                    .onAppear { customNames = model.settings.customAgentNames.joined(separator: ", ") }
-            } header: {
-                Text("Detection")
-            } footer: {
-                Text("Without hooks, Vigil still shows which worktrees have an agent process running in them (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp). Add other executable names, comma separated, and press Return.")
-            }
-            Section("Activity feed") {
-                Picker("Show tool calls", selection: settings.agentToolCallsInFeed) {
-                    ForEach(AgentToolCallFeedMode.allCases, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .help("Which of an agent's tool calls get their own entry in the activity feed")
-            }
-            Section {
-                Toggle("Show tasks and steps in widgets", isOn: settings.showTasksInWidgets)
-                    .help("Let desktop widgets show each agent's task and latest steps. Anyone who can see your screen can read them.")
-            } header: {
-                Text("Desktop widgets")
-            } footer: {
-                Text("Add the Agents widget from the desktop's Edit Widgets menu. Each widget can also be set to hide tasks, or to show only agents that need you.")
-            }
-            Section("Notifications") {
-                Toggle("When an agent needs permission or asks a question", isOn: settings.notifyOnAgentPermission)
-                    .help("Post a notification when an agent is waiting on you")
-                Toggle("When two agents edit the same files", isOn: settings.notifyOnAgentCollision)
-                    .help("Post a notification when agents working in one worktree edit the same file, which can undo each other's work")
-                Toggle("When an agent finishes a turn", isOn: settings.notifyOnAgentTurnFinished)
-                    .help("Post a notification when an agent finishes its turn and is ready for your next prompt")
-                if !model.isNotifierAvailable {
-                    Text("Notifications work when Vigil runs from an app bundle.").font(.callout).foregroundStyle(.secondary)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(.top, 14)
+            .padding(.bottom, 2)
+            Form {
+                switch section {
+                case .hooks: hooks
+                case .otherAgents:
+                    otherAgents
+                    detection
+                case .feedAndWidgets: feedAndWidgets
+                case .notifications: notifications
                 }
             }
         }
@@ -801,6 +703,164 @@ struct AgentSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Removes the script and Vigil's delimited block from config.yaml after saving a backup.")
+        }
+        .onAppear {
+            // VIGIL_DEBUG_FLAGS=agents:<section>: open on that section (with settings:agents).
+            if let wanted = AgentSettingsSection.allCases.first(where: { model.debugFlags.contains("agents:" + $0.rawValue) }) {
+                section = wanted
+            }
+        }
+    }
+
+    /// The hook socket, who has reported, and the one-click installers.
+    @ViewBuilder private var hooks: some View {
+        let hub = model.agentHub
+        Section {
+            LabeledContent("Socket") {
+                HStack(spacing: 6) {
+                    Circle().fill(hub.isListening ? .green : .red).frame(width: 8, height: 8)
+                    Text(hub.isListening ? "listening" : (hub.socketError ?? "not listening"))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            LabeledContent("Events received", value: "\(hub.eventsReceived)" + (hub.lastEventAt.map { " · last \(Format.relative($0, to: model.now))" } ?? ""))
+            heardFrom
+        } header: {
+            Text("Status")
+        } footer: {
+            Text("Hooks are commands an agent runs whenever something happens: a prompt, a tool call, a permission request. Vigil's post each event to its local socket, so it knows what the agent is doing. Vigil installs them for Claude Code and Hermes with one click; any other agent takes a setup you paste into its own settings (see Other Agents).")
+        }
+        Section {
+            LabeledContent("Hooks") {
+                Text(hooksInstalled ? "Installed" : "Not installed")
+                    .foregroundStyle(hooksInstalled ? .green : .secondary)
+            }
+            HStack {
+                Button("Install Hooks…") { confirmInstall = true }
+                    .help("Add Vigil's hooks to ~/.claude/settings.json. A backup is saved first and your own hooks are kept.")
+                    .disabled(hooksInstalled)
+                Button("Uninstall Hooks…") { confirmUninstall = true }
+                    .help("Remove only Vigil's hooks from ~/.claude/settings.json. A backup is saved first.")
+                    .disabled(!hooksInstalled)
+                Spacer()
+                Button("Reveal settings.json") {
+                    NSWorkspace.shared.activateFileViewerSelecting([HookInstaller.settingsURL])
+                }
+                .help("Show Claude Code's settings file in Finder")
+            }
+            if let lastMessage {
+                Text(lastMessage).font(.callout).foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Claude Code")
+        } footer: {
+            Text("Hooks let Claude Code tell Vigil exactly what it is doing: when a turn starts and ends, every tool call, and when it needs your permission or asks you a question. Installing adds entries to ~/.claude/settings.json that post each event to Vigil's local socket with curl; a backup is saved first and your other hooks are left untouched. If Vigil is not running the command fails silently in under a second.")
+        }
+        if hermesState != .notPresent {
+            Section {
+                LabeledContent("Hooks") {
+                    Text(hermesStatusText)
+                        .foregroundStyle(hermesAwaitingApproval ? .orange : hermesState == .installed ? .green : .secondary)
+                }
+                if hermesAwaitingApproval {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Hermes runs a hook only after you approve it, and its gateway cannot ask, so until then it skips Vigil's hooks without a word. Run this once in Terminal, quit with /exit, then open a new Hermes session:")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Text(Self.hermesApproveCommand)
+                                .font(.callout.monospaced())
+                                .textSelection(.enabled)
+                            Spacer()
+                            Button("Copy") { Workspace.copy(Self.hermesApproveCommand) }
+                                .help("Copy the command that approves Vigil's hooks in Hermes")
+                            Button("Check Again") { refreshHermes() }
+                                .help("Read Hermes's hook approvals again")
+                        }
+                        Text("Or run plain hermes and approve each hook when it asks. --accept-hooks approves every hook in config.yaml, so look there first if you have hooks of your own.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                HStack {
+                    Button("Install Hermes Hooks…") { confirmHermesInstall = true }
+                        .help("Write Vigil's hook script and add its hooks to ~/.hermes/config.yaml. A backup is saved first.")
+                        .disabled(hermesState == .installed)
+                    Button("Uninstall Hermes Hooks…") { confirmHermesUninstall = true }
+                        .help("Remove Vigil's hook script and its block from ~/.hermes/config.yaml. A backup is saved first.")
+                        .disabled(hermesState != .installed)
+                    Spacer()
+                    Button("Copy YAML") { Workspace.copy(HermesHookInstaller.snippet) }
+                        .help("The entries to put under hooks: in ~/.hermes/config.yaml")
+                }
+                if let hermesMessage {
+                    Text(hermesMessage).font(.callout).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Hermes Agent")
+            } footer: {
+                Text((hermesState == .manualMergeNeeded
+                     ? "Your config.yaml already has a hooks: block, so Vigil will not edit it. Install writes the script to ~/.hermes/agent-hooks/vigil.sh; then paste the copied YAML entries under your existing hooks: key."
+                     : "Install writes a small script to ~/.hermes/agent-hooks/vigil.sh and appends a delimited hooks: block to ~/.hermes/config.yaml (backup first). Hermes then needs you to approve the hooks once from a terminal; sessions opened after that report to Vigil.")
+                     + " Hermes gets an installer of its own because it runs hooks without a shell, which needs the script, and skips any you have not approved; this section shows which are still waiting.")
+            }
+            .onAppear { refreshHermes() }
+        }
+    }
+
+    /// Agents seen from their processes, for those without hooks.
+    @ViewBuilder private var detection: some View {
+        let settings = SettingsBinding.make(model)
+        Section {
+            Toggle("Detect agent processes", isOn: settings.agentScanEnabled)
+                .help("Look for agent processes in your worktrees, so an agent shows even without hooks")
+            Stepper("Scan every \(Int(settings.wrappedValue.agentScanIntervalSeconds)) s",
+                    value: settings.agentScanIntervalSeconds, in: 1...30, step: 1)
+                .disabled(!settings.wrappedValue.agentScanEnabled)
+            TextField("Additional executable names", text: $customNames, prompt: Text("myagent, otheragent"))
+                .onSubmit { commitNames() }
+                .onAppear { customNames = model.settings.customAgentNames.joined(separator: ", ") }
+        } header: {
+            Text("Detection")
+        } footer: {
+            Text("Without hooks, Vigil still shows which worktrees have an agent process running in them (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp). Add other executable names, comma separated, and press Return.")
+        }
+    }
+
+    @ViewBuilder private var feedAndWidgets: some View {
+        let settings = SettingsBinding.make(model)
+        Section("Activity feed") {
+            Picker("Show tool calls", selection: settings.agentToolCallsInFeed) {
+                ForEach(AgentToolCallFeedMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .help("Which of an agent's tool calls get their own entry in the activity feed")
+        }
+        Section {
+            Toggle("Show tasks and steps in widgets", isOn: settings.showTasksInWidgets)
+                .help("Let desktop widgets show each agent's task and latest steps. Anyone who can see your screen can read them.")
+        } header: {
+            Text("Desktop widgets")
+        } footer: {
+            Text("Add the Agents widget from the desktop's Edit Widgets menu. Each widget can also be set to hide tasks, or to show only agents that need you.")
+        }
+    }
+
+    @ViewBuilder private var notifications: some View {
+        let settings = SettingsBinding.make(model)
+        Section {
+            Toggle("When an agent needs permission or asks a question", isOn: settings.notifyOnAgentPermission)
+                .help("Post a notification when an agent is waiting on you")
+            Toggle("When two agents edit the same files", isOn: settings.notifyOnAgentCollision)
+                .help("Post a notification when agents working in one worktree edit the same file, which can undo each other's work")
+            Toggle("When an agent finishes a turn", isOn: settings.notifyOnAgentTurnFinished)
+                .help("Post a notification when an agent finishes its turn and is ready for your next prompt")
+            if !model.isNotifierAvailable {
+                Text("Notifications work when Vigil runs from an app bundle.").font(.callout).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -862,8 +922,6 @@ struct AgentSettingsView: View {
                         .disabled(!FileManager.default.fileExists(atPath: url.path))
                 }
             }
-        } header: {
-            Text("Other agents")
         } footer: {
             Text("Any agent that can run a command when something happens can report to Vigil. Add the setup to the agent's own settings: Vigil works out which agent sent each event and understands its event names. Vigil never edits these files, so remove the entries yourself to stop.")
         }
