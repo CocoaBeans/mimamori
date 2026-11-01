@@ -6,6 +6,10 @@ import WidgetKit
 /// extension reads, and asks WidgetKit to reload. WidgetKit limits reloads, so it writes at once
 /// only when who needs you changes, otherwise at most every 10 s, and only when what the widgets
 /// show has changed; a heartbeat every 15 minutes lets them tell a quiet Vigil from a gone one.
+///
+/// Every build signed for the team shares that container, so a scratch run (VIGIL_SUPPORT_DIR,
+/// as the debug scripts use) writes nothing: it would put its test agents, then "not running",
+/// on your desktop, and the Vigil you use would not correct it until its own agents changed.
 @MainActor
 final class WidgetPublisher {
     private static let minimumInterval: TimeInterval = 10
@@ -17,8 +21,10 @@ final class WidgetPublisher {
     private var pending: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
     private var latest: [AgentWidgetSnapshot.Agent] = []
+    private let enabled = !Persistence.isScratch
 
     init() {
+        guard enabled else { return }
         heartbeatTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.heartbeat))
@@ -30,6 +36,7 @@ final class WidgetPublisher {
 
     /// The agents as they are now, the most pressing first.
     func update(_ agents: [AgentWidgetSnapshot.Agent]) {
+        guard enabled else { return }
         latest = agents
         guard agents != shown else { return }
         let waiting = Set(agents.filter { $0.state == .needsYou || $0.collision != nil }.map(\.id))
@@ -47,8 +54,11 @@ final class WidgetPublisher {
         }
     }
 
-    /// Vigil is quitting: the widgets say so instead of showing states nobody keeps current.
+    /// Vigil is quitting: the widgets say so instead of showing states nobody keeps current. Not
+    /// when another Vigil has written since: it is the one keeping them current now.
     func vigilQuitting() {
+        guard enabled else { return }
+        if let onDisk = AgentWidgetSnapshot.load(), abs(onDisk.writtenAt.timeIntervalSince(lastWriteAt)) > 0.001 { return }
         write(latest, running: false)
     }
 

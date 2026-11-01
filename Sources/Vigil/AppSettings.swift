@@ -236,6 +236,9 @@ enum Persistence {
         return base.appendingPathComponent("Vigil", isDirectory: true)
     }()
 
+    /// A scripted run in a throwaway folder (VIGIL_SUPPORT_DIR), which must leave your real setup alone.
+    static let isScratch = !(ProcessInfo.processInfo.environment["VIGIL_SUPPORT_DIR"] ?? "").isEmpty
+
     static var stateURL: URL { supportDirectory.appendingPathComponent("state.json") }
     static var shadowIndexDirectory: URL { supportDirectory.appendingPathComponent("index", isDirectory: true) }
     static var activityURL: URL { supportDirectory.appendingPathComponent("activity.jsonl") }
