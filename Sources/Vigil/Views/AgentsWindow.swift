@@ -189,9 +189,25 @@ struct AgentDashboardRow: View {
     var onOpenFile: (String) -> Void = { _ in }
     var onDismissCollision: () -> Void = {}
 
+    @State private var hovering = false
+
     private var presence: AgentPresence { row.presence }
 
     private func relative(_ text: String) -> String { AgentText.shortenPaths(text, in: row.session.id) }
+
+    /// The agent is waiting on you, so Go to agent stays in view, tinted: it is where you answer.
+    private var answerHere: Bool { canGoToAgent && presence.source == .hooks && presence.activity.needsAttention }
+
+    /// A working agent that has gone this long without a tool call is probably stuck, or thinking
+    /// hard. VIGIL_QUIET_AFTER (seconds) shortens it for screenshots.
+    static let quietAfter: TimeInterval = Double(ProcessInfo.processInfo.environment["VIGIL_QUIET_AFTER"] ?? "") ?? 3 * 60
+
+    /// "quiet 4m": how long a working agent has gone without a tool call, once that is a while.
+    private func quiet(in timeline: TurnTimeline) -> String? {
+        guard presence.source == .hooks, case .working = presence.activity,
+              let quiet = timeline.quietFor, quiet >= Self.quietAfter else { return nil }
+        return "quiet \(Format.duration(quiet))"
+    }
 
     /// The last tool call, when the status line does not already name it.
     private var lastCall: String? {
@@ -249,11 +265,16 @@ struct AgentDashboardRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 6)
-                    if let steps {
-                        Text(steps)
-                            .font(.callout.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .fixedSize()
+                    // The step count, or under the pointer the buttons in its place.
+                    ZStack(alignment: .trailing) {
+                        if let steps {
+                            Text(steps)
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .fixedSize()
+                                .opacity(hovering ? 0 : 1)
+                        }
+                        hoverButtons
                     }
                     AgentTimerPill(presence: presence, now: now)
                 }
@@ -262,8 +283,17 @@ struct AgentDashboardRow: View {
                     .lineLimit(2)
                     .truncationMode(.tail)
                 if let timeline {
-                    TurnTimelineStrip(timeline: timeline)
-                        .padding(.vertical, 2)
+                    HStack(spacing: 8) {
+                        TurnTimelineStrip(timeline: timeline)
+                        if let quiet = quiet(in: timeline) {
+                            Label(quiet, systemImage: "hourglass")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .fixedSize()
+                                .help("No tool call for a while: the agent may be stuck, or thinking hard")
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
                 if let collision = presence.collision {
                     AgentCollisionNote(collision: collision, worktree: row.session.id, onDismiss: onDismissCollision)
@@ -280,10 +310,45 @@ struct AgentDashboardRow: View {
             }
         }
         .padding(.vertical, detailed ? 7 : 5)
+        .onHover { hovering = $0 }
+    }
+
+    /// Go to agent and Summary, shown under the pointer in place of the step count. They stay in
+    /// the tree, hidden, so the row does not shift when they appear; the context menu has both too.
+    private var hoverButtons: some View {
+        HStack(spacing: 2) {
+            if canGoToAgent, !answerHere {
+                Button(action: onGoToAgent) { Image(systemName: "arrow.up.forward.app") }
+                    .help("Go to agent: bring the app it runs in to the front")
+                    .accessibilityLabel("Go to agent")
+            }
+            Button(action: onSummary) { Image(systemName: "doc.text") }
+                .help("Session summary: write up this session as Markdown")
+                .accessibilityLabel("Session summary")
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .opacity(hovering ? 1 : 0)
+        .allowsHitTesting(hovering)
+        .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+
+    /// For an agent waiting on you: Go to agent, tinted, where you answer it.
+    @ViewBuilder private var answerButton: some View {
+        if answerHere {
+            Button(action: onGoToAgent) {
+                Label("Go to agent", systemImage: "arrow.up.forward.app")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(presence.alertTint)
+            .controlSize(.small)
+            .help("Bring the app this agent runs in to the front, to answer it")
+        }
     }
 
     private var compactFooter: some View {
         HStack(spacing: 8) {
+            answerButton
             if let lastCall {
                 Text(lastCall)
                     .lineLimit(1)
@@ -325,23 +390,12 @@ struct AgentDashboardRow: View {
             FileChips(files: row.files, onOpen: onOpenFile)
         }
         HStack(spacing: 8) {
-            if canGoToAgent {
-                Button(action: onGoToAgent) {
-                    Label("Go to agent", systemImage: "arrow.up.forward.app")
-                }
-                .help("Bring the app this agent runs in to the front")
-            }
-            Button(action: onSummary) {
-                Label("Summary", systemImage: "doc.text")
-            }
-            .help("Write up this session as Markdown")
+            answerButton
             Spacer(minLength: 6)
             ChangeSummary(session: row.session)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .controlSize(.small)
-        .buttonStyle(.bordered)
         .padding(.top, 2)
     }
 }

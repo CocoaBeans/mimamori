@@ -66,11 +66,11 @@ state, never on a loop.
 - [x] Each agent a card tinted like the banner, with the widget's badge: its glyph in a disc the
       colour of its state.
 - [x] Each agent's timer in a pill the colour of its state.
-- [ ] Go to agent and Summary as icon buttons that appear on hover; agents that need you keep a
+- [x] Go to agent and Summary as icon buttons that appear on hover; agents that need you keep a
       tinted Go to agent.
 - [x] A turn timeline: one tick per tool call, coloured by kind, so a turn's rhythm and a long
       silence show at a glance.
-- [ ] "Quiet for 4m" on an agent still working that has made no tool call for a while.
+- [x] "Quiet for 4m" on an agent still working that has made no tool call for a while.
 - [ ] Two columns when the window is wide, like the extra-large widget.
 - [x] Mini diff bars on the file chips, with the changed-file diff bars above.
 

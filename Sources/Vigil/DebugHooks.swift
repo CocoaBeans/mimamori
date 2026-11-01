@@ -14,6 +14,7 @@ import WidgetKit
 ///     VIGIL_WINDOW=1000x640                  resize the main window after launch
 ///     VIGIL_SUPPORT_DIR=/path                keep state, shadow indexes and the socket here instead
 ///     VIGIL_SCREENSHOT_WINDOW=Agents         capture the window with this title instead of the largest
+///     VIGIL_QUIET_AFTER=5                    call a working agent quiet after 5 s without a tool call, not 3 min
 ///     VIGIL_DEBUG_FLAGS=summary              open the session summary (and write it to <dump>.summary.md)
 ///     VIGIL_DEBUG_FLAGS=open-runs            open every agent run in the activity feed
 ///     VIGIL_DEBUG_FLAGS=menu-bar             open the menu-bar popover (captured as <screenshot>.extra1.png)
