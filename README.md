@@ -147,10 +147,13 @@ Vigil talks to nothing but your local `git`. It has no network code beyond a Uni
 
 ## Development
 
+Open `Vigil.xcodeproj` in Xcode to build, run and sign the app: the **Vigil** app target over a **VigilCore** static framework, signed automatically with the project's team. Both targets use folder-synchronized groups, so a Swift file added under `Sources/Vigil` or `Sources/VigilCore` is part of the build without editing the project.
+
 ```bash
-swift build          # build
-swift test           # parsers, rules, differ, plus integration tests against real git
-Scripts/make-app.sh  # wrap the binary in build/Vigil.app (debug|release)
+Scripts/make-app.sh             # build/Vigil.app via xcodebuild, team-signed (debug|release)
+VIGIL_SIGN=adhoc Scripts/make-app.sh   # signed ad hoc, for a Mac without the team's certificate
+swift test                      # parsers, rules, differ, plus integration tests against real git
+swift build                     # the same app as a Swift package, for `swift run` and the debug hooks
 ```
 
 ### App icon

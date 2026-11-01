@@ -13,7 +13,8 @@ let package = Package(
         // No SwiftUI in here, so it can be tested quickly from the command line.
         .target(name: "VigilCore"),
 
-        // The macOS app: SwiftUI shell over VigilCore.
+        // The macOS app: SwiftUI shell over VigilCore. Vigil.xcodeproj builds the shipped,
+        // signed app from the same sources; this target is for `swift run` and the debug hooks.
         .executableTarget(
             name: "Vigil",
             dependencies: ["VigilCore"],

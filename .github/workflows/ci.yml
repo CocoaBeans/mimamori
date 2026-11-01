@@ -17,14 +17,15 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Build
-        run: swift build -c release
+      # The package still builds the app, for `swift run` and the debug hooks.
+      - name: Build (Swift package)
+        run: swift build
 
       - name: Test
         run: swift test
 
-      - name: Bundle app
-        run: Scripts/make-app.sh release
+      - name: Build app (Xcode project, ad hoc signed)
+        run: VIGIL_SIGN=adhoc Scripts/make-app.sh release
 
       - name: Zip app
         run: ditto -c -k --keepParent build/Vigil.app build/Vigil-unsigned.zip

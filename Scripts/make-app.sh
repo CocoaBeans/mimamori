@@ -1,23 +1,27 @@
 #!/bin/zsh
-# Builds Vigil and wraps it in a proper .app bundle at build/Vigil.app.
+# Builds Vigil.app from Vigil.xcodeproj and copies it to build/Vigil.app.
 # Usage: Scripts/make-app.sh [debug|release]   (default: release)
+#
+# The app is signed with the project's team (automatic signing, an Apple Development certificate).
+# VIGIL_SIGN=adhoc signs it ad hoc instead, for CI or a Mac without the team's certificate.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="${1:-release}"
-swift build -c "$CONFIG" --product Vigil
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/Vigil"
+case "${1:-release}" in
+  debug) CONFIG=Debug ;;
+  release) CONFIG=Release ;;
+  *) echo "usage: $0 [debug|release]" >&2; exit 2 ;;
+esac
+
+SIGNING=()
+if [[ "${VIGIL_SIGN:-team}" == adhoc ]]; then
+  SIGNING=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=)
+fi
+
+xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration "$CONFIG" \
+  -derivedDataPath build/DerivedData "${SIGNING[@]}" -quiet build
 
 APP="build/Vigil.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Vigil"
-cp Resources/Info.plist "$APP/Contents/Info.plist"
-printf 'APPL????' > "$APP/Contents/PkgInfo"
-if [[ -f Resources/AppIcon.icns ]]; then
-  cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-fi
-
-# Ad-hoc signature so macOS treats it as a stable identity (notifications, TCC prompts).
-codesign --force --sign - --identifier dev.vigil.mac "$APP" >/dev/null 2>&1 || true
+ditto "build/DerivedData/Build/Products/$CONFIG/Vigil.app" "$APP"
 echo "$PWD/$APP"
