@@ -17,6 +17,7 @@ import WidgetKit
 ///     VIGIL_DEBUG_FLAGS=summary              open the session summary (and write it to <dump>.summary.md)
 ///     VIGIL_DEBUG_FLAGS=open-runs            open every agent run in the activity feed
 ///     VIGIL_DEBUG_FLAGS=menu-bar             open the menu-bar popover (captured as <screenshot>.extra1.png)
+///     VIGIL_DEBUG_FLAGS=status-pill          open the toolbar's agent status popover
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -42,6 +43,7 @@ enum DebugHooks {
         var renderedWidgets = false
         var openedCommit = false
         var openedMenuBar = false
+        var renderedPillPopover = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
             let resized = windowSize.map { resizeWindow(to: $0, titled: windowTitle) } ?? true
@@ -100,6 +102,11 @@ enum DebugHooks {
                               let first = session.openCommitChanges.first {
                         session.select(.file(commit: oid, path: first.path))
                     }
+                }
+                if model.debugFlags.contains("status-pill"), !renderedPillPopover, !model.agentRows.isEmpty, let dump {
+                    // The live popover loses its vibrant colours too.
+                    renderedPillPopover = true
+                    writePreviews(of: AgentStatusPopover(onDone: {}), named: "status-pill", model: model, to: dump)
                 }
                 if model.debugFlags.contains("menu-bar"), !openedMenuBar {
                     openedMenuBar = clickStatusItem()
@@ -176,8 +183,13 @@ enum DebugHooks {
 
     /// The menu-bar popover in light and dark, next to the dump.
     private static func writeMenuBarPreviews(model: AppModel, to path: String) {
+        writePreviews(of: MenuBarPanel(), named: "menubar", model: model, to: path)
+    }
+
+    /// `view` in light and dark, as `<path>.<name>-light.png` and `-dark.png`.
+    private static func writePreviews(of content: some View, named name: String, model: AppModel, to path: String) {
         for scheme in [ColorScheme.light, .dark] {
-            let view = MenuBarPanel()
+            let view = content
                 .environment(model)
                 .background(scheme == .dark ? Color(white: 0.17) : Color(white: 0.95))
                 .environment(\.colorScheme, scheme)
@@ -186,7 +198,7 @@ enum DebugHooks {
             renderer.scale = 2
             guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
                   let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { continue }
-            try? png.write(to: URL(fileURLWithPath: "\(path).menubar-\(scheme == .dark ? "dark" : "light").png"))
+            try? png.write(to: URL(fileURLWithPath: "\(path).\(name)-\(scheme == .dark ? "dark" : "light").png"))
         }
     }
 

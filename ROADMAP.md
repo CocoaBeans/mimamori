@@ -58,7 +58,7 @@ state, never on a loop.
 - [ ] A change overview beside the diff, and hunk headers that stay put.
 - [ ] Settings › Agents split into tabs.
 - [ ] A real app icon.
-- [ ] A status pill in the toolbar for the most pressing agent.
+- [x] A status pill in the toolbar for the most pressing agent.
 
 ### Agents window
 

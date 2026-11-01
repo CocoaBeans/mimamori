@@ -249,6 +249,8 @@ struct AgentBannerDetails {
     var onGoToAgent: () -> Void
     var onSummary: () -> Void
     var onDismissCollision: () -> Void = {}
+    /// Offer the button that shows more or less; off where the banner is always shown in full.
+    var canToggle = true
 }
 
 /// A prominent status banner for the top of the detail column.
@@ -422,11 +424,13 @@ struct AgentStatusBanner: View {
                 }
                 .help("Session summary (⇧⌘E)")
                 .accessibilityLabel("Session summary")
-                Button(action: details.onToggle) {
-                    Image(systemName: details.expanded ? "chevron.up" : "chevron.down")
+                if details.canToggle {
+                    Button(action: details.onToggle) {
+                        Image(systemName: details.expanded ? "chevron.up" : "chevron.down")
+                    }
+                    .help(details.expanded ? "Show less" : "Show the task, recent steps and files")
+                    .accessibilityLabel(details.expanded ? "Show less" : "Show details")
                 }
-                .help(details.expanded ? "Show less" : "Show the task, recent steps and files")
-                .accessibilityLabel(details.expanded ? "Show less" : "Show details")
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
