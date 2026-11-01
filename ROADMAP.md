@@ -7,6 +7,11 @@ hook installers, reading agents' session records and running `git` on arbitrary 
 The plan is a free, open-source release distributed as a notarized download and a Homebrew
 cask. These items gate it.
 
+### Name
+
+- [ ] Rename Vigil to Mimamori, first, while the only hooks to migrate are the maintainer's.
+      Planned in [docs/plans/rename-to-mimamori.md](docs/plans/rename-to-mimamori.md).
+
 ### Distribution
 
 - [ ] Sign with a Developer ID certificate and notarize each build (`notarytool`), stapling the ticket.
