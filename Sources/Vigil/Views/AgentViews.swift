@@ -253,18 +253,13 @@ struct AgentStatusBanner: View {
         details.map { AgentText.shortenPaths(text, in: $0.worktree) } ?? text
     }
 
-    private func headlineRow(_ text: String, named: Bool) -> some View {
-        HStack(spacing: 6) {
-            if named {
-                Text(presence.kind.displayName)
-                    .font(.headline)
-            }
-            Text(text)
-                .font(.headline)
-                .fontWeight(named ? .regular : .semibold)
-                .foregroundStyle(presence.needsAttention ? presence.tint : .primary)
-        }
-        .lineLimit(1)
+    /// "Codex Needs permission": one text, so in the narrowest column it wraps rather than truncating.
+    private func headlineText(_ text: String) -> some View {
+        let state = Text(text)
+            .fontWeight(.regular)
+            .foregroundStyle(presence.needsAttention ? presence.tint : .primary)
+        return Text("\(Text(presence.kind.displayName))\u{2002}\(state)")
+            .font(.headline)
     }
 
     var body: some View {
@@ -296,16 +291,24 @@ struct AgentStatusBanner: View {
                 .frame(width: 28)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    // Shorten the words before truncating them, so a narrow column still reads.
-                    ViewThatFits(in: .horizontal) {
-                        headlineRow(headline, named: true)
-                        headlineRow(shortHeadline, named: true)
-                        headlineRow(shortHeadline, named: false)
+                // One row while the headline fits beside the clock and buttons, in full or in
+                // shorter words. Narrower than that, the clock and buttons move to a row of their
+                // own and the headline gets the whole width: it never shrinks to "…".
+                ViewThatFits(in: .horizontal) {
+                    oneRow(headline)
+                    oneRow(shortHeadline)
+                    VStack(alignment: .leading, spacing: 4) {
+                        ViewThatFits(in: .horizontal) {
+                            headlineText(headline).lineLimit(1)
+                            headlineText(shortHeadline).lineLimit(1)
+                            headlineText(shortHeadline).lineLimit(2)
+                        }
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            timing
+                            Spacer(minLength: 8)
+                            buttons
+                        }
                     }
-                    .layoutPriority(1)
-                    Spacer(minLength: 8)
-                    trailing
                 }
                 if let detail {
                     Text(detail)
@@ -325,44 +328,58 @@ struct AgentStatusBanner: View {
         }
     }
 
-    /// The clock, the step count, and small buttons for the agent's app, the summary and collapsing.
-    private var trailing: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            // One line, so the detail below sits right under the headline.
-            HStack(spacing: 0) {
-                Text(presence.timing(now: now))
-                    .foregroundStyle(.secondary)
-                    .help(presence.timingHelp)
-                if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
-                    Text(" · " + (presence.toolCallsThisTurn == 1 ? "1 step" : "\(presence.toolCallsThisTurn) steps"))
-                        .foregroundStyle(.tertiary)
-                }
+    /// The headline, then the clock and buttons on the right.
+    private func oneRow(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            headlineText(text).lineLimit(1)
+            Spacer(minLength: 8)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                timing
+                buttons
             }
-            .font(.callout.monospacedDigit())
-            .fixedSize()
-            if let details {
-                HStack(spacing: 6) {
-                    if details.canGoToAgent {
-                        Button(action: details.onGoToAgent) {
-                            Image(systemName: "arrow.up.forward.app")
-                        }
-                        .help("Go to agent: bring the app it runs in to the front")
-                        .accessibilityLabel("Go to agent")
-                    }
-                    Button(action: details.onSummary) {
-                        Image(systemName: "doc.text")
-                    }
-                    .help("Session summary (⇧⌘E)")
-                    .accessibilityLabel("Session summary")
-                    Button(action: details.onToggle) {
-                        Image(systemName: details.expanded ? "chevron.up" : "chevron.down")
-                    }
-                    .help(details.expanded ? "Show less" : "Show the task, recent steps and files")
-                    .accessibilityLabel(details.expanded ? "Show less" : "Show details")
-                }
-                .buttonStyle(.borderless)
+        }
+    }
+
+    /// The clock and the step count, on one line.
+    private var timing: some View {
+        HStack(spacing: 0) {
+            Text(presence.timing(now: now))
                 .foregroundStyle(.secondary)
+                .help(presence.timingHelp)
+            if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
+                Text(" · " + (presence.toolCallsThisTurn == 1 ? "1 step" : "\(presence.toolCallsThisTurn) steps"))
+                    .foregroundStyle(.tertiary)
             }
+        }
+        .font(.callout.monospacedDigit())
+        .fixedSize()
+    }
+
+    /// Small buttons for the agent's app, the summary and collapsing.
+    @ViewBuilder
+    private var buttons: some View {
+        if let details {
+            HStack(spacing: 6) {
+                if details.canGoToAgent {
+                    Button(action: details.onGoToAgent) {
+                        Image(systemName: "arrow.up.forward.app")
+                    }
+                    .help("Go to agent: bring the app it runs in to the front")
+                    .accessibilityLabel("Go to agent")
+                }
+                Button(action: details.onSummary) {
+                    Image(systemName: "doc.text")
+                }
+                .help("Session summary (⇧⌘E)")
+                .accessibilityLabel("Session summary")
+                Button(action: details.onToggle) {
+                    Image(systemName: details.expanded ? "chevron.up" : "chevron.down")
+                }
+                .help(details.expanded ? "Show less" : "Show the task, recent steps and files")
+                .accessibilityLabel(details.expanded ? "Show less" : "Show details")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
         }
     }
 
