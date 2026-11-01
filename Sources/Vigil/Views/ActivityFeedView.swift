@@ -3,6 +3,8 @@ import VigilCore
 
 struct ActivityFeedView: View {
     @Environment(AppModel.self) private var model
+    /// Agent runs opened to show their steps, by the run's id.
+    @State private var openRuns: Set<UUID> = []
 
     private var entries: [ActivityEntry] {
         let filter = model.activityAgentFilter
@@ -38,12 +40,24 @@ struct ActivityFeedView: View {
                                        description: Text(emptyDescription))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(entries) { entry in
-                    ActivityRow(entry: entry, showWorktree: model.activityScopeAll, now: model.now,
-                                worktreeName: model.sessions[entry.worktreePath]?.displayName)
-                        .equatable()
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
+                List(ActivityFeedGrouping.items(entries)) { item in
+                    Group {
+                        switch item {
+                        case .day(let day):
+                            DayHeader(day: day, now: model.now)
+                        case .entry(let entry):
+                            ActivityRow(entry: entry, showWorktree: model.activityScopeAll, now: model.now,
+                                        worktreeName: model.sessions[entry.worktreePath]?.displayName)
+                                .equatable()
+                        case .run(let run):
+                            AgentRunRow(run: run, showWorktree: model.activityScopeAll, now: model.now,
+                                        worktreeName: model.sessions[run.worktreePath]?.displayName,
+                                        isOpen: Binding(get: { openRuns.contains(run.id) || model.debugFlags.contains("open-runs") },
+                                                        set: { if $0 { openRuns.insert(run.id) } else { openRuns.remove(run.id) } }))
+                        }
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
                 }
                 .listStyle(.plain)
             }
@@ -98,6 +112,100 @@ struct ActivityFeedView: View {
             .background(.bar)
         }
         .onChange(of: model.activityScopeAll) { model.persistUISoon() }
+    }
+}
+
+/// "Today", "Yesterday", or the date, above each day's entries.
+struct DayHeader: View {
+    let day: Date
+    let now: Date
+
+    private var title: String {
+        let calendar = Calendar.current
+        if calendar.isDate(day, inSameDayAs: now) { return "Today" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(day, inSameDayAs: yesterday) {
+            return "Yesterday"
+        }
+        return day.formatted(date: .complete, time: .omitted)
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.top, 6)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// An agent's run of tool calls, folded into one row: who, what kinds of steps, which files.
+/// Opening it lists every step and change in it.
+struct AgentRunRow: View {
+    let run: AgentRun
+    let showWorktree: Bool
+    let now: Date
+    let worktreeName: String?
+    @Binding var isOpen: Bool
+
+    private var files: String? {
+        let names = run.files.map { ($0 as NSString).lastPathComponent }
+        guard let first = names.first else { return nil }
+        return names.count == 1 ? first : names.count == 2 ? "\(first), \(names[1])" : "\(first) and \(names.count - 1) more"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { isOpen.toggle() }
+            } label: {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: AgentKind.symbolName(forDisplayName: run.agent))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18)
+                        .padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(run.agent): \(run.summary)")
+                                .font(.callout)
+                                .lineLimit(2)
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .rotationEffect(.degrees(isOpen ? 90 : 0))
+                        }
+                        HStack(spacing: 6) {
+                            if let files {
+                                Text(files).lineLimit(1)
+                            }
+                            if showWorktree, let worktreeName {
+                                Text(worktreeName).lineLimit(1)
+                            }
+                            Spacer(minLength: 4)
+                            Text(Format.relative(run.latestAt, to: now))
+                                .monospacedDigit()
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isOpen ? "Hide the steps" : "Show each step, \(Format.time.string(from: run.startedAt)) to \(Format.time.string(from: run.latestAt))")
+            .accessibilityLabel("\(run.agent): \(run.summary)")
+            .accessibilityHint(isOpen ? "Hides the steps" : "Shows each step")
+
+            if isOpen {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(run.entries) { entry in
+                        ActivityRow(entry: entry, showWorktree: false, now: now, worktreeName: nil)
+                            .equatable()
+                    }
+                }
+                .padding(.leading, 26)
+            }
+        }
     }
 }
 
