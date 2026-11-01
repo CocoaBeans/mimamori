@@ -107,8 +107,8 @@ enum Format {
     static func relative(_ date: Date, to now: Date) -> String {
         let seconds = max(0, now.timeIntervalSince(date))
         switch seconds {
-        case ..<5: return "just now"
-        case ..<60: return "\(Int(seconds))s ago"
+        // Minutes, not seconds: lists keep this current with a clock that ticks every 30 s.
+        case ..<60: return "just now"
         case ..<3600: return "\(Int(seconds / 60))m ago"
         case ..<86400: return "\(Int(seconds / 3600))h ago"
         default: return "\(Int(seconds / 86400))d ago"

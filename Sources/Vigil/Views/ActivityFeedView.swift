@@ -41,6 +41,7 @@ struct ActivityFeedView: View {
                 List(entries) { entry in
                     ActivityRow(entry: entry, showWorktree: model.activityScopeAll, now: model.now,
                                 worktreeName: model.sessions[entry.worktreePath]?.displayName)
+                        .equatable()
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
                 }
@@ -97,6 +98,14 @@ struct ActivityFeedView: View {
             .background(.bar)
         }
         .onChange(of: model.activityScopeAll) { model.persistUISoon() }
+    }
+}
+
+/// A new entry every few seconds rebuilds the visible rows; one whose inputs are unchanged need
+/// not draw again.
+extension ActivityRow: @preconcurrency Equatable {
+    static func == (a: ActivityRow, b: ActivityRow) -> Bool {
+        a.entry == b.entry && a.showWorktree == b.showWorktree && a.now == b.now && a.worktreeName == b.worktreeName
     }
 }
 

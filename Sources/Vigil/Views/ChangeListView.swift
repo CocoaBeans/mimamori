@@ -104,6 +104,7 @@ struct ChangeListView: View {
                                   attribution: session.attributions[row.change.path],
                                   review: review,
                                   onToggleReviewed: { session.setReviewed(!review.isReviewed, paths: [row.change.path]) })
+                            .equatable()
                             .tag(row.change.path)
                             .listRowBackground(rowBackground(recency: row.recency, selected: session.selectedPath == row.change.path))
                     }
@@ -321,6 +322,16 @@ extension AppModel {
     }
 }
 
+
+/// A row whose file, timing, attribution and review mark are unchanged need not draw again. The
+/// review action is left out: it always toggles this row's own path.
+extension ChangeRow: @preconcurrency Equatable {
+    static func == (a: ChangeRow, b: ChangeRow) -> Bool {
+        a.change == b.change && a.recency == b.recency && a.lastChanged == b.lastChanged && a.now == b.now
+            && a.worktreePath == b.worktreePath && a.attribution == b.attribution && a.review == b.review
+            && (a.onToggleReviewed == nil) == (b.onToggleReviewed == nil)
+    }
+}
 
 struct ChangeRow: View {
     let change: FileChange

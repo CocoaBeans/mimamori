@@ -97,6 +97,7 @@ private struct RepositorySection: View {
                 WorktreeRow(info: worktree, session: model.sessions[worktree.path], now: model.now,
                             recencyWindow: model.settings.recencyWindowSeconds,
                             presence: model.agentHub.presence(for: worktree.path))
+                    .equatable()
                     .tag(worktree.path)
                     .contextMenu {
                         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([worktree.url]) }
@@ -161,6 +162,15 @@ private struct RepositorySection: View {
                 Button("Stop Watching…", role: .destructive) { model.requestRemoval(of: repo) }
             }
         }
+    }
+}
+
+/// Every row is rebuilt whenever any agent changes; one whose own inputs are unchanged need not
+/// draw again (what it reads from its session, it observes itself).
+extension WorktreeRow: @preconcurrency Equatable {
+    static func == (a: WorktreeRow, b: WorktreeRow) -> Bool {
+        a.info == b.info && a.session === b.session && a.now == b.now
+            && a.recencyWindow == b.recencyWindow && a.presence == b.presence
     }
 }
 

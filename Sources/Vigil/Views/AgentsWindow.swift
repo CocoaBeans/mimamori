@@ -70,7 +70,7 @@ struct AgentsWindowView: View {
                         ForEach(rows) { row in
                             HoverRow {
                                 AgentDashboardRow(
-                                    row: row, now: model.now, detailed: detailed,
+                                    row: row, now: model.agentNow, detailed: detailed,
                                     canGoToAgent: AgentApps.canGo(to: row.presence),
                                     onGoToAgent: { goToAgent(row) },
                                     onSummary: { summary(row) },

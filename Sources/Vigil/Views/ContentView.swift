@@ -231,7 +231,7 @@ private struct AgentBannerSlot: View {
     var body: some View {
         if let presence = model.agentHub.presence(for: worktree) {
             let session = model.sessions[worktree]
-            AgentStatusBanner(presence: presence, now: model.now, details: AgentBannerDetails(
+            AgentStatusBanner(presence: presence, now: model.agentNow, details: AgentBannerDetails(
                 worktree: worktree,
                 files: session.map { model.filesTouched(in: $0, by: presence) } ?? [],
                 expanded: model.settings.agentBannerExpanded,
