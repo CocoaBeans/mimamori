@@ -45,6 +45,7 @@ struct ActivityFeedView: View {
                         switch item {
                         case .day(let day):
                             DayHeader(day: day, now: model.now)
+                                .listRowSeparator(.hidden)
                         case .entry(let entry):
                             ActivityRow(entry: entry, showWorktree: model.activityScopeAll, now: model.now,
                                         worktreeName: model.sessions[entry.worktreePath]?.displayName)
@@ -56,8 +57,9 @@ struct ActivityFeedView: View {
                                                         set: { if $0 { openRuns.insert(run.id) } else { openRuns.remove(run.id) } }))
                         }
                     }
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
+                    // A faint line between entries, starting under the text rather than the icon.
+                    .listRowSeparatorTint(Color.primary.opacity(0.08))
+                    .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 6))
                 }
                 .listStyle(.plain)
             }
@@ -154,40 +156,46 @@ struct AgentRunRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let worktree = showWorktree ? worktreeName : nil
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { isOpen.toggle() }
             } label: {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: 6) {
                     Image(systemName: AgentKind.symbolName(forDisplayName: run.agent))
                         .foregroundStyle(.secondary)
-                        .frame(width: 18)
+                        .frame(width: 16)
                         .padding(.top, 1)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text("\(run.agent): \(run.summary)")
                                 .font(.callout)
+                                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                                 .lineLimit(2)
                             Spacer(minLength: 4)
+                            // With nothing else to say below, the time comes up beside the title.
+                            if files == nil && worktree == nil {
+                                ActivityTime(date: run.latestAt, now: now)
+                            }
                             Image(systemName: "chevron.right")
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.tertiary)
                                 .rotationEffect(.degrees(isOpen ? 90 : 0))
                         }
-                        HStack(spacing: 6) {
-                            if let files {
-                                Text(files).lineLimit(1)
+                        if files != nil || worktree != nil {
+                            HStack(spacing: 6) {
+                                if let files {
+                                    Text(files).lineLimit(1)
+                                }
+                                if let worktree {
+                                    Text(worktree).lineLimit(1)
+                                }
+                                Spacer(minLength: 4)
+                                ActivityTime(date: run.latestAt, now: now)
                             }
-                            if showWorktree, let worktreeName {
-                                Text(worktreeName).lineLimit(1)
-                            }
-                            Spacer(minLength: 4)
-                            Text(Format.relative(run.latestAt, to: now))
-                                .monospacedDigit()
-                                .fixedSize()
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     }
                 }
                 .contentShape(Rectangle())
@@ -198,13 +206,13 @@ struct AgentRunRow: View {
             .accessibilityHint(isOpen ? "Hides the steps" : "Shows each step")
 
             if isOpen {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(run.entries) { entry in
                         ActivityRow(entry: entry, showWorktree: false, now: now, worktreeName: nil)
                             .equatable()
                     }
                 }
-                .padding(.leading, 26)
+                .padding(.leading, 22)
             }
         }
     }
@@ -253,35 +261,46 @@ struct ActivityRow: View {
                 model.select(worktree: entry.worktreePath, path: entry.path)
             }
         } label: {
-            HStack(alignment: .top, spacing: 8) {
+            let worktree = showWorktree ? worktreeName : nil
+            let hasCounts = entry.additions != nil || entry.deletions != nil
+            let hasDetails = hasCounts || entry.detail != nil || worktree != nil
+            HStack(alignment: .top, spacing: 6) {
                 // An agent's own entries show which agent; everything else what happened.
                 Image(systemName: entry.kind.isAgentEvent ? entry.agent.map(AgentKind.symbolName(forDisplayName:)) ?? entry.kind.systemImage
                       : entry.kind.systemImage)
                     .foregroundStyle(tint)
-                    .frame(width: 18)
+                    .frame(width: 16)
                     .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.title)
-                        .font(.callout)
-                        .lineLimit(2)
-                        .truncationMode(.head)
-                    HStack(spacing: 6) {
-                        if entry.additions != nil || entry.deletions != nil {
-                            DeltaText(additions: entry.additions, deletions: entry.deletions)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(entry.title)
+                            .font(.callout)
+                            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                            .lineLimit(2)
+                            .truncationMode(.head)
+                        // With nothing else to say below, the time comes up beside the title.
+                        if !hasDetails {
+                            Spacer(minLength: 4)
+                            ActivityTime(date: entry.date, now: now)
                         }
-                        if let detail = entry.detail {
-                            Text(AgentText.shortenPaths(detail, in: entry.worktreePath)).lineLimit(1)
-                        }
-                        if showWorktree, let worktreeName {
-                            Text(worktreeName).lineLimit(1)
-                        }
-                        Spacer(minLength: 4)
-                        Text(Format.relative(entry.date, to: now))
-                            .monospacedDigit()
-                            .fixedSize()
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    if hasDetails {
+                        HStack(spacing: 6) {
+                            if hasCounts {
+                                DeltaText(additions: entry.additions, deletions: entry.deletions)
+                            }
+                            if let detail = entry.detail {
+                                Text(AgentText.shortenPaths(detail, in: entry.worktreePath)).lineLimit(1)
+                            }
+                            if let worktree {
+                                Text(worktree).lineLimit(1)
+                            }
+                            Spacer(minLength: 4)
+                            ActivityTime(date: entry.date, now: now)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
             .contentShape(Rectangle())
@@ -289,5 +308,19 @@ struct ActivityRow: View {
         .buttonStyle(.plain)
         .help(entry.kind == .committed ? "\(Format.dateTime.string(from: entry.date)) · Show this commit"
                                         : Format.dateTime.string(from: entry.date))
+    }
+}
+
+/// How long ago, in the feed's caption style; it keeps its size in a narrow column.
+struct ActivityTime: View {
+    let date: Date
+    let now: Date
+
+    var body: some View {
+        Text(Format.relative(date, to: now))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .fixedSize()
     }
 }
