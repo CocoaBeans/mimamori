@@ -80,9 +80,11 @@ struct FileChips: View {
                     onOpen(file.path)
                 } label: {
                     HStack(spacing: 4) {
+                        FileTypeIcon(path: file.path)
+                            .imageScale(.small)
                         Text(file.fileName)
                         if !file.isBinary, let additions = file.additions, let deletions = file.deletions {
-                            Text("+\(additions) −\(deletions)").foregroundStyle(.secondary)
+                            DiffBar(additions: additions, deletions: deletions, block: 5)
                         }
                     }
                     .font(.caption)
@@ -94,7 +96,8 @@ struct FileChips: View {
                     .foregroundStyle(file.isFlagged ? Color.orange : Color.primary)
                 }
                 .buttonStyle(.plain)
-                .help(file.flags.isEmpty ? file.path : file.path + "\n" + file.flags.map(\.message).joined(separator: "\n"))
+                .help(([file.path, file.isBinary ? "binary" : file.additions.map { "+\($0) −\(file.deletions ?? 0)" }].compactMap { $0 }
+                       + file.flags.map(\.message)).joined(separator: "\n"))
             }
             if files.count > Self.limit {
                 Text("+\(files.count - Self.limit) more")

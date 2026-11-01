@@ -52,7 +52,7 @@ state, never on a loop.
 - [x] One look per agent: a glyph per agent kind, colour for state only, one attention language.
 - [x] Group the activity feed by turn, with day separators.
 - [x] An agent banner that fits its column: two rows when narrow, never a bare "…".
-- [ ] A mini diff bar and file-type icons on each changed file.
+- [x] A mini diff bar and file-type icons on each changed file.
 - [ ] Compact sidebar rows: agent glyph and chips for changed, flagged and to-review files.
 - [x] A menu-bar popover that reuses the widget's views.
 - [ ] A change overview beside the diff, and hunk headers that stay put.
@@ -72,7 +72,7 @@ state, never on a loop.
       silence show at a glance.
 - [ ] "Quiet for 4m" on an agent still working that has made no tool call for a while.
 - [ ] Two columns when the window is wide, like the extra-large widget.
-- [ ] Mini diff bars on the file chips, with the changed-file diff bars above.
+- [x] Mini diff bars on the file chips, with the changed-file diff bars above.
 
 ## Later
 

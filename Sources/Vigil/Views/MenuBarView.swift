@@ -134,10 +134,11 @@ struct MenuBarPanel: View {
                 } else if model.isCollapsed(repo) {
                     // Collapsed in the sidebar: one line here too.
                     Button { show(worktree: sessions[0].id) } label: {
+                        let changes = sessions.flatMap(\.changes)
                         PanelWorktreeLine(glyph: AgentGlyph(symbol: "square.stack.3d.up", tint: .secondary),
                                           title: sessions.count == 1 ? "1 worktree" : "\(sessions.count) worktrees",
-                                          status: status(changed: sessions.reduce(0) { $0 + $1.changes.count },
-                                                         flagged: sessions.reduce(0) { $0 + $1.flaggedCount }, toReview: nil))
+                                          status: status(changed: changes.count, flagged: changes.flaggedCount, toReview: nil),
+                                          diff: (changes.totalAdditions, changes.totalDeletions))
                     }
                     .help("Show \(repo.displayName) in Vigil")
                 } else {
@@ -159,7 +160,8 @@ struct MenuBarPanel: View {
                 ?? AgentGlyph(symbol: session.info.isMain ? "shippingbox" : "arrow.triangle.branch", tint: .secondary),
             title: session.displayName,
             status: status(changed: session.changes.count, flagged: session.flaggedCount,
-                           toReview: left < session.changes.count ? left : nil))
+                           toReview: left < session.changes.count ? left : nil),
+            diff: (session.changes.totalAdditions, session.changes.totalDeletions))
     }
 
     /// "5 changed · 1 flagged · 2 to review", or "clean".
@@ -213,6 +215,8 @@ private struct PanelWorktreeLine: View {
     let glyph: AgentGlyph
     let title: String
     let status: (text: String, warning: Bool)
+    /// Lines added and removed across its changes.
+    var diff: (additions: Int, deletions: Int) = (0, 0)
 
     var body: some View {
         HStack(spacing: 8) {
@@ -221,6 +225,9 @@ private struct PanelWorktreeLine: View {
             Text(title)
                 .lineLimit(1)
             Spacer(minLength: 8)
+            if diff.additions + diff.deletions > 0 {
+                DiffBar(additions: diff.additions, deletions: diff.deletions, block: 5)
+            }
             Text(status.text)
                 .font(.caption)
                 .foregroundStyle(status.warning ? Color.orange : Color.secondary)

@@ -354,6 +354,10 @@ struct ChangeRow: View {
                 .opacity(review.isReviewed ? 0.45 : 1)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 0) {
+                    FileTypeIcon(path: change.path)
+                        .font(.caption)
+                        .frame(width: 14)
+                        .padding(.trailing, 4)
                     if !change.directory.isEmpty {
                         Text(change.directory + "/")
                             .foregroundStyle(.secondary)
@@ -361,6 +365,8 @@ struct ChangeRow: View {
                     Text(change.fileName)
                         .fontWeight(review.isReviewed ? .regular : .medium)
                         .foregroundStyle(review.isReviewed ? .secondary : .primary)
+                        // The folder gives way first.
+                        .layoutPriority(1)
                 }
                 .lineLimit(1)
                 .truncationMode(.head)
@@ -469,7 +475,8 @@ struct WorktreeHeaderView: View {
                     if !model.showCommits && !session.changes.isEmpty {
                         ToReviewToggle(session: session)
                     }
-                    DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions)
+                    // No bar: the branch name needs the room more than one total does.
+                    DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions, bar: false)
                     AttentionBadgeButton(sessions: [session], arrowEdge: .top, debugID: "header")
                 }
                 .font(.caption.monospacedDigit())

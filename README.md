@@ -17,7 +17,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 ## What it does
 
-- **Watches live.** FSEvents on the worktree and the git directory drive refreshes a few hundred milliseconds after files settle. Recently touched files glow and say "12s ago", so you can see where the agent is working. Bursts that only touch ignored paths (build output, `node_modules`) are discarded without a refresh.
+- **Watches live.** FSEvents on the worktree and the git directory drive refreshes a few hundred milliseconds after files settle. Recently touched files glow and say "12s ago", so you can see where the agent is working. Each file shows an icon for its kind and a five-block diff bar: the more lines changed, the more blocks light (green for added, red for removed), so the big edits stand out in any list. Bursts that only touch ignored paths (build output, `node_modules`) are discarded without a refresh.
 - **Compares against the right baseline.** Agents commit as they go, so a plain working-tree diff goes blank after each commit. Switch between:
   - *Uncommitted*: working tree versus HEAD, including untracked files.
   - *Since branch point*: everything since the branch diverged from the default branch (or from its upstream when you are on the default branch).

@@ -60,9 +60,11 @@ struct CountBadge: View {
     }
 }
 
+/// "+12 −3" and its diff bar.
 struct DeltaText: View {
     let additions: Int?
     let deletions: Int?
+    var bar = true
 
     var body: some View {
         HStack(spacing: 4) {
@@ -72,8 +74,45 @@ struct DeltaText: View {
             if let deletions {
                 Text("−\(deletions)").foregroundStyle(.red)
             }
+            if bar, additions != nil || deletions != nil {
+                DiffBar(additions: additions ?? 0, deletions: deletions ?? 0)
+                    .padding(.leading, 2)
+            }
         }
         .font(.caption.monospacedDigit())
+    }
+}
+
+/// Five small blocks: as many lit as the change is large, green for the share of lines added and
+/// red for the share removed (`DiffBlocks`).
+struct DiffBar: View {
+    let additions: Int
+    let deletions: Int
+    var block: CGFloat = 6
+
+    var body: some View {
+        let blocks = DiffBlocks(additions: additions, deletions: deletions)
+        HStack(spacing: block / 4) {
+            ForEach(0..<DiffBlocks.count, id: \.self) { index in
+                RoundedRectangle(cornerRadius: block / 4)
+                    .fill(index < blocks.added ? AnyShapeStyle(Color.green)
+                          : index < blocks.added + blocks.removed ? AnyShapeStyle(Color.red) : AnyShapeStyle(.quaternary))
+                    .frame(width: block, height: block)
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("\(additions) lines added, \(deletions) removed")
+    }
+}
+
+/// What kind of file a path is, at a glance (`FileSymbol`).
+struct FileTypeIcon: View {
+    let path: String
+
+    var body: some View {
+        Image(systemName: FileSymbol.name(for: path))
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
     }
 }
 

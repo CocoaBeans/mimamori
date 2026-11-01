@@ -392,6 +392,7 @@ private struct ChangeSummary: View {
             if total == 0 {
                 Text("clean")
             } else {
+                DiffBar(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions)
                 let left = session.unreviewedCount
                 Text(left < total ? "\(total) changed · \(left) to review" : "\(total) changed")
                 if session.flaggedCount > 0 {
