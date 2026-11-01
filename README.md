@@ -50,13 +50,13 @@ Until signed releases exist, build it yourself. It takes about a minute:
 ```bash
 git clone https://github.com/CocoaBeans/vigil.git
 cd vigil
-Scripts/make-app.sh release
+VIGIL_SIGN=adhoc Scripts/make-app.sh release
 open build/Vigil.app
 ```
 
 Or `Scripts/run.sh` for a debug build that opens immediately. You can also run `swift run Vigil`, or open `Package.swift` in Xcode and run the `Vigil` scheme. Notifications only work from the app bundle.
 
-The locally built app is ad-hoc signed. The first launch may ask you to confirm in System Settings › Privacy & Security, or you can right-click the app and choose Open.
+`VIGIL_SIGN=adhoc` signs the app ad hoc, since the Xcode project is set up for the maintainer's team; the first launch may ask you to confirm in System Settings › Privacy & Security, or you can right-click the app and choose Open. An ad-hoc build's desktop widget cannot read Vigil's data, which needs a team-signed App Group; [CONTRIBUTING](CONTRIBUTING.md#signing-with-your-own-team) explains how to build with your own team.
 
 ### Try it with a simulated agent
 
@@ -201,7 +201,7 @@ Example: `open --env VIGIL_SCREENSHOT=/tmp/vigil.png build/Vigil.app`
 
 ## Contributing
 
-Issues and pull requests are welcome. Keep `VigilCore` free of UI, add a test when you touch a parser or a rule, and run `swift test` before opening a pull request.
+Issues and pull requests are welcome. [CONTRIBUTING](CONTRIBUTING.md) covers building with your own signing team, where code belongs, tests, and how to report a security problem privately.
 
 ## License
 

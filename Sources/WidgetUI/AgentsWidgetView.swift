@@ -425,10 +425,10 @@ extension AgentWidgetSnapshot {
     static var sample: AgentWidgetSnapshot {
         let now = Date()
         return AgentWidgetSnapshot(writtenAt: now, agents: [
-            .init(worktreePath: "/sample/plan", repository: "harbor", worktree: "plan", agent: "Codex", symbol: "curlybraces", state: .needsYou,
+            .init(worktreePath: "/sample/plan", repository: "backend", worktree: "plan", agent: "Codex", symbol: "curlybraces", state: .needsYou,
                   status: "needs permission · Bash", since: now.addingTimeInterval(-74), task: "Plan the release",
                   steps: [.init(tool: "Bash", target: "rm -rf dist", running: true), .init(tool: "Edit", target: "PLAN.md")]),
-            .init(worktreePath: "/sample/main", repository: "AcmeStore", worktree: "main", agent: "Claude Code", symbol: "sparkle", state: .working,
+            .init(worktreePath: "/sample/main", repository: "mobile-app", worktree: "main", agent: "Claude Code", symbol: "sparkle", state: .working,
                   status: "working · Edit", since: now.addingTimeInterval(-312), task: "Tidy the onboarding screens",
                   steps: [.init(tool: "Edit", target: "Onboarding/Welcome.swift", running: true), .init(tool: "Bash", target: "swift test")]),
             .init(worktreePath: "/sample/docs", repository: "Vigil", worktree: "docs", agent: "Hermes", symbol: "paperplane", state: .ready,

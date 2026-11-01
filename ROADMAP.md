@@ -39,7 +39,7 @@ cask. These items gate it.
 
 - [ ] A privacy statement: no network access, no telemetry, what is written to disk and where
       (expanding the README's "Privacy and footprint").
-- [ ] Add CONTRIBUTING and a security contact (the code is already MIT licensed).
+- [x] Add CONTRIBUTING and a security contact (the code is already MIT licensed).
 - [ ] Screenshots and a short demo for the README and release page.
 - [ ] A short in-app guide under Help › Vigil Help (⌘?): what Vigil does and how to use it.
       Planned in [docs/plans/help-window.md](docs/plans/help-window.md).

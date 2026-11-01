@@ -138,11 +138,11 @@ struct HermesHookTests {
         #expect(write.filePath == "src/a.py")
         #expect(write.cwd == "/Users/x/.hermes")
 
-        let shell = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"cd /Users/x/Projects/harbor && swift test"},"session_id":"s","cwd":"/Users/x/.hermes","extra":{}}"#))
-        #expect(shell.absolutePathHints == ["/Users/x/Projects/harbor"])
+        let shell = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"cd /Users/x/Projects/backend && swift test"},"session_id":"s","cwd":"/Users/x/.hermes","extra":{}}"#))
+        #expect(shell.absolutePathHints == ["/Users/x/Projects/backend"])
 
-        let scoped = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"ls","workdir":"/Users/x/Projects/harbor"},"session_id":"s","cwd":"/Users/x/.hermes","extra":{}}"#))
-        #expect(scoped.cwd == "/Users/x/Projects/harbor")
+        let scoped = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"ls","workdir":"/Users/x/Projects/backend"},"session_id":"s","cwd":"/Users/x/.hermes","extra":{}}"#))
+        #expect(scoped.cwd == "/Users/x/Projects/backend")
     }
 
     @Test func repeatedModelCallsDoNotRestartTheTurn() {
@@ -410,33 +410,33 @@ struct HookSocketServerTests {
 struct SessionPlacementTests {
     @Test func aReadElsewhereDoesNotMoveAPlacedSession() {
         var placement = SessionPlacement()
-        // Hermes edits in harbor: firm.
-        let edit = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: true)
-        #expect(edit == .init(worktree: "/p/harbor", movedFrom: nil))
-        // It reads a file in ledger: stays in harbor.
-        let read = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: false)
-        #expect(read.worktree == "/p/harbor")
+        // Hermes edits in backend: firm.
+        let edit = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/backend", changesFiles: true)
+        #expect(edit == .init(worktree: "/p/backend", movedFrom: nil))
+        // It reads a file in frontend: stays in backend.
+        let read = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/frontend", changesFiles: false)
+        #expect(read.worktree == "/p/backend")
         // An event with no path at all follows the session.
-        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false).worktree == "/p/harbor")
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false).worktree == "/p/backend")
     }
 
     @Test func changingFilesElsewhereMovesTheSession() {
         var placement = SessionPlacement()
-        _ = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: true)
-        let write = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: true)
-        #expect(write == .init(worktree: "/p/ledger", movedFrom: "/p/harbor"))
+        _ = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/backend", changesFiles: true)
+        let write = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/frontend", changesFiles: true)
+        #expect(write == .init(worktree: "/p/frontend", movedFrom: "/p/backend"))
     }
 
     @Test func aReadPlacesOnlyUntilSomethingFirmerArrives() {
         var placement = SessionPlacement()
         // First sign of the session is a read: place it there for now.
-        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: false).worktree == "/p/ledger")
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/frontend", changesFiles: false).worktree == "/p/frontend")
         // A later read elsewhere may still move a tentative placement.
-        let reread = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: false)
-        #expect(reread == .init(worktree: "/p/harbor", movedFrom: "/p/ledger"))
+        let reread = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/backend", changesFiles: false)
+        #expect(reread == .init(worktree: "/p/backend", movedFrom: "/p/frontend"))
         // A working directory always wins and is firm.
         _ = placement.place(session: "h1", cwdMatch: "/p/vigil", pathMatch: nil, changesFiles: false)
-        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/harbor", changesFiles: false).worktree == "/p/vigil")
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/backend", changesFiles: false).worktree == "/p/vigil")
     }
 
     @Test func eventsWithoutASessionStillPlaceByPath() {
@@ -447,20 +447,20 @@ struct SessionPlacementTests {
 
     @Test func theRecordedDirectoryPlacesASessionBeforeAnyTool() {
         var placement = SessionPlacement()
-        // A turn starts: no path yet, but Hermes records the session working in harbor.
-        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: "/p/harbor").worktree == "/p/harbor")
+        // A turn starts: no path yet, but Hermes records the session working in backend.
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: "/p/backend").worktree == "/p/backend")
         // A read elsewhere does not move it.
-        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: false, homeMatch: "/p/harbor").worktree == "/p/harbor")
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/frontend", changesFiles: false, homeMatch: "/p/backend").worktree == "/p/backend")
         // A change elsewhere does, and sticks.
-        let write = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/ledger", changesFiles: true, homeMatch: "/p/harbor")
-        #expect(write == .init(worktree: "/p/ledger", movedFrom: "/p/harbor"))
-        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: "/p/harbor").worktree == "/p/ledger")
+        let write = placement.place(session: "h1", cwdMatch: nil, pathMatch: "/p/frontend", changesFiles: true, homeMatch: "/p/backend")
+        #expect(write == .init(worktree: "/p/frontend", movedFrom: "/p/backend"))
+        #expect(placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: "/p/backend").worktree == "/p/frontend")
     }
 
     @Test func theRecordedDirectoryIsLookedUpOnlyWhenNeeded() {
         var placement = SessionPlacement()
         var lookups = 0
-        func home() -> String? { lookups += 1; return "/p/harbor" }
+        func home() -> String? { lookups += 1; return "/p/backend" }
         _ = placement.place(session: "h1", cwdMatch: "/p/vigil", pathMatch: nil, changesFiles: false, homeMatch: home())
         _ = placement.place(session: "h1", cwdMatch: nil, pathMatch: nil, changesFiles: false, homeMatch: home())
         #expect(lookups == 0)
@@ -490,13 +490,13 @@ struct HermesSessionTests {
         let url = try database([
             "PRAGMA journal_mode=WAL",
             "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, cwd TEXT, git_repo_root TEXT)",
-            "INSERT INTO sessions VALUES ('20260903_173947_d73992', 'tui', '/Users/x/Projects/harbor', '/Users/x/Projects/harbor')",
-            "INSERT INTO sessions VALUES ('repo-only', 'cli', NULL, '/Users/x/Projects/ledger')",
+            "INSERT INTO sessions VALUES ('20260903_173947_d73992', 'tui', '/Users/x/Projects/backend', '/Users/x/Projects/backend')",
+            "INSERT INTO sessions VALUES ('repo-only', 'cli', NULL, '/Users/x/Projects/frontend')",
             "INSERT INTO sessions VALUES ('nowhere', 'local', '', NULL)",
         ])
         defer { try? FileManager.default.removeItem(at: url) }
-        #expect(HermesSessions.directory(forSession: "20260903_173947_d73992", in: url) == "/Users/x/Projects/harbor")
-        #expect(HermesSessions.directory(forSession: "repo-only", in: url) == "/Users/x/Projects/ledger")
+        #expect(HermesSessions.directory(forSession: "20260903_173947_d73992", in: url) == "/Users/x/Projects/backend")
+        #expect(HermesSessions.directory(forSession: "repo-only", in: url) == "/Users/x/Projects/frontend")
         #expect(HermesSessions.directory(forSession: "nowhere", in: url) == nil)
         // Not written yet: its first turn has not started.
         #expect(HermesSessions.directory(forSession: "new", in: url) == nil)

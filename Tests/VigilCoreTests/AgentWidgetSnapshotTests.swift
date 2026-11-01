@@ -8,11 +8,11 @@ struct AgentWidgetSnapshotTests {
 
     @Test func survivesTheTripThroughTheSharedFile() throws {
         let snapshot = AgentWidgetSnapshot(writtenAt: now, agents: [
-            .init(worktreePath: "/repo/plan", repository: "harbor", worktree: "plan", agent: "Codex", state: .needsYou,
+            .init(worktreePath: "/repo/plan", repository: "backend", worktree: "plan", agent: "Codex", state: .needsYou,
                   status: "needs permission · Bash", since: now.addingTimeInterval(-90), task: "Plan the release",
                   steps: [.init(tool: "Bash", target: "rm -rf dist", running: true)], others: 1,
                   collision: "Codex and Cursor Agent both edited PLAN.md"),
-            .init(worktreePath: "/repo", repository: "harbor", worktree: "main", agent: "Claude Code", state: .working,
+            .init(worktreePath: "/repo", repository: "backend", worktree: "main", agent: "Claude Code", state: .working,
                   status: "working · Edit", since: now.addingTimeInterval(-20)),
         ])
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("widgets-\(UUID().uuidString).json")

@@ -182,8 +182,8 @@ Each step builds and passes tests on its own; they land as one PR.
 - Dismissing silences the alert until a new file is shared.
 
 **Headless app run** (scratch support folder, as in the earlier checks)
-1. Two Claude-shaped sessions edit different files in `harbor`.
-2. Then Codex and Cursor edit the same file in `harbor-plan`.
+1. Two Claude-shaped sessions edit different files in `backend`.
+2. Then Codex and Cursor edit the same file in `backend-plan`.
 3. Check the dump for live sessions and collisions, and screenshot the sidebar, banner and Agents
    window.
 4. Confirm the attention count and one notification key per collision.
