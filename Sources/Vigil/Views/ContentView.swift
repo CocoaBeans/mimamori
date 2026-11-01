@@ -110,9 +110,7 @@ struct ContentView: View {
     /// so the inspector's width never affects their spacing.
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            AgentStatusPill()
-        }
+        AgentStatusPillItem()
         ToolbarItem(placement: .navigation) {
             Button {
                 model.promptForRepository()
