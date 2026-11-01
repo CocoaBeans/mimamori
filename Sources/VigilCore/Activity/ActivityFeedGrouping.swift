@@ -36,14 +36,7 @@ public struct AgentRun: Identifiable, Hashable, Sendable {
     public var summary: String {
         var counts: [AgentToolCategory: Int] = [:]
         for call in toolCalls { counts[AgentRun.category(of: call), default: 0] += 1 }
-        let order: [(AgentToolCategory, String, String)] = [
-            (.edit, "edit", "edits"), (.command, "command", "commands"), (.read, "read", "reads"),
-            (.search, "search", "searches"), (.web, "web lookup", "web lookups"), (.subagent, "subagent", "subagents"),
-            (.question, "question", "questions"), (.other, "other step", "other steps"),
-        ]
-        return order.compactMap { category, one, many in
-            counts[category].map { $0 == 1 ? "1 \(one)" : "\($0) \(many)" }
-        }.joined(separator: ", ")
+        return AgentToolCategory.describe(counts)
     }
 
     /// The files it touched, the most recent first, each once.

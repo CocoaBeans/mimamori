@@ -212,6 +212,19 @@ struct AgentDashboardRow: View {
         return relative(presence.statusText)
     }
 
+    /// The turn's tool calls along its time: the current turn up to now, or the last one as it
+    /// ended. Only hooks report calls.
+    private var timeline: TurnTimeline? {
+        guard presence.source == .hooks, let started = presence.turnStartedAt else { return nil }
+        let underway: Bool = switch presence.activity {
+        case .working, .needsPermission, .askedQuestion: true
+        case .ready, .idle: false
+        }
+        guard underway || !presence.turnSteps.isEmpty else { return nil }
+        return TurnTimeline(calls: presence.turnSteps, turnStartedAt: started, end: underway ? now : presence.since,
+                            totalCalls: underway ? presence.toolCallsThisTurn : nil, waitingCallID: presence.awaitingCallID)
+    }
+
     /// "4 steps", beside the timer while the agent works.
     private var steps: String? {
         guard detailed, presence.isWorking, presence.toolCallsThisTurn > 0 else { return nil }
@@ -247,6 +260,10 @@ struct AgentDashboardRow: View {
                     .foregroundStyle(presence.source == .hooks && presence.activity.needsAttention ? presence.tint : .primary)
                     .lineLimit(2)
                     .truncationMode(.tail)
+                if let timeline {
+                    TurnTimelineStrip(timeline: timeline)
+                        .padding(.vertical, 2)
+                }
                 if let collision = presence.collision {
                     AgentCollisionNote(collision: collision, worktree: row.session.id, onDismiss: onDismissCollision)
                 }

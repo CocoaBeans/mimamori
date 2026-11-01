@@ -155,6 +155,11 @@ enum Format {
     }
 
     /// "42s", "12m", "5h 12m", "2d 3h": how long something has been going on.
+    /// "45s", "12m", "1h 05m" for a span of time.
+    static func duration(_ interval: TimeInterval) -> String {
+        duration(since: Date(timeIntervalSinceReferenceDate: 0), to: Date(timeIntervalSinceReferenceDate: interval))
+    }
+
     static func duration(since start: Date, to now: Date) -> String {
         let seconds = max(0, Int(now.timeIntervalSince(start)))
         switch seconds {

@@ -13,6 +13,75 @@ enum AgentText {
 }
 
 /// One recent tool call: what kind of step, what it acted on, and how long ago.
+extension AgentToolCategory {
+    /// The step's symbol and colour, as step lines and turn timelines draw it: colour for what
+    /// acts (edits, commands, lookups, subagents, questions), grey for reading and searching.
+    var symbol: String {
+        switch self {
+        case .edit: "pencil"
+        case .command: "terminal"
+        case .read: "doc.text"
+        case .search: "magnifyingglass"
+        case .web: "globe"
+        case .subagent: "person.2"
+        case .question: "questionmark.bubble"
+        case .other: "wrench.and.screwdriver"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .edit: .blue
+        case .command: .green
+        case .read, .search, .other: .secondary
+        case .web: .teal
+        case .subagent: .purple
+        case .question: .orange
+        }
+    }
+}
+
+/// A turn's tool calls as marks along a thin strip, coloured by kind as the step lines are, a
+/// failed one red and one waiting on you orange: the turn's rhythm at a glance, and a long empty
+/// stretch at the end for an agent gone quiet.
+struct TurnTimelineStrip: View {
+    let timeline: TurnTimeline
+    var height: CGFloat = 6
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: size.height / 2),
+                         with: .style(.quaternary))
+            for mark in timeline.marks {
+                // Wide enough to see, however short the call.
+                let width = min(size.width, max(3, mark.length * size.width))
+                let rect = CGRect(x: min(mark.start * size.width, size.width - width), y: 0, width: width, height: size.height)
+                let color = mark.failed ? Color.red : mark.waiting ? Color.orange : mark.category.color
+                context.fill(Path(roundedRect: rect, cornerRadius: min(2, size.height / 2)),
+                             with: .color(mark.running ? color.opacity(0.6) : color))
+            }
+        }
+        .frame(height: height)
+        .clipShape(Capsule())
+        .help(description)
+        .accessibilityElement()
+        .accessibilityLabel(description)
+    }
+
+    /// "12 steps over 4m: 6 edits, 3 commands, 3 reads. Quiet for 1m."
+    private var description: String {
+        let steps = timeline.marks.count
+        var text = timeline.missedCalls > 0
+            ? "The last \(steps) of \(steps + timeline.missedCalls) steps, over \(Format.duration(timeline.duration))"
+            : "\(steps == 1 ? "1 step" : "\(steps) steps") over \(Format.duration(timeline.duration))"
+        let kinds = AgentToolCategory.describe(timeline.counts)
+        if !kinds.isEmpty { text += ": " + kinds }
+        text += "."
+        if let quiet = timeline.quietFor, quiet >= 60 { text += " Quiet for \(Format.duration(quiet))." }
+        return text
+    }
+}
+
 struct StepLine: View {
     let step: AgentToolCall
     let target: String?
@@ -20,23 +89,10 @@ struct StepLine: View {
     /// The step is waiting for your permission rather than running.
     var waiting = false
 
-    private var icon: (name: String, color: Color) {
-        switch step.category {
-        case .edit: ("pencil", .blue)
-        case .command: ("terminal", .green)
-        case .read: ("doc.text", .secondary)
-        case .search: ("magnifyingglass", .secondary)
-        case .web: ("globe", .teal)
-        case .subagent: ("person.2", .purple)
-        case .question: ("questionmark.bubble", .orange)
-        case .other: ("wrench.and.screwdriver", .secondary)
-        }
-    }
-
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: icon.name)
-                .foregroundStyle(icon.color)
+            Image(systemName: step.category.symbol)
+                .foregroundStyle(step.category.color)
                 .frame(width: 14)
             Text(step.toolName)
                 .fontWeight(.medium)
