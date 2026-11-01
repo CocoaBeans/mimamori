@@ -599,7 +599,7 @@ final class AppModel {
             } : []
             return AgentWidgetSnapshot.Agent(
                 worktreePath: row.session.id, repository: row.repositoryName, worktree: row.session.displayName,
-                agent: presence.kind.displayName, state: state, status: AgentText.shortenPaths(presence.statusText, in: row.session.id),
+                agent: presence.kind.displayName, symbol: presence.kind.symbolName, state: state, status: AgentText.shortenPaths(presence.statusText, in: row.session.id),
                 since: presence.since, task: details ? presence.task : nil, steps: steps, others: presence.others.count,
                 collision: presence.collision?.title)
         }

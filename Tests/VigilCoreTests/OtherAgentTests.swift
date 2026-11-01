@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import VigilCore
@@ -279,5 +280,20 @@ struct AgentHookRecipeTests {
         #expect(command.contains("'http://vigil/event?agent=weird-name'"))
         #expect(command.hasSuffix("|| true"))
         #expect(AgentHookRecipe.other.setup(socketPath: socket, agent: "") .contains("?agent=agent'"))
+    }
+}
+
+@Suite("Agent glyphs")
+struct AgentGlyphTests {
+    @Test func everyAgentHasASymbolThatExists() {
+        let custom = [AgentKind.named("my-agent"), AgentKind.unnamed, AgentKind(id: "42", displayName: "42")].compactMap { $0 }
+        for kind in AgentKind.known + custom {
+            #expect(NSImage(systemSymbolName: kind.symbolName, accessibilityDescription: nil) != nil, "\(kind.displayName): \(kind.symbolName)")
+        }
+        // Known agents each get their own.
+        #expect(Set(AgentKind.known.map(\.symbolName)).count == AgentKind.known.count)
+        #expect(AgentKind.named("my-agent")?.symbolName == "m.circle")
+        #expect(AgentKind.symbolName(forDisplayName: "Codex") == "curlybraces")
+        #expect(AgentKind.symbolName(forDisplayName: "Zed Agent") == "z.circle")
     }
 }

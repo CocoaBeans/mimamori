@@ -67,15 +67,55 @@ extension AgentPresence {
     }
 }
 
+/// An agent at a glance: its own glyph in the colour of its state, with a hand when it is
+/// waiting on you and a triangle when it is colliding with another agent. The glyph says who,
+/// the colour how it is doing.
+struct AgentGlyph: View {
+    let symbol: String
+    let tint: Color
+    var waiting = false
+    var colliding = false
+
+    init(symbol: String, tint: Color, waiting: Bool = false, colliding: Bool = false) {
+        self.symbol = symbol
+        self.tint = tint
+        self.waiting = waiting
+        self.colliding = colliding
+    }
+
+    init(presence: AgentPresence) {
+        self.init(symbol: presence.kind.symbolName, tint: presence.tint,
+                  waiting: presence.source == .hooks && presence.activity.needsAttention,
+                  colliding: presence.collision != nil)
+    }
+
+    private var mark: String? {
+        colliding ? "exclamationmark.triangle.fill" : waiting ? "hand.raised.fill" : nil
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .foregroundStyle(tint)
+            .overlay(alignment: .bottomTrailing) {
+                if let mark {
+                    Image(systemName: mark)
+                        .foregroundStyle(.orange)
+                        .scaleEffect(0.6, anchor: .bottomTrailing)
+                        .offset(x: 3, y: 2)
+                }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
 /// A small colored dot plus agent name, for sidebar rows.
 struct AgentPresenceBadge: View {
     let presence: AgentPresence
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: presence.others.isEmpty ? presence.systemImage : "person.2.fill")
+            AgentGlyph(presence: presence)
                 .font(.caption2)
-                .foregroundStyle(presence.alertTint)
             Text(summary)
                 .font(.caption)
                 .foregroundStyle(presence.needsAttention ? presence.alertTint : .secondary)
@@ -116,8 +156,7 @@ struct AgentStatusLine: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: presence.systemImage)
-                .foregroundStyle(presence.tint)
+            AgentGlyph(presence: presence)
             Text(presence.kind.displayName)
                 .fontWeight(.medium)
             Text("·").foregroundStyle(.tertiary)
@@ -252,9 +291,8 @@ struct AgentStatusBanner: View {
 
     private var agentBody: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: presence.systemImage)
+            AgentGlyph(presence: presence)
                 .font(.title2)
-                .foregroundStyle(presence.tint)
                 .frame(width: 28)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 4) {
@@ -449,8 +487,7 @@ struct OtherAgentLine: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: presence.systemImage)
-                .foregroundStyle(presence.tint)
+            AgentGlyph(presence: presence)
                 .frame(width: 14)
             Text(presence.kind.displayName)
                 .fontWeight(.medium)

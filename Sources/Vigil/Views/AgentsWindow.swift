@@ -192,9 +192,8 @@ struct AgentDashboardRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: presence.systemImage)
+            AgentGlyph(presence: presence)
                 .font(.title3)
-                .foregroundStyle(presence.tint)
                 .frame(width: 24)
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: detailed ? 5 : 3) {

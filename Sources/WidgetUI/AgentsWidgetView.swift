@@ -111,19 +111,35 @@ struct AgentLink<Content: View>: View {
     }
 }
 
-/// The agent's state as a symbol in a tinted disc.
+/// The agent's own glyph in a disc the colour of its state, as in the app: a hand when it is
+/// waiting on you, a triangle when it collides with another agent.
 struct StateBadge: View {
     let state: AgentWidgetSnapshot.State
+    /// The agent's symbol; snapshots from before it was recorded fall back to the state's.
+    var symbol: String? = nil
     var collision = false
     var size: CGFloat = 26
 
+    private var mark: String? {
+        collision ? "exclamationmark.triangle.fill" : state == .needsYou ? "hand.raised.fill" : nil
+    }
+
     var body: some View {
-        let tint = collision ? Color.orange : state.tint
-        Image(systemName: collision ? "exclamationmark.triangle.fill" : state.symbol)
-            .font(.system(size: size * 0.48, weight: .semibold))
-            .foregroundStyle(tint)
+        Image(systemName: symbol ?? state.symbol)
+            .font(.system(size: size * 0.46, weight: .semibold))
+            .foregroundStyle(state.tint)
             .frame(width: size, height: size)
-            .background(tint.opacity(0.18), in: Circle())
+            .background(state.tint.opacity(0.18), in: Circle())
+            .overlay(alignment: .bottomTrailing) {
+                if let mark {
+                    Image(systemName: mark)
+                        .font(.system(size: size * 0.32, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .padding(2)
+                        .background(Circle().fill(.background))
+                        .offset(x: 3, y: 3)
+                }
+            }
             .widgetAccentable()
     }
 }
@@ -189,7 +205,7 @@ struct SmallAgentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top) {
-                StateBadge(state: agent.state, collision: agent.collision != nil, size: 32)
+                StateBadge(state: agent.state, symbol: agent.symbol, collision: agent.collision != nil, size: 32)
                 Spacer()
                 if more > 0 {
                     Text("+\(more)")
@@ -223,7 +239,7 @@ struct AgentRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
-                StateBadge(state: agent.state, collision: agent.collision != nil, size: 24)
+                StateBadge(state: agent.state, symbol: agent.symbol, collision: agent.collision != nil, size: 24)
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 4) {
                         Text(agent.worktree)
@@ -384,13 +400,13 @@ extension AgentWidgetSnapshot {
     static var sample: AgentWidgetSnapshot {
         let now = Date()
         return AgentWidgetSnapshot(writtenAt: now, agents: [
-            .init(worktreePath: "/sample/plan", repository: "harbor", worktree: "plan", agent: "Codex", state: .needsYou,
+            .init(worktreePath: "/sample/plan", repository: "harbor", worktree: "plan", agent: "Codex", symbol: "curlybraces", state: .needsYou,
                   status: "needs permission · Bash", since: now.addingTimeInterval(-74), task: "Plan the release",
                   steps: [.init(tool: "Bash", target: "rm -rf dist", running: true), .init(tool: "Edit", target: "PLAN.md")]),
-            .init(worktreePath: "/sample/main", repository: "AcmeStore", worktree: "main", agent: "Claude Code", state: .working,
+            .init(worktreePath: "/sample/main", repository: "AcmeStore", worktree: "main", agent: "Claude Code", symbol: "sparkle", state: .working,
                   status: "working · Edit", since: now.addingTimeInterval(-312), task: "Tidy the onboarding screens",
                   steps: [.init(tool: "Edit", target: "Onboarding/Welcome.swift", running: true), .init(tool: "Bash", target: "swift test")]),
-            .init(worktreePath: "/sample/docs", repository: "Vigil", worktree: "docs", agent: "Hermes", state: .ready,
+            .init(worktreePath: "/sample/docs", repository: "Vigil", worktree: "docs", agent: "Hermes", symbol: "paperplane", state: .ready,
                   status: "ready for your next prompt", since: now.addingTimeInterval(-900), task: "Summarise what we built",
                   steps: [.init(tool: "read_file", target: "README.md")]),
         ])

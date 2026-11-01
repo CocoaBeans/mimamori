@@ -42,6 +42,8 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         public var repository: String
         public var worktree: String
         public var agent: String
+        /// The agent's SF Symbol (`AgentKind.symbolName`); nil in snapshots from before it existed.
+        public var symbol: String?
         public var state: State
         /// "needs permission · Bash", "working · Edit", "ready for your next prompt".
         public var status: String
@@ -58,12 +60,14 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
 
         public var id: String { worktreePath }
 
-        public init(worktreePath: String, repository: String, worktree: String, agent: String, state: State, status: String,
-                    since: Date, task: String? = nil, steps: [Step] = [], others: Int = 0, collision: String? = nil) {
+        public init(worktreePath: String, repository: String, worktree: String, agent: String, symbol: String? = nil,
+                    state: State, status: String, since: Date, task: String? = nil, steps: [Step] = [], others: Int = 0,
+                    collision: String? = nil) {
             self.worktreePath = worktreePath
             self.repository = repository
             self.worktree = worktree
             self.agent = agent
+            self.symbol = symbol
             self.state = state
             self.status = status
             self.since = since

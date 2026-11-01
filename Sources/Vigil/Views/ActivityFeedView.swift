@@ -145,7 +145,9 @@ struct ActivityRow: View {
             }
         } label: {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: entry.kind.systemImage)
+                // An agent's own entries show which agent; everything else what happened.
+                Image(systemName: entry.kind.isAgentEvent ? entry.agent.map(AgentKind.symbolName(forDisplayName:)) ?? entry.kind.systemImage
+                      : entry.kind.systemImage)
                     .foregroundStyle(tint)
                     .frame(width: 18)
                     .padding(.top, 1)

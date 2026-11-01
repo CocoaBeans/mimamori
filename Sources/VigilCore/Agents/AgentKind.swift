@@ -24,6 +24,29 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
 
     public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes]
 
+    /// The SF Symbol that stands for this agent wherever it appears. Generic symbols, never a
+    /// product's logo; an agent Vigil does not know gets the circled first letter of its name.
+    public var symbolName: String {
+        switch id {
+        case Self.claudeCode.id: "sparkle"
+        case Self.codex.id: "curlybraces"
+        case Self.gemini.id: "diamond"
+        case Self.cursor.id: "cursorarrow.rays"
+        case Self.hermes.id: "paperplane"
+        case Self.aider.id: "wrench.adjustable"
+        case Self.goose.id: "bird"
+        case Self.opencode.id: "chevron.left.forwardslash.chevron.right"
+        case Self.amp.id: "bolt"
+        default:
+            if let letter = displayName.lowercased().first(where: { $0.isLetter && $0.isASCII }) { "\(letter).circle" } else { "person.crop.circle" }
+        }
+    }
+
+    /// The symbol for an agent known only by its display name, as activity entries record it.
+    public static func symbolName(forDisplayName name: String) -> String {
+        (known.first { $0.displayName == name } ?? AgentKind(id: name.lowercased(), displayName: name)).symbolName
+    }
+
     /// The agent a hook names itself as (`?agent=codex`, `gemini-cli`, `Claude Code`): a known
     /// agent when the name is one, otherwise a new kind with that name.
     public static func named(_ name: String) -> AgentKind? {
