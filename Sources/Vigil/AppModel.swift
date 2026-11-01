@@ -65,6 +65,12 @@ final class AppModel {
     private var persisted: PersistedState
     private var saveTask: Task<Void, Never>?
     private var tickerTask: Task<Void, Never>?
+    @ObservationIgnored private var worktreeRoots: (keys: Set<String>, roots: [(key: String, paths: [String])]) = ([], [])
+    @ObservationIgnored private var resolvedPaths: [String: String] = [:]
+    /// Entries recorded but not yet in `activity`. Agents report several times a second and every
+    /// change to the feed redraws it, so new entries join it at most twice a second.
+    @ObservationIgnored private var pendingActivity: [ActivityEntry] = []
+    @ObservationIgnored private var activityFlush: Task<Void, Never>?
     @ObservationIgnored private var tickingFast = true
     @ObservationIgnored private var visibilityObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
@@ -353,6 +359,7 @@ final class AppModel {
         repositoryWatchers[id]?.stop()
         repositoryWatchers.removeValue(forKey: id)
         // Its history goes too, on disk as well as in the feed.
+        flushActivity()
         let removedPaths = Set(repo.worktrees.map(\.path))
         if activity.contains(where: { removedPaths.contains($0.worktreePath) }) {
             activity.removeAll { removedPaths.contains($0.worktreePath) }
@@ -411,18 +418,27 @@ final class AppModel {
     }
 
     /// The watched worktree that contains `cwd`, longest match first.
-    func worktree(containing cwd: String) -> String? {
-        let candidates = [cwd, URL(fileURLWithPath: cwd).resolvingSymlinksInPath().path]
-        var best: String? = nil
-        for key in sessions.keys {
-            let resolvedKey = URL(fileURLWithPath: key).resolvingSymlinksInPath().path
-            for candidate in candidates {
-                for root in [key, resolvedKey] where candidate == root || candidate.hasPrefix(root + "/") {
-                    if best == nil || key.count > best!.count { best = key }
-                }
-            }
+    /// The watched worktree a path is in, the innermost when worktrees nest. Every hook event asks
+    /// this for several paths, so worktrees' resolved paths are kept, and a path is resolved
+    /// (symlinks are disk lookups) only when it does not match as given.
+    func worktree(containing path: String) -> String? {
+        let keys = Set(sessions.keys)
+        if keys != worktreeRoots.keys {
+            worktreeRoots = (keys, keys.sorted { $0.count > $1.count }.map { key in
+                (key, Array(Set([key, URL(fileURLWithPath: key).resolvingSymlinksInPath().path])))
+            })
+            resolvedPaths = [:]
         }
-        return best
+        func match(_ candidate: String) -> String? {
+            worktreeRoots.roots.first { root in
+                root.paths.contains { candidate == $0 || candidate.hasPrefix($0 + "/") }
+            }?.key
+        }
+        if let found = match(path) { return found }
+        if resolvedPaths.count > 1000 { resolvedPaths = [:] }
+        let resolved = resolvedPaths[path] ?? URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        resolvedPaths[path] = resolved
+        return resolved == path ? nil : match(resolved)
     }
 
     func rediscoverAll() {
@@ -519,6 +535,9 @@ final class AppModel {
     }
 
     func clearActivity() {
+        activityFlush?.cancel()
+        activityFlush = nil
+        pendingActivity = []
         activity.removeAll()
         activityLog.replaceAll(with: [])
         activityHistoryStart = Date()
@@ -536,6 +555,8 @@ final class AppModel {
         let days = settings.activityRetentionDays
         activityLog.retention = Double(days) * 86_400
         let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
+        // The log is rewritten from the feed: entries still on their way must be in it.
+        flushActivity()
         guard activity.contains(where: { $0.date < cutoff }) else { return }
         activity.removeAll { $0.date < cutoff }
         activityLog.replaceAll(with: activity.reversed())
@@ -672,12 +693,27 @@ final class AppModel {
 
     private func record(_ entries: [ActivityEntry]) {
         guard !entries.isEmpty else { return }
-        activity.insert(contentsOf: entries.reversed(), at: 0)
-        if activity.count > activityLog.maxEntries { activity.removeLast(activity.count - activityLog.maxEntries) }
+        pendingActivity.append(contentsOf: entries)
+        if activityFlush == nil {
+            activityFlush = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                self?.flushActivity()
+            }
+        }
         activityLog.append(entries)
         if settings.notificationsEnabled, let first = entries.first, let session = sessions[first.worktreePath] {
             notifier.notify(entries: entries, worktreeName: session.displayName, minimumSeverity: settings.notifyMinimumSeverity)
         }
+    }
+
+    /// Moves the entries recorded since the last flush into the feed, newest on top.
+    private func flushActivity() {
+        activityFlush?.cancel()
+        activityFlush = nil
+        guard !pendingActivity.isEmpty else { return }
+        activity.insert(contentsOf: pendingActivity.reversed(), at: 0)
+        pendingActivity = []
+        if activity.count > activityLog.maxEntries { activity.removeLast(activity.count - activityLog.maxEntries) }
     }
 
     // MARK: Persistence
