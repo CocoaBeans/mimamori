@@ -57,7 +57,7 @@ state, never on a loop.
 - [x] A menu-bar popover that reuses the widget's views.
 - [x] A change overview beside the diff, and hunk headers that stay put.
 - [ ] Settings › Agents split into tabs.
-- [ ] A real app icon.
+- [x] A real app icon.
 - [x] A status pill in the toolbar for the most pressing agent.
 
 ### Agents window
