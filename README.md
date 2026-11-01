@@ -207,7 +207,7 @@ swift build                     # the same app as a Swift package, for `swift ru
 
 ### App icon
 
-The icon, a mimamori flame keeping watch over a branch graph, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes get bolder lines. After changing the drawing, regenerate it and rebuild:
+The icon, a paper lantern (chōchin) hung over a branch graph, the worktrees it watches over, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes get bolder lines. After changing the drawing, regenerate it and rebuild:
 
 ```bash
 swift Scripts/make-icon.swift

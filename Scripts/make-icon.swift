@@ -1,7 +1,8 @@
 #!/usr/bin/env swift
-// Draws Mimamori's app icon at every size and packs it into Resources/AppIcon.icns: a mimamori flame
-// keeping watch at the top of a branch graph, the worktrees it watches, on a night sky. Drawn
-// from shapes, so every size is sharp; small sizes get bolder lines and solid branch ends.
+// Draws Mimamori's app icon at every size and packs it into Resources/AppIcon.icns: a paper
+// lantern (chōchin) hung over a branch graph, the worktrees it watches over, on a night sky.
+// Drawn from shapes, so every size is sharp; small sizes get bolder lines and solid branch ends,
+// and leave out the lantern's ribs.
 //
 // Usage: swift Scripts/make-icon.swift [Resources/AppIcon.icns]
 
@@ -70,7 +71,7 @@ func render(canvas: CGFloat) -> NSBitmapImageRep {
     let root = CGPoint(x: x, y: y0 + 130 * k)
     let left = CGPoint(x: x - 215 * k, y: y0 + 385 * k)
     let right = CGPoint(x: x + 215 * k, y: y0 + 430 * k)
-    let top = CGPoint(x: x, y: y0 + 450 * k)
+    let top = CGPoint(x: x, y: y0 + 470 * k)
     let blue = color(0.56, 0.68, 0.98)
     blue.setStroke()
     func stroke(_ path: NSBezierPath) {
@@ -98,29 +99,41 @@ func render(canvas: CGFloat) -> NSBitmapImageRep {
         for end in [root, left, right] { circle(end, 20 * k).fill() }
     }
 
-    // The flame at the top of the trunk, and its glow over the branches.
-    let base = CGPoint(x: x, y: y0 + 530 * k)
-    let height: CGFloat = 230 * k * (small ? 1.1 : 1)
-    let half: CGFloat = 88 * k * (small ? 1.15 : 1)
-    radialGlow([(color(1, 0.75, 0.35, 0.55), 0), (color(1, 0.6, 0.25, 0.15), 0.45), (color(1, 0.5, 0.2, 0), 1)],
-               at: CGPoint(x: x, y: base.y + 60 * k), radius: 340 * k)
-    let flame = NSBezierPath()
-    flame.move(to: CGPoint(x: x, y: base.y + height))
-    flame.curve(to: CGPoint(x: x + half, y: base.y),
-                controlPoint1: CGPoint(x: x + half * 0.33, y: base.y + height * 0.68),
-                controlPoint2: CGPoint(x: x + half * 1.2, y: base.y + height * 0.36))
-    flame.curve(to: CGPoint(x: x - half, y: base.y),
-                controlPoint1: CGPoint(x: x + half * 0.76, y: base.y - height * 0.48),
-                controlPoint2: CGPoint(x: x - half * 0.76, y: base.y - height * 0.48))
-    flame.curve(to: CGPoint(x: x, y: base.y + height),
-                controlPoint1: CGPoint(x: x - half * 1.2, y: base.y + height * 0.36),
-                controlPoint2: CGPoint(x: x - half * 0.33, y: base.y + height * 0.68))
-    flame.close()
+    // The lantern at the top of the trunk, its glow over the branches: a paper body lit from
+    // within, dark caps at top and bottom, and the cord it hangs from.
+    let center = CGPoint(x: x, y: y0 + 600 * k)
+    let width: CGFloat = 250 * k, height: CGFloat = 270 * k
+    radialGlow([(color(1, 0.72, 0.35, 0.55), 0), (color(1, 0.6, 0.25, 0.14), 0.5), (color(1, 0.5, 0.2, 0), 1)],
+               at: center, radius: 360 * k)
+    let wood = color(0.20, 0.13, 0.11)
+    wood.setStroke()
+    let cord = NSBezierPath()
+    cord.lineWidth = 12 * k * weight
+    cord.move(to: CGPoint(x: x, y: center.y + height / 2 + 20 * k))
+    cord.line(to: CGPoint(x: x, y: rect.maxY))
+    cord.stroke()
+    let body = NSBezierPath(ovalIn: CGRect(x: x - width / 2, y: center.y - height / 2, width: width, height: height))
     cg.saveGState()
-    flame.addClip()
-    radialGlow([(color(1, 0.98, 0.85), 0), (color(1, 0.80, 0.35), 0.45), (color(0.96, 0.45, 0.12), 1)],
-               at: CGPoint(x: x, y: base.y + 10 * k), radius: height)
+    body.addClip()
+    radialGlow([(color(1, 0.97, 0.85), 0), (color(1, 0.78, 0.38), 0.55), (color(0.92, 0.42, 0.14), 1)],
+               at: CGPoint(x: x, y: center.y + 10 * k), radius: height * 0.62)
+    if !small {
+        color(0.75, 0.32, 0.10, 0.45).setStroke()
+        for rib in 1..<7 {
+            let y = center.y - height / 2 + CGFloat(rib) * height / 7
+            let line = NSBezierPath()
+            line.lineWidth = 5 * k
+            line.move(to: CGPoint(x: x - width / 2, y: y))
+            line.line(to: CGPoint(x: x + width / 2, y: y))
+            line.stroke()
+        }
+    }
     cg.restoreGState()
+    wood.setFill()
+    for capY in [center.y + height / 2 - 16 * k, center.y - height / 2 - 24 * k] {
+        NSBezierPath(roundedRect: CGRect(x: x - width * 0.36, y: capY, width: width * 0.72, height: 40 * k),
+                     xRadius: 10 * k, yRadius: 10 * k).fill()
+    }
     cg.restoreGState()
     return rep
 }
