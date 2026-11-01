@@ -2,30 +2,30 @@
 
 ## Public release
 
-Vigil ships outside the Mac App Store: the App Sandbox would block process scanning, the
+Mimamori ships outside the Mac App Store: the App Sandbox would block process scanning, the
 hook installers, reading agents' session records and running `git` on arbitrary folders.
 The plan is a free, open-source release distributed as a notarized download and a Homebrew
 cask. These items gate it.
 
 ### Name
 
-- [ ] Rename Vigil to Mimamori, first, while the only hooks to migrate are the maintainer's.
+- [x] Rename Vigil to Mimamori, first, while the only hooks to migrate are the maintainer's.
       Planned in [docs/plans/rename-to-mimamori.md](docs/plans/rename-to-mimamori.md).
 
 ### Distribution
 
 - [ ] Sign with a Developer ID certificate and notarize each build (`notarytool`), stapling the ticket.
 - [ ] Package a DMG and publish it from GitHub Releases or a small site.
-- [ ] Publish a Homebrew cask (`brew install --cask vigil`).
+- [ ] Publish a Homebrew cask (`brew install --cask mimamori`).
 - [ ] Add automatic updates with Sparkle (signed appcast).
 - [ ] Release workflow in CI: build, sign, notarize, attach the DMG, update the appcast and cask.
 
 ### First run and hooks
 
-- [ ] Onboarding that explains what Vigil watches and what hooks are, before anything is installed.
+- [ ] Onboarding that explains what Mimamori watches and what hooks are, before anything is installed.
 - [ ] Make it clear which files the hook installers change (`~/.claude/settings.json`,
       `~/.hermes/config.yaml`), where backups go, and how to uninstall cleanly.
-- [ ] Remove Vigil's hooks when the app is deleted, or document how to.
+- [ ] Remove Mimamori's hooks when the app is deleted, or document how to.
 
 ### Compatibility
 
@@ -36,7 +36,7 @@ cask. These items gate it.
 
 ### Cleanup
 
-- [ ] Keep the debug hooks (`VIGIL_DEBUG_*`, `DebugHooks.swift`) out of release builds,
+- [ ] Keep the debug hooks (`MIMAMORI_DEBUG_*`, `DebugHooks.swift`) out of release builds,
       or gate them behind a build flag.
 - [x] Every control has a tooltip and an accessibility label.
 
@@ -46,7 +46,7 @@ cask. These items gate it.
       (expanding the README's "Privacy and footprint").
 - [x] Add CONTRIBUTING and a security contact (the code is already MIT licensed).
 - [ ] Screenshots and a short demo for the README and release page.
-- [ ] A short in-app guide under Help › Vigil Help (⌘?): what Vigil does and how to use it.
+- [ ] A short in-app guide under Help › Mimamori Help (⌘?): what Mimamori does and how to use it.
       Planned in [docs/plans/help-window.md](docs/plans/help-window.md).
 
 ## Visual polish

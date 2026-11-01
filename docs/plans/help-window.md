@@ -2,22 +2,22 @@
 
 ## Goal
 
-A short, friendly guide inside Vigil that says what it does and how to use it. It opens from
-**Help › Vigil Help** (⌘?). Today that menu item only says help isn't available.
+A short, friendly guide inside Mimamori that says what it does and how to use it. It opens from
+**Help › Mimamori Help** (⌘?). Today that menu item only says help isn't available.
 
 This isn't a manual. Each topic is about a screenful and takes a minute to read. The README stays
 the reference for developers.
 
 ## Approach
 
-- **A Help window.** A SwiftUI `Window("Vigil Help", id: "help")` with a list of topics on the
-  left and the chosen topic on the right. It opens from Help › Vigil Help (⌘?), which replaces
+- **A Help window.** A SwiftUI `Window("Mimamori Help", id: "help")` with a list of topics on the
+  left and the chosen topic on the right. It opens from Help › Mimamori Help (⌘?), which replaces
   the default help command (`CommandGroup(replacing: .help)`). Like the summary window, it can be
   moved and resized and kept beside your work.
 - **Rendering.** Reuse `MarkdownPreview` from the session summary. It already draws headings,
   bullets, notes and code, in light and dark mode. Write the topics in what it supports, using
   bullets rather than tables, so it needs no changes.
-- **Where the text lives.** One Swift file, `Sources/Vigil/Help/HelpTopics.swift`, holds the
+- **Where the text lives.** One Swift file, `Sources/Mimamori/Help/HelpTopics.swift`, holds the
   topics (title, SF Symbol, Markdown) as string literals.
   - No resource bundle, which would need `Bundle.module` and extra copying in
     `Scripts/make-app.sh`.
@@ -35,7 +35,7 @@ Not chosen:
 Each topic is short, plain and task-first. Settings and menu items are named exactly as they
 appear.
 
-1. **Welcome.** Vigil watches your git worktrees while coding agents work in them. It shows:
+1. **Welcome.** Mimamori watches your git worktrees while coding agents work in them. It shows:
    - what changed;
    - what needs a look;
    - what each agent is doing.
@@ -70,7 +70,7 @@ appear.
    - The Disk space row, and deleting snapshots.
 9. **Keyboard shortcuts.** A bulleted list of every menu shortcut.
 10. **Privacy.**
-    - What Vigil reads.
+    - What Mimamori reads.
     - What it writes, and where.
     - That nothing leaves your Mac.
 11. **Troubleshooting.**
@@ -84,7 +84,7 @@ appear.
 
 - A comment at the top of `HelpTopics.swift` says to update it with any change that adds or
   renames a feature, menu item, shortcut or setting.
-- A `VIGIL_DEBUG_FLAGS=help:<topic>` flag opens the Help window on a topic, so headless runs can
+- A `MIMAMORI_DEBUG_FLAGS=help:<topic>` flag opens the Help window on a topic, so headless runs can
   screenshot each one.
 
 ## Steps
@@ -93,10 +93,10 @@ One small PR, a few hours of work:
 
 1. Write `HelpTopics.swift` following the outline above.
 2. Add the `HelpWindow` view: a `NavigationSplitView` with a topic list and a scrolling
-   `MarkdownPreview`. Add its `Window` scene and the Help › Vigil Help (⌘?) command.
+   `MarkdownPreview`. Add its `Window` scene and the Help › Mimamori Help (⌘?) command.
 3. Give the topic list accessible names and tooltips, and select Welcome by default.
 4. Add the debug flag and screenshot every topic in light and dark mode.
-5. Add a README line pointing to Help › Vigil Help.
+5. Add a README line pointing to Help › Mimamori Help.
 
 ## Later, if wanted
 

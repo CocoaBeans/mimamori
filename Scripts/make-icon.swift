@@ -1,5 +1,5 @@
 #!/usr/bin/env swift
-// Draws Vigil's app icon at every size and packs it into Resources/AppIcon.icns: a vigil flame
+// Draws Mimamori's app icon at every size and packs it into Resources/AppIcon.icns: a mimamori flame
 // keeping watch at the top of a branch graph, the worktrees it watches, on a night sky. Drawn
 // from shapes, so every size is sharp; small sizes get bolder lines and solid branch ends.
 //
@@ -125,7 +125,7 @@ func render(canvas: CGFloat) -> NSBitmapImageRep {
     return rep
 }
 
-let iconsetURL = URL(fileURLWithPath: "build/Vigil.iconset", isDirectory: true)
+let iconsetURL = URL(fileURLWithPath: "build/Mimamori.iconset", isDirectory: true)
 try? FileManager.default.removeItem(at: iconsetURL)
 try FileManager.default.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
 

@@ -36,10 +36,10 @@ jobs:
         run: swift test
 
       - name: Build app (Xcode project, ad hoc signed)
-        run: VIGIL_SIGN=adhoc Scripts/make-app.sh release
+        run: MIMAMORI_SIGN=adhoc Scripts/make-app.sh release
 
       - name: Zip app
-        run: ditto -c -k --keepParent build/Vigil.app build/Vigil-unsigned.zip
+        run: ditto -c -k --keepParent build/Mimamori.app build/Mimamori-unsigned.zip
 
       # Convenience only: artifact storage on private repositories is quota-limited,
       # so a failed upload must not fail the build.
@@ -47,6 +47,6 @@ jobs:
         uses: actions/upload-artifact@v5
         continue-on-error: true
         with:
-          name: Vigil-unsigned
-          path: build/Vigil-unsigned.zip
+          name: Mimamori-unsigned
+          path: build/Mimamori-unsigned.zip
           retention-days: 7

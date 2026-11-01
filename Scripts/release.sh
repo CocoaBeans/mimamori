@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 VERSION="$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)"
 BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw Resources/Info.plist)"
 APP="$(Scripts/make-app.sh release)"
-ZIP="build/Vigil-$VERSION.zip"
+ZIP="build/Mimamori-$VERSION.zip"
 
 IDENTITY="${IDENTITY:-$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')}"
 if [[ -z "$IDENTITY" ]]; then
@@ -30,7 +30,7 @@ ASC_KEY_PATH="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_K
 [[ -f "$ASC_KEY_PATH" ]] || { echo "API key not found at $ASC_KEY_PATH" >&2; exit 1; }
 
 echo "Signing with: $IDENTITY"
-codesign --force --options runtime --timestamp --sign "$IDENTITY" --identifier "$BUNDLE_ID" "$APP/Contents/MacOS/Vigil"
+codesign --force --options runtime --timestamp --sign "$IDENTITY" --identifier "$BUNDLE_ID" "$APP/Contents/MacOS/Mimamori"
 codesign --force --options runtime --timestamp --sign "$IDENTITY" --identifier "$BUNDLE_ID" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 

@@ -108,7 +108,9 @@ launch, without touching the real configs.
    Code's events arrive, Hermes asks for approval, and the widget can be added. Then remove
    `build/Vigil.app`.
 4. Rename the GitHub repository and point the local remote at it.
-5. Later, separately: the icon, and a fresh README screenshot.
+5. Later, separately: the icon, and a fresh README screenshot. The screenshot is a real screen
+   capture (⌘⇧4, then Space, for one window), since the app's own captures flatten glass and
+   vibrancy: a demo copy runs with sample repositories and test agents, so no real project shows.
 
 ## Risks
 

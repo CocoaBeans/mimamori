@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Vigil</string>
+	<string>Mimamori</string>
 	<key>CFBundleExecutable</key>
-	<string>Vigil</string>
+	<string>Mimamori</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.kevinross.Vigil</string>
+	<string>com.kevinross.Mimamori</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Vigil</string>
+	<string>Mimamori</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -24,10 +24,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.kevinross.Vigil</string>
+			<string>com.kevinross.Mimamori</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>vigil</string>
+				<string>mimamori</string>
 			</array>
 		</dict>
 	</array>

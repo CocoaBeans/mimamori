@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Pretends to be a coding agent: edits, adds, deletes and occasionally commits
-# files in a repo so you can watch Vigil react. Creates a throwaway repo if no
+# files in a repo so you can watch Mimamori react. Creates a throwaway repo if no
 # path is given.
 #
 # Usage: Scripts/simulate-agent.sh [repo-path] [interval-seconds]
@@ -10,7 +10,7 @@ REPO="${1:-}"
 INTERVAL="${2:-4}"
 
 if [[ -z "$REPO" ]]; then
-  REPO="$(mktemp -d /tmp/vigil-demo.XXXXXX)"
+  REPO="$(mktemp -d /tmp/mimamori-demo.XXXXXX)"
   git -C "$REPO" init -q -b main
   mkdir -p "$REPO/src" "$REPO/tests" "$REPO/.github/workflows"
   cat > "$REPO/src/app.py" <<'PY'

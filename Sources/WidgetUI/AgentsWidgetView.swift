@@ -1,9 +1,9 @@
 import SwiftUI
-import VigilCore
+import MimamoriCore
 import WidgetKit
 
 // The Agents widget's views. Compiled into the widget extension and into the app, which draws
-// its menu-bar popover with them and renders widget previews (VIGIL_DEBUG_FLAGS=widgets).
+// its menu-bar popover with them and renders widget previews (MIMAMORI_DEBUG_FLAGS=widgets).
 
 /// What a widget instance is set to show (its configuration, in the extension).
 struct AgentsWidgetOptions: Hashable, Sendable {
@@ -96,11 +96,11 @@ struct AgentsWidgetView: View {
 extension EnvironmentValues {
     /// Drawing a preview with `ImageRenderer`, which cannot draw links.
     @Entry var isRenderingWidgetPreview = false
-    /// Inside Vigil, what clicking an agent does, in place of following its `vigil://` link.
+    /// Inside Mimamori, what clicking an agent does, in place of following its `mimamori://` link.
     @Entry var openAgent: (@MainActor (AgentWidgetSnapshot.Agent) -> Void)? = nil
 }
 
-/// An agent's row, opening Vigil on its worktree when clicked.
+/// An agent's row, opening Mimamori on its worktree when clicked.
 struct AgentLink<Content: View>: View {
     @Environment(\.isRenderingWidgetPreview) private var isPreview
     @Environment(\.openAgent) private var openAgent
@@ -113,7 +113,7 @@ struct AgentLink<Content: View>: View {
         } else if let openAgent {
             Button { openAgent(agent) } label: { content }
                 .accessibilityLabel("\(agent.worktree), \(agent.agent), \(agent.status)")
-                .help("Show \(agent.worktree) in Vigil")
+                .help("Show \(agent.worktree) in Mimamori")
         } else {
             Link(destination: agent.link) { content }
         }
@@ -308,7 +308,7 @@ struct AgentRowView: View {
     }
 }
 
-/// Medium and large: a header and a column of agents, each opening Vigil on its worktree.
+/// Medium and large: a header and a column of agents, each opening Mimamori on its worktree.
 struct AgentListView: View {
     let snapshot: AgentWidgetSnapshot
     let agents: [AgentWidgetSnapshot.Agent]
@@ -388,7 +388,7 @@ struct QuietView: View {
             Text(onlyNeedsYou ? "Nobody needs you" : "No agents at work")
                 .font(.headline)
             if family != .systemSmall {
-                Text(onlyNeedsYou ? "Agents waiting on you show up here." : "Agents show up here while they run in a worktree Vigil watches.")
+                Text(onlyNeedsYou ? "Agents waiting on you show up here." : "Agents show up here while they run in a worktree Mimamori watches.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -398,7 +398,7 @@ struct QuietView: View {
     }
 }
 
-/// Vigil has quit, or has not written for a long while: the states would be stale.
+/// Mimamori has quit, or has not written for a long while: the states would be stale.
 struct NotRunningView: View {
     let family: WidgetFamily
 
@@ -407,21 +407,21 @@ struct NotRunningView: View {
             Image(systemName: "eye.slash.fill")
                 .font(family == .systemSmall ? .title : .largeTitle)
                 .foregroundStyle(.secondary)
-            Text("Vigil isn't running")
+            Text("Mimamori isn't running")
                 .font(.headline)
             if family != .systemSmall {
-                Text("Open Vigil to see your agents.")
+                Text("Open Mimamori to see your agents.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .widgetURL(URL(string: "vigil://open"))
+        .widgetURL(URL(string: "mimamori://open"))
     }
 }
 
 extension AgentWidgetSnapshot {
-    /// What the widget gallery shows before Vigil has written anything.
+    /// What the widget gallery shows before Mimamori has written anything.
     static var sample: AgentWidgetSnapshot {
         let now = Date()
         return AgentWidgetSnapshot(writtenAt: now, agents: [
@@ -431,7 +431,7 @@ extension AgentWidgetSnapshot {
             .init(worktreePath: "/sample/main", repository: "mobile-app", worktree: "main", agent: "Claude Code", symbol: "sparkle", state: .working,
                   status: "working · Edit", since: now.addingTimeInterval(-312), task: "Tidy the onboarding screens",
                   steps: [.init(tool: "Edit", target: "Onboarding/Welcome.swift", running: true), .init(tool: "Bash", target: "swift test")]),
-            .init(worktreePath: "/sample/docs", repository: "Vigil", worktree: "docs", agent: "Hermes", symbol: "paperplane", state: .ready,
+            .init(worktreePath: "/sample/docs", repository: "Mimamori", worktree: "docs", agent: "Hermes", symbol: "paperplane", state: .ready,
                   status: "ready for your next prompt", since: now.addingTimeInterval(-900), task: "Summarise what we built",
                   steps: [.init(tool: "read_file", target: "README.md")]),
         ])

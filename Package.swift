@@ -2,28 +2,28 @@
 import PackageDescription
 
 let package = Package(
-    name: "Vigil",
+    name: "Mimamori",
     platforms: [.macOS(.v15)],
     products: [
-        .executable(name: "Vigil", targets: ["Vigil"]),
-        .library(name: "VigilCore", targets: ["VigilCore"]),
+        .executable(name: "Mimamori", targets: ["Mimamori"]),
+        .library(name: "MimamoriCore", targets: ["MimamoriCore"]),
     ],
     targets: [
         // Everything that knows about git, the file system and change analysis.
         // No SwiftUI in here, so it can be tested quickly from the command line.
-        .target(name: "VigilCore"),
+        .target(name: "MimamoriCore"),
 
-        // The macOS app: SwiftUI shell over VigilCore. Vigil.xcodeproj builds the shipped,
+        // The macOS app: SwiftUI shell over MimamoriCore. Mimamori.xcodeproj builds the shipped,
         // signed app from the same sources; this target is for `swift run` and the debug hooks.
         // It shares the widget's views (Sources/WidgetUI) with the widget extension, for the
         // menu-bar popover.
         .executableTarget(
-            name: "Vigil",
-            dependencies: ["VigilCore"],
+            name: "Mimamori",
+            dependencies: ["MimamoriCore"],
             path: "Sources",
-            sources: ["Vigil", "WidgetUI"],
+            sources: ["Mimamori", "WidgetUI"],
             linkerSettings: [
-                // Embed Info.plist so `swift run Vigil` behaves like a real app
+                // Embed Info.plist so `swift run Mimamori` behaves like a real app
                 // (name in the menu bar, activation) even without a bundle.
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
@@ -34,6 +34,6 @@ let package = Package(
             ]
         ),
 
-        .testTarget(name: "VigilCoreTests", dependencies: ["VigilCore"]),
+        .testTarget(name: "MimamoriCoreTests", dependencies: ["MimamoriCore"]),
     ]
 )
