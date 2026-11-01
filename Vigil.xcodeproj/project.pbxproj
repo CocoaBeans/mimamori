@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		7A1C00000000000000000101 /* VigilCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000002 /* VigilCore.framework */; };
 		7A1C00000000000000000102 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000011 /* AppIcon.icns */; };
+		7A1C00000000000000000103 /* VigilCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000002 /* VigilCore.framework */; };
+		7A1C00000000000000000104 /* VigilWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000003 /* VigilWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,14 +21,46 @@
 			remoteGlobalIDString = 7A1C00000000000000000602;
 			remoteInfo = VigilCore;
 		};
+		7A1C00000000000000000202 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A1C00000000000000000901 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A1C00000000000000000602;
+			remoteInfo = VigilCore;
+		};
+		7A1C00000000000000000203 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A1C00000000000000000901 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A1C00000000000000000603;
+			remoteInfo = VigilWidgets;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7A1C00000000000000000405 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				7A1C00000000000000000104 /* VigilWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		7A1C00000000000000000001 /* Vigil.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vigil.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A1C00000000000000000002 /* VigilCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = VigilCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1C00000000000000000003 /* VigilWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VigilWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A1C00000000000000000011 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		7A1C00000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7A1C00000000000000000013 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		7A1C00000000000000000014 /* Vigil.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Vigil.entitlements; sourceTree = "<group>"; };
+		7A1C00000000000000000015 /* VigilWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VigilWidgets.entitlements; sourceTree = "<group>"; };
+		7A1C00000000000000000016 /* VigilWidgets-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "VigilWidgets-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -38,6 +72,16 @@
 		7A1C00000000000000000302 /* VigilCore */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Sources/VigilCore;
+			sourceTree = "<group>";
+		};
+		7A1C00000000000000000303 /* VigilWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Sources/VigilWidgets;
+			sourceTree = "<group>";
+		};
+		7A1C00000000000000000304 /* WidgetUI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Sources/WidgetUI;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -58,6 +102,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A1C00000000000000000403 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A1C00000000000000000103 /* VigilCore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -66,6 +118,8 @@
 			children = (
 				7A1C00000000000000000301 /* Vigil */,
 				7A1C00000000000000000302 /* VigilCore */,
+				7A1C00000000000000000303 /* VigilWidgets */,
+				7A1C00000000000000000304 /* WidgetUI */,
 				7A1C00000000000000000502 /* Resources */,
 				7A1C00000000000000000013 /* Package.swift */,
 				7A1C00000000000000000503 /* Products */,
@@ -77,6 +131,9 @@
 			children = (
 				7A1C00000000000000000011 /* AppIcon.icns */,
 				7A1C00000000000000000012 /* Info.plist */,
+				7A1C00000000000000000014 /* Vigil.entitlements */,
+				7A1C00000000000000000016 /* VigilWidgets-Info.plist */,
+				7A1C00000000000000000015 /* VigilWidgets.entitlements */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -86,6 +143,7 @@
 			children = (
 				7A1C00000000000000000001 /* Vigil.app */,
 				7A1C00000000000000000002 /* VigilCore.framework */,
+				7A1C00000000000000000003 /* VigilWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -100,14 +158,17 @@
 				7A1C00000000000000000701 /* Sources */,
 				7A1C00000000000000000401 /* Frameworks */,
 				7A1C00000000000000000801 /* Resources */,
+				7A1C00000000000000000405 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				7A1C00000000000000000B01 /* PBXTargetDependency */,
+				7A1C00000000000000000B03 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7A1C00000000000000000301 /* Vigil */,
+				7A1C00000000000000000304 /* WidgetUI */,
 			);
 			name = Vigil;
 			packageProductDependencies = (
@@ -138,6 +199,30 @@
 			productReference = 7A1C00000000000000000002 /* VigilCore.framework */;
 			productType = "com.apple.product-type.framework";
 		};
+		7A1C00000000000000000603 /* VigilWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A1C00000000000000000A04 /* Build configuration list for PBXNativeTarget "VigilWidgets" */;
+			buildPhases = (
+				7A1C00000000000000000703 /* Sources */,
+				7A1C00000000000000000403 /* Frameworks */,
+				7A1C00000000000000000803 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7A1C00000000000000000B02 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7A1C00000000000000000303 /* VigilWidgets */,
+				7A1C00000000000000000304 /* WidgetUI */,
+			);
+			name = VigilWidgets;
+			packageProductDependencies = (
+			);
+			productName = VigilWidgets;
+			productReference = 7A1C00000000000000000003 /* VigilWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -152,6 +237,9 @@
 						CreatedOnToolsVersion = 26.5;
 					};
 					7A1C00000000000000000602 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					7A1C00000000000000000603 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -172,6 +260,7 @@
 			targets = (
 				7A1C00000000000000000601 /* Vigil */,
 				7A1C00000000000000000602 /* VigilCore */,
+				7A1C00000000000000000603 /* VigilWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -186,6 +275,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7A1C00000000000000000802 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1C00000000000000000803 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -209,6 +305,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A1C00000000000000000703 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -216,6 +319,16 @@
 			isa = PBXTargetDependency;
 			target = 7A1C00000000000000000602 /* VigilCore */;
 			targetProxy = 7A1C00000000000000000201 /* PBXContainerItemProxy */;
+		};
+		7A1C00000000000000000B02 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A1C00000000000000000602 /* VigilCore */;
+			targetProxy = 7A1C00000000000000000202 /* PBXContainerItemProxy */;
+		};
+		7A1C00000000000000000B03 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A1C00000000000000000603 /* VigilWidgets */;
+			targetProxy = 7A1C00000000000000000203 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -266,6 +379,7 @@
 		7A1C00000000000000000C11 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/Vigil.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -276,12 +390,14 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Vigil;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) XCODE_APP";
 			};
 			name = Debug;
 		};
 		7A1C00000000000000000C12 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/Vigil.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -292,6 +408,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Vigil;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) XCODE_APP";
 			};
 			name = Release;
 		};
@@ -321,6 +438,42 @@
 			};
 			name = Release;
 		};
+		7A1C00000000000000000C31 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/VigilWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = "Resources/VigilWidgets-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Vigil.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		7A1C00000000000000000C32 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/VigilWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = "Resources/VigilWidgets-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Vigil.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -347,6 +500,15 @@
 			buildConfigurations = (
 				7A1C00000000000000000C01 /* Debug */,
 				7A1C00000000000000000C02 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A1C00000000000000000A04 /* Build configuration list for PBXNativeTarget "VigilWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A1C00000000000000000C31 /* Debug */,
+				7A1C00000000000000000C32 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
