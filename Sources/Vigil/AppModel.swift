@@ -60,6 +60,11 @@ final class AppModel {
     private var persisted: PersistedState
     private var saveTask: Task<Void, Never>?
     private var tickerTask: Task<Void, Never>?
+    /// When something last happened: an activity entry or an agent's status changing. Times on
+    /// screen show seconds only for a minute after that, so the clock ticks fast only then.
+    @ObservationIgnored private var lastActivityAt = Date()
+    @ObservationIgnored private var tickingFast = true
+    @ObservationIgnored private var visibilityObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     private var repositoryWatchers: [UUID: FSEventsWatcher] = [:]
     private var rediscoverTasks: [UUID: Task<Void, Never>] = [:]
@@ -86,6 +91,7 @@ final class AppModel {
         refreshAfterWaking()
         agentHub.resolveWorktree = { [weak self] cwd in self?.worktree(containing: cwd) }
         agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
+        agentHub.onStatusChange = { [weak self] in self?.noteActivity() }
         DebugHooks.start(model: self)
         // Review marks and other edits are saved after a short delay; do not lose them on quit.
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
@@ -213,13 +219,42 @@ final class AppModel {
         }
     }
 
+    /// `now` drives every relative time on screen, and each change redraws (and re-measures)
+    /// every window showing one. Labels show seconds only in their first minute ("12s ago",
+    /// "working for 42s"), so the clock ticks every 2 s for a minute after something happens and
+    /// every 30 s otherwise, and not at all while no Vigil window can be seen.
     private func startTicker() {
+        tickerTask?.cancel()
+        tickingFast = Date().timeIntervalSince(lastActivityAt) < 65
         tickerTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                self?.now = Date()
+                let fast = self?.tickingFast ?? false
+                try? await Task.sleep(for: .seconds(fast ? 2 : 30))
+                guard let self, !Task.isCancelled else { return }
+                if self.anyWindowVisible { self.now = Date() }
+                self.tickingFast = Date().timeIntervalSince(self.lastActivityAt) < 65
             }
         }
+        guard visibilityObservers.isEmpty else { return }
+        // Catch up the moment a window comes back into view.
+        for name in [NSWindow.didChangeOcclusionStateNotification, NSApplication.didUnhideNotification] {
+            visibilityObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.anyWindowVisible else { return }
+                    self.now = Date()
+                }
+            })
+        }
+    }
+
+    /// Something happened: count seconds again.
+    private func noteActivity() {
+        lastActivityAt = Date()
+        if !tickingFast { startTicker() }
+    }
+
+    private var anyWindowVisible: Bool {
+        NSApp.windows.contains { $0.isVisible && $0.occlusionState.contains(.visible) && $0.styleMask.contains(.titled) }
     }
 
     // MARK: Repositories
@@ -625,6 +660,7 @@ final class AppModel {
 
     private func record(_ entries: [ActivityEntry]) {
         guard !entries.isEmpty else { return }
+        noteActivity()
         activity.insert(contentsOf: entries.reversed(), at: 0)
         if activity.count > activityLog.maxEntries { activity.removeLast(activity.count - activityLog.maxEntries) }
         activityLog.append(entries)

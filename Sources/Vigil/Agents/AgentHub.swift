@@ -100,6 +100,8 @@ final class AgentHub {
 
     var resolveWorktree: @MainActor (String) -> String? = { _ in nil }
     var onNotes: @MainActor (_ worktree: String, _ agent: AgentKind, _ notes: [AgentNote]) -> Void = { _, _, _ in }
+    /// Called when a published status changes, so the clock can count seconds again.
+    var onStatusChange: @MainActor () -> Void = {}
 
     // Bookkeeping that views never read, kept out of observation.
     /// One machine per session (`AgentStatus.key`) in each worktree.
@@ -208,7 +210,8 @@ final class AgentHub {
             return
         }
         let interval = max(1, settings.agentScanIntervalSeconds)
-        scanTask = Task { [weak self] in
+        // The scan looks at every process on the Mac; nothing waits on it.
+        scanTask = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
                 let roots = self.watchedWorktrees
@@ -386,7 +389,10 @@ final class AgentHub {
             let list = sessions.values.compactMap(\.status).sorted(by: WorktreeAgents.morePressing)
             return list.isEmpty ? nil : list
         }
-        if fresh != statuses { statuses = fresh }
+        if fresh != statuses {
+            statuses = fresh
+            onStatusChange()
+        }
         updateAgents()
     }
 

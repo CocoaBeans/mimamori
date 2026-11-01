@@ -54,7 +54,8 @@ public enum ProcessRunner {
         currentDirectory: URL? = nil,
         environment: [String: String]? = nil,
         stdin: Data? = nil,
-        timeout: Duration = .seconds(60)
+        timeout: Duration = .seconds(60),
+        qualityOfService: QualityOfService = .userInitiated
     ) async throws -> ProcessResult {
         _ = ignoreSIGPIPE
         let description = ([executable.lastPathComponent] + arguments).joined(separator: " ")
@@ -64,6 +65,7 @@ public enum ProcessRunner {
 
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ProcessResult, Error>) in
             let process = Process()
+            process.qualityOfService = qualityOfService
             process.executableURL = executable
             process.arguments = arguments
             process.currentDirectoryURL = currentDirectory
@@ -131,7 +133,7 @@ public enum ProcessRunner {
 
             if let stdin, let inPipe {
                 let writer = Box(inPipe.fileHandleForWriting)
-                DispatchQueue.global(qos: .userInitiated).async {
+                DispatchQueue.global(qos: DispatchQoS.QoSClass(qualityOfService)).async {
                     try? writer.value.write(contentsOf: stdin)
                     try? writer.value.close()
                 }
@@ -147,7 +149,7 @@ public enum ProcessRunner {
             let seconds = Double(timeout.components.seconds) + Double(timeout.components.attoseconds) / 1e18
             DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: timeoutItem)
 
-            group.notify(queue: DispatchQueue.global(qos: .userInitiated)) {
+            group.notify(queue: DispatchQueue.global(qos: DispatchQoS.QoSClass(qualityOfService))) {
                 timeoutItem.cancel()
                 let status = boxed.value.terminationStatus
                 boxed.value.terminationHandler = nil
@@ -157,6 +159,18 @@ public enum ProcessRunner {
                     continuation.resume(returning: ProcessResult(status: status, stdout: out.value, stderr: err.value))
                 }
             }
+        }
+    }
+}
+
+extension DispatchQoS.QoSClass {
+    init(_ quality: QualityOfService) {
+        switch quality {
+        case .userInteractive: self = .userInteractive
+        case .userInitiated: self = .userInitiated
+        case .utility: self = .utility
+        case .background: self = .background
+        default: self = .default
         }
     }
 }

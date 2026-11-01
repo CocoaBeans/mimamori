@@ -148,6 +148,11 @@ public actor AgentScanner {
     /// Where Claude Code records its sessions; nil to skip reading them.
     private let claudeSessions: URL?
     private var previousCPU: [Int32: (time: TimeInterval, at: Date)] = [:]
+    /// What each process turned out to be, by pid and start time. A process keeps its executable,
+    /// so a scan looks closely only at processes it has not seen: most of the Mac's are not agents.
+    private var known: [Int32: (started: Date?, executable: String, kind: AgentKind?)] = [:]
+    /// Younger processes are looked at again: a launcher script can still exec into an agent.
+    static let settledAge: TimeInterval = 10
 
     public init(classifier: AgentClassifier = AgentClassifier(), claudeSessions: URL? = ClaudeSessionFiles.directory) {
         self.classifier = classifier
@@ -156,6 +161,7 @@ public actor AgentScanner {
 
     public func setClassifier(_ classifier: AgentClassifier) {
         self.classifier = classifier
+        known = [:]
     }
 
     /// Finds agents in `worktrees`, matched longest-prefix first so nested worktrees win over
@@ -165,16 +171,32 @@ public actor AgentScanner {
         let now = Date()
         var result = AgentScan()
         var seen = Set<Int32>()
-
+        var alive = Set<Int32>()
         for pid in ProcessInspector.allPIDs() {
-            guard let executable = ProcessInspector.executablePath(of: pid) else { continue }
-            let name = (executable as NSString).lastPathComponent
-            let needsArguments = AgentClassifier.isInterpreter(name)
-            let arguments = needsArguments ? ProcessInspector.arguments(of: pid) : []
-            guard let kind = classifier.classify(executable: executable, arguments: arguments) else { continue }
+            alive.insert(pid)
+            let started = ProcessInspector.startDate(of: pid)
+            let executable: String
+            let kind: AgentKind
+            if let cached = known[pid], cached.started == started {
+                guard let cachedKind = cached.kind else { continue }
+                executable = cached.executable
+                kind = cachedKind
+            } else {
+                guard let path = ProcessInspector.executablePath(of: pid) else { continue }
+                let name = (path as NSString).lastPathComponent
+                let arguments = AgentClassifier.isInterpreter(name) ? ProcessInspector.arguments(of: pid) : []
+                let found = classifier.classify(executable: path, arguments: arguments)
+                // Remember settled processes, and ones that keep their start time to themselves
+                // (another user's): a pid reused by one of yours has a start time, so it is looked at.
+                if started.map({ now.timeIntervalSince($0) > Self.settledAge }) ?? true {
+                    known[pid] = (started, path, found)
+                }
+                guard let found else { continue }
+                executable = path
+                kind = found
+            }
             guard let cwd = ProcessInspector.currentDirectory(of: pid) else { continue }
             let root = roots.first(where: { cwd == $0 || cwd.hasPrefix($0 + "/") })
-            let started = ProcessInspector.startDate(of: pid)
             let session = kind == .claudeCode
                 ? claudeSessions.flatMap { ClaudeSessionFiles.record(for: pid, startedAt: started, in: $0) } : nil
             guard root != nil || session != nil else { continue }
@@ -198,6 +220,7 @@ public actor AgentScanner {
             }
         }
         previousCPU = previousCPU.filter { seen.contains($0.key) }
+        known = known.filter { alive.contains($0.key) }
         return result
     }
 }

@@ -370,14 +370,28 @@ final class WorktreeSession: Identifiable {
     private func performRefresh(quiet: Bool = false) async {
         guard let inspector else { return }
         let started = Date()
+        // A spinner redraws the screen for as long as it shows, and most refreshes are done
+        // before it would tell you anything: show it only for one that is taking a while.
+        var showBusy: Task<Void, Never>? = nil
         if state == nil {
             phase = .indexing
         } else if !quiet {
-            phase = .refreshing
+            showBusy = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                self?.phase = .refreshing
+            }
         }
         do {
             let previous = state
-            let fresh = try await inspector.refresh(baseline: baseline)
+            let fresh: WorktreeState
+            do {
+                fresh = try await inspector.refresh(baseline: baseline)
+                showBusy?.cancel()
+            } catch {
+                showBusy?.cancel()
+                throw error
+            }
             var commits: [CommitSummary] = []
             if let previous, previous.branch.headOID != fresh.branch.headOID {
                 commits = await inspector.commits(from: previous.branch.headOID, to: fresh.branch.headOID)

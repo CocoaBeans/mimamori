@@ -27,13 +27,21 @@ public struct GitClient: Sendable {
         public var allowedExitCodes: Set<Int32> = [0]
         public var stdin: Data?
         public var timeout: Duration = .seconds(60)
+        /// Most git work is refreshing in the background, which macOS may run on efficiency
+        /// cores; what you are waiting to see (a diff, a commit) asks for `.userInitiated`.
+        public var qualityOfService: QualityOfService = .utility
 
-        public init(indexFile: URL? = nil, allowedExitCodes: Set<Int32> = [0], stdin: Data? = nil, timeout: Duration = .seconds(60)) {
+        public init(indexFile: URL? = nil, allowedExitCodes: Set<Int32> = [0], stdin: Data? = nil, timeout: Duration = .seconds(60),
+                    qualityOfService: QualityOfService = .utility) {
             self.indexFile = indexFile
             self.allowedExitCodes = allowedExitCodes
             self.stdin = stdin
             self.timeout = timeout
+            self.qualityOfService = qualityOfService
         }
+
+        /// For what is on its way to the screen because you asked for it.
+        static let shown = Options(timeout: .seconds(120), qualityOfService: .userInitiated)
     }
 
     // MARK: Locating git
@@ -103,7 +111,8 @@ public struct GitClient: Sendable {
             currentDirectory: directory,
             environment: env,
             stdin: options.stdin,
-            timeout: options.timeout
+            timeout: options.timeout,
+            qualityOfService: options.qualityOfService
         )
         guard options.allowedExitCodes.contains(result.status) else {
             throw GitError(command: arguments.joined(separator: " "), status: result.status, stderr: result.stderrText)
@@ -232,7 +241,7 @@ public struct GitClient: Sendable {
 
     /// The full message of a commit: subject, blank line, body.
     public func commitMessage(_ commit: String, in worktree: URL) async -> String? {
-        guard let result = try? await run(["log", "-1", "--format=%B", commit, "--"], in: worktree) else { return nil }
+        guard let result = try? await run(["log", "-1", "--format=%B", commit, "--"], in: worktree, options: .shown) else { return nil }
         return result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -266,7 +275,7 @@ public struct GitClient: Sendable {
             arguments += paths.map { ":(literal)\($0)" }
         }
         let result = try await run(arguments, in: worktree,
-                                   options: Options(indexFile: indexFile, timeout: .seconds(120)))
+                                   options: Options(indexFile: indexFile, timeout: .seconds(120), qualityOfService: .userInitiated))
         return result.stdoutText
     }
 
@@ -274,13 +283,13 @@ public struct GitClient: Sendable {
 
     public func treeRawDiff(from old: String, to new: String, in worktree: URL) async throws -> [RawDiffEntry] {
         let result = try await run(["diff-tree", "-r", "-z", "-M", "--raw", "--no-abbrev", "--no-ext-diff", old, new],
-                                   in: worktree, options: Options(timeout: .seconds(120)))
+                                   in: worktree, options: .shown)
         return RawDiffParser.parse(result.stdout)
     }
 
     public func treeNumstat(from old: String, to new: String, in worktree: URL) async throws -> [NumstatEntry] {
         let result = try await run(["diff-tree", "-r", "-z", "-M", "--numstat", "--no-ext-diff", old, new],
-                                   in: worktree, options: Options(timeout: .seconds(120)))
+                                   in: worktree, options: .shown)
         return NumstatParser.parse(result.stdout)
     }
 
@@ -291,13 +300,13 @@ public struct GitClient: Sendable {
             arguments.append("--")
             arguments += paths.map { ":(literal)\($0)" }
         }
-        return try await run(arguments, in: worktree, options: Options(timeout: .seconds(120))).stdoutText
+        return try await run(arguments, in: worktree, options: .shown).stdoutText
     }
 
     /// Unified diff between two blobs. Its paths are the blob ids; callers relabel them.
     public func blobPatch(from old: String, to new: String, in worktree: URL, context: Int = 3) async throws -> String {
         let result = try await run(["diff", "--no-ext-diff", "--no-color", "-p", "--unified=\(context)", old, new],
-                                   in: worktree, options: Options(timeout: .seconds(120)))
+                                   in: worktree, options: .shown)
         return result.stdoutText
     }
 
