@@ -77,7 +77,9 @@ struct AgentsWidgetView: View {
                 switch family {
                 case .systemSmall: SmallAgentView(agent: agents[0], more: agents.count - 1)
                 case .systemMedium: AgentListView(snapshot: snapshot, agents: agents, limit: 3, detailed: false)
-                case .systemLarge: AgentListView(snapshot: snapshot, agents: agents, limit: 4, detailed: options.showDetails)
+                // Three agents fit with their tasks and steps, four without.
+                case .systemLarge: AgentListView(snapshot: snapshot, agents: agents, limit: options.showDetails ? 3 : 4,
+                                                 detailed: options.showDetails)
                 default: AgentGridView(snapshot: snapshot, agents: agents, limit: 8, detailed: options.showDetails)
                 }
             }
@@ -88,6 +90,26 @@ struct AgentsWidgetView: View {
 }
 
 // MARK: Pieces
+
+extension EnvironmentValues {
+    /// Drawing a preview with `ImageRenderer`, which cannot draw links.
+    @Entry var isRenderingWidgetPreview = false
+}
+
+/// An agent's row, opening Vigil on its worktree when clicked.
+struct AgentLink<Content: View>: View {
+    @Environment(\.isRenderingWidgetPreview) private var isPreview
+    let agent: AgentWidgetSnapshot.Agent
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if isPreview {
+            content
+        } else {
+            Link(destination: agent.link) { content }
+        }
+    }
+}
 
 /// The agent's state as a symbol in a tinted disc.
 struct StateBadge: View {
@@ -106,15 +128,25 @@ struct StateBadge: View {
     }
 }
 
-/// "Waiting 2:03": the state's verb and a timer that ticks without reloading the widget.
+/// "Waiting 2:03", "Ready since 4:02 PM": a live timer, ticking without reloading the widget,
+/// for what is going on now; a time of day, which never goes stale, for the rest.
 struct StateTimer: View {
     let agent: AgentWidgetSnapshot.Agent
 
     var body: some View {
         HStack(spacing: 3) {
-            Text(agent.state.verb)
-            Text(agent.since, style: .timer)
-                .monospacedDigit()
+            switch agent.state {
+            case .needsYou, .working:
+                Text(agent.state.verb)
+                Text(agent.since, style: .timer)
+                    .monospacedDigit()
+            case .ready, .running:
+                Text("\(agent.state.verb) since")
+                Text(agent.since, style: .time)
+            case .ended:
+                Text(agent.state.verb)
+                Text(agent.since, style: .time)
+            }
         }
         .foregroundStyle(agent.state.tint)
     }
@@ -259,7 +291,7 @@ struct AgentListView: View {
         VStack(alignment: .leading, spacing: 8) {
             WidgetHeader(snapshot: snapshot)
             ForEach(agents.prefix(limit)) { agent in
-                Link(destination: agent.link) {
+                AgentLink(agent: agent) {
                     AgentRowView(agent: agent, detailed: detailed)
                 }
             }
@@ -286,7 +318,7 @@ struct AgentGridView: View {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 18, alignment: .top), GridItem(.flexible(), spacing: 18, alignment: .top)],
                       alignment: .leading, spacing: 12) {
                 ForEach(agents.prefix(limit)) { agent in
-                    Link(destination: agent.link) {
+                    AgentLink(agent: agent) {
                         AgentRowView(agent: agent, detailed: detailed)
                     }
                 }

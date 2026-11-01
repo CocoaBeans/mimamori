@@ -102,6 +102,8 @@ final class AgentHub {
     var onNotes: @MainActor (_ worktree: String, _ agent: AgentKind, _ notes: [AgentNote]) -> Void = { _, _, _ in }
     /// Called when a published status changes, so the clock can count seconds again.
     var onStatusChange: @MainActor () -> Void = {}
+    /// Called when who works where changes: statuses, processes, collisions.
+    var onAgentsChange: @MainActor () -> Void = {}
 
     // Bookkeeping that views never read, kept out of observation.
     /// One machine per session (`AgentStatus.key`) in each worktree.
@@ -407,7 +409,10 @@ final class AgentHub {
             fresh[worktree] = WorktreeAgents(statuses: statuses[worktree] ?? [], processes: processes[worktree] ?? [],
                                              established: establishedPIDs, now: now)
         }
-        if fresh != agents { agents = fresh }
+        if fresh != agents {
+            agents = fresh
+            onAgentsChange()
+        }
 
         for (worktree, here) in fresh where here.isShared {
             let present = Set(here.live.map(\.key) + here.unclaimed.map { "pid:\($0.pid)" })

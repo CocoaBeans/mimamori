@@ -31,6 +31,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var notifyOnAgentTurnFinished: Bool = false
     /// Notify when two agents in one worktree edit the same file.
     var notifyOnAgentCollision: Bool = true
+    /// Whether desktop widgets may show agents' tasks and steps, which anyone near the screen can read.
+    var showTasksInWidgets: Bool = true
     var customAgentNames: [String] = []
     var agentsWindowFloats: Bool = false
     /// Rows show the task, recent steps and files; off for one-line-per-agent rows.
@@ -68,6 +70,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         notifyOnAgentPermission = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentPermission) ?? defaults.notifyOnAgentPermission
         notifyOnAgentTurnFinished = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentTurnFinished) ?? defaults.notifyOnAgentTurnFinished
         notifyOnAgentCollision = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentCollision) ?? defaults.notifyOnAgentCollision
+        showTasksInWidgets = try c.decodeIfPresent(Bool.self, forKey: .showTasksInWidgets) ?? defaults.showTasksInWidgets
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
         agentsWindowFloats = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowFloats) ?? defaults.agentsWindowFloats
         agentsWindowDetailed = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowDetailed) ?? defaults.agentsWindowDetailed

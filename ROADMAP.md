@@ -46,7 +46,7 @@ cask. These items gate it.
 
 ## Later
 
-- Desktop widgets showing the running agents, who needs you, and optionally each task. Planned in
-  [docs/plans/desktop-widgets.md](docs/plans/desktop-widgets.md); depends on Developer ID signing.
+- [x] Desktop widgets showing the running agents, who needs you, and optionally each task
+      ([docs/plans/desktop-widgets.md](docs/plans/desktop-widgets.md)).
 
 - Paid "supporter" build or team features, if there is demand after release.

@@ -137,6 +137,12 @@ For an agent of your own, use the plain names with the fields Claude Code uses: 
 
 What Vigil can show depends on what an agent sends: start and end of a turn give working and ready; tool events add each step and which edit changed which file; permission and question events make it count as needing you, with notifications. Without a session id, a worktree holds one session at a time.
 
+## Desktop widgets
+
+Add the **Agents** widget from the desktop's **Edit Widgets** menu (or Notification Center) to see your agents without opening Vigil, the one that needs you first. **Small** shows that agent, how long it has been waiting or working, and how many others there are. **Medium** lists three, **large** three with each one's task and latest steps (four without), and **extra large** eight in two columns. Click an agent to open Vigil on its worktree. Each widget can be set (Edit Widget) to hide tasks and steps, or to show only agents that need you; **Settings › Agents › Show tasks and steps in widgets** keeps them off every widget, since anyone near the screen can read them.
+
+The widget is an app extension running sandboxed in its own process. Vigil writes what it shows to `widgets.json` in the App Group container `~/Library/Group Containers/555LXJXR4U.com.kevinross.Vigil/` and asks WidgetKit to reload: at once when an agent starts or stops needing you, otherwise at most every 10 seconds, plus every 15 minutes so the widget can tell a quiet Vigil from one that has quit. When Vigil quits, or has written nothing for 45 minutes, the widget says Vigil isn't running rather than show stale states. Timers ("Waiting 2:03") tick on their own between reloads.
+
 ## Privacy and footprint
 
 Vigil talks to nothing but your local `git`. It has no network code beyond a Unix-domain socket that only your own processes can reach (the socket file is readable and writable by you alone), and no telemetry. On disk it writes:
@@ -176,7 +182,7 @@ Environment variables for driving the app headlessly, useful on machines without
 | `VIGIL_DEBUG_SELECT=src/app.py` | Select that file in the selected worktree once it appears |
 | `VIGIL_DEBUG_REVIEW=README.md,src/app.py` | Mark those files in the selected worktree reviewed once they appear |
 | `VIGIL_WINDOW=1000x640` | Resize the main window after launch (clamped to the content minimum) |
-| `VIGIL_DEBUG_FLAGS=popover:sidebar,cycle` | Open the attention popover; cycle the selection through all worktrees; `toggle-review` presses ⌘↩ once on the selected file; `agents-window` opens the Agents window; `summary` opens the session summary and writes it next to the dump |
+| `VIGIL_DEBUG_FLAGS=popover:sidebar,cycle` | Open the attention popover; cycle the selection through all worktrees; `toggle-review` presses ⌘↩ once on the selected file; `agents-window` opens the Agents window; `summary` opens the session summary and writes it next to the dump; `widgets` renders every widget size, light and dark, next to the dump (Xcode build only) |
 | `VIGIL_SCREENSHOT_WINDOW=Agents` | Capture the window with that title instead of the main window |
 | `VIGIL_SUPPORT_DIR=/tmp/vigil-scratch` | Keep state, shadow indexes and the hook socket in that folder, leaving your real setup alone |
 

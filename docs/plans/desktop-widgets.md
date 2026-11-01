@@ -1,5 +1,10 @@
 # Plan: desktop widgets
 
+> **Built.** The spike settled the open questions: one Xcode project for the whole app, team
+> `555LXJXR4U`, App Group `555LXJXR4U.com.kevinross.Vigil`, tasks shown by default. Signing
+> needed no provisioning profile and nothing registered. The README's "Desktop widgets" section
+> describes the result.
+
 ## Goal
 
 See your agents at a glance on the desktop, or in Notification Center, without opening Vigil:

@@ -652,6 +652,14 @@ struct AgentSettingsView: View {
                 }
                 .help("Which of an agent's tool calls get their own entry in the activity feed")
             }
+            Section {
+                Toggle("Show tasks and steps in widgets", isOn: settings.showTasksInWidgets)
+                    .help("Let desktop widgets show each agent's task and latest steps. Anyone who can see your screen can read them.")
+            } header: {
+                Text("Desktop widgets")
+            } footer: {
+                Text("Add the Agents widget from the desktop's Edit Widgets menu. Each widget can also be set to hide tasks, or to show only agents that need you.")
+            }
             Section("Notifications") {
                 Toggle("When an agent needs permission or asks a question", isOn: settings.notifyOnAgentPermission)
                     .help("Post a notification when an agent is waiting on you")

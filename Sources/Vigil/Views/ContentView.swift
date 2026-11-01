@@ -46,6 +46,13 @@ struct ContentView: View {
                 openSettings()
             }
         }
+        // A desktop widget's agent opens its worktree; vigil://open just brings Vigil forward.
+        .onOpenURL { url in
+            if let worktree = AgentWidgetSnapshot.worktree(in: url), model.sessions[worktree] != nil {
+                model.select(worktree: worktree)
+            }
+            NSApplication.shared.activate()
+        }
         // Code that is not a view (the debug hooks) asks for a summary through the model.
         .onChange(of: model.summaryWindowRequest) { _, worktree in
             guard let worktree else { return }

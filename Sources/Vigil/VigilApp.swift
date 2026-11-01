@@ -23,6 +23,8 @@ struct VigilApp: App {
         .defaultSize(width: 1280, height: 800)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
+        // vigil:// links (from the desktop widgets) open here, whichever window is in front.
+        .handlesExternalEvents(matching: ["*"])
         .commands { VigilCommands(model: model) }
 
         // One per worktree, so a summary can sit beside your work. A summary reopened after a
@@ -34,6 +36,7 @@ struct VigilApp: App {
         .defaultSize(width: 760, height: 680)
         .windowResizability(.contentMinSize)
         .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
 
         Window("Agents", id: "agents") {
             AgentsWindowView()
@@ -41,6 +44,7 @@ struct VigilApp: App {
         }
         .defaultSize(width: 520, height: 620)
         .windowResizability(.contentMinSize)
+        .handlesExternalEvents(matching: [])
         .keyboardShortcut("a", modifiers: [.command, .shift])
         .windowLevel(model.settings.agentsWindowFloats ? .floating : .normal)
 

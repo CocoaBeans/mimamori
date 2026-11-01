@@ -77,6 +77,8 @@ final class AppModel {
     private var repositoryWatchers: [UUID: FSEventsWatcher] = [:]
     private var rediscoverTasks: [UUID: Task<Void, Never>] = [:]
     private let notifier = Notifier()
+    @ObservationIgnored private let widgets = WidgetPublisher()
+    @ObservationIgnored private var quitObserver: NSObjectProtocol?
 
     init() {
         let persisted = Persistence.load()
@@ -100,6 +102,11 @@ final class AppModel {
         agentHub.resolveWorktree = { [weak self] cwd in self?.worktree(containing: cwd) }
         agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
         agentHub.onStatusChange = { [weak self] in self?.agentStatusChanged() }
+        agentHub.onAgentsChange = { [weak self] in self?.publishWidgets() }
+        quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
+                                                              queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.widgets.vigilQuitting() }
+        }
         DebugHooks.start(model: self)
         // Review marks and other edits are saved after a short delay; do not lose them on quit.
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
@@ -192,6 +199,8 @@ final class AppModel {
         await loadActivityHistory()
         await locateGit()
         agentHub.start(settings: settings)
+        // Tell the widgets Vigil is running, whether or not an agent is yet.
+        publishWidgets()
         for repo in persisted.repositories {
             await loadRepository(id: repo.id, rootPath: repo.path)
         }
@@ -523,6 +532,9 @@ final class AppModel {
         if newValue.notificationsEnabled && !old.notificationsEnabled {
             Task { _ = await notifier.requestAuthorization() }
         }
+        if old.showTasksInWidgets != newValue.showTasksInWidgets {
+            publishWidgets()
+        }
     }
 
     func settingsBinding<T>(_ keyPath: WritableKeyPath<AppSettings, T>) -> (get: () -> T, set: (T) -> Void) {
@@ -561,6 +573,36 @@ final class AppModel {
         activity.removeAll { $0.date < cutoff }
         activityLog.replaceAll(with: activity.reversed())
         activityHistoryStart = max(activityHistoryStart, cutoff)
+    }
+
+    // MARK: Desktop widgets
+
+    /// Hands the widgets the agents as the Agents window lists them.
+    func publishWidgets() {
+        widgets.update(widgetAgents())
+    }
+
+    func widgetAgents() -> [AgentWidgetSnapshot.Agent] {
+        let details = settings.showTasksInWidgets
+        return agentRows.map { row in
+            let presence = row.presence
+            let state: AgentWidgetSnapshot.State = switch (presence.source, presence.activity) {
+            case (.process, _): .running
+            case (.hooks, .needsPermission), (.hooks, .askedQuestion): .needsYou
+            case (.hooks, .working): .working
+            case (.hooks, .ready): .ready
+            case (.hooks, .idle): .ended
+            }
+            let steps = details ? presence.turnSteps.suffix(3).reversed().map { step in
+                AgentWidgetSnapshot.Step(tool: step.toolName, target: step.summary.map { AgentText.shortenPaths($0, in: row.session.id) },
+                                         running: step.finishedAt == nil)
+            } : []
+            return AgentWidgetSnapshot.Agent(
+                worktreePath: row.session.id, repository: row.repositoryName, worktree: row.session.displayName,
+                agent: presence.kind.displayName, state: state, status: AgentText.shortenPaths(presence.statusText, in: row.session.id),
+                since: presence.since, task: details ? presence.task : nil, steps: steps, others: presence.others.count,
+                collision: presence.collision?.title)
+        }
     }
 
     // MARK: Session summary

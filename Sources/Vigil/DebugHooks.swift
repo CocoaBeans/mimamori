@@ -1,6 +1,10 @@
 import AppKit
 import Foundation
 import VigilCore
+#if XCODE_APP
+import SwiftUI
+import WidgetKit
+#endif
 
 /// Developer-only hooks driven by environment variables; inert otherwise.
 ///
@@ -35,6 +39,7 @@ enum DebugHooks {
         let windowTitle = value("VIGIL_SCREENSHOT_WINDOW")
         var toggledReview = false
         var openedSummary = false
+        var renderedWidgets = false
         var openedCommit = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
@@ -56,6 +61,13 @@ enum DebugHooks {
                         toReview.subtract(ready)
                     }
                 }
+                #if XCODE_APP
+                // "widgets": render every widget size, light and dark, next to the dump.
+                if model.debugFlags.contains("widgets"), !renderedWidgets, let dump {
+                    renderedWidgets = true
+                    writeWidgetPreviews(agents: model.widgetAgents(), to: dump)
+                }
+                #endif
                 // "summary": open the session summary for the selected worktree once.
                 if model.debugFlags.contains("summary"), !openedSummary, let session = model.selectedSession, session.state != nil {
                     model.summaryWindowRequest = session.id
@@ -115,6 +127,38 @@ enum DebugHooks {
         window.center()
         return true
     }
+
+    #if XCODE_APP
+    /// The widget sizes on a Mac's desktop, in points.
+    private static let widgetSizes: [(name: String, family: WidgetFamily, size: CGSize)] = [
+        ("small", .systemSmall, CGSize(width: 170, height: 170)),
+        ("medium", .systemMedium, CGSize(width: 364, height: 170)),
+        ("large", .systemLarge, CGSize(width: 364, height: 382)),
+        ("extralarge", .systemExtraLarge, CGSize(width: 776, height: 382)),
+    ]
+
+    /// Draws the Agents widget in every size, light and dark, as `<path>.widget-<size>-<scheme>.png`.
+    /// Uses the app's agents, or the gallery's sample ones when none are running.
+    private static func writeWidgetPreviews(agents: [AgentWidgetSnapshot.Agent], to path: String) {
+        let snapshot = AgentWidgetSnapshot(agents: agents.isEmpty ? AgentWidgetSnapshot.sample.agents : agents)
+        for size in widgetSizes {
+            for scheme in [ColorScheme.light, .dark] {
+                // Outside WidgetKit there is no container background; draw a plain one instead.
+                let view = AgentsWidgetView(snapshot: snapshot, family: size.family)
+                    .padding(16)
+                    .frame(width: size.size.width, height: size.size.height)
+                    .background(scheme == .dark ? Color(white: 0.17) : Color(white: 0.95), in: RoundedRectangle(cornerRadius: 22))
+                    .environment(\.colorScheme, scheme)
+                    .environment(\.isRenderingWidgetPreview, true)
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 2
+                guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+                      let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { continue }
+                try? png.write(to: URL(fileURLWithPath: "\(path).widget-\(size.name)-\(scheme == .dark ? "dark" : "light").png"))
+            }
+        }
+    }
+    #endif
 
     static func writeDump(model: AppModel, to path: String) {
         var lines: [String] = []
