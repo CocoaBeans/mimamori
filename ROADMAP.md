@@ -49,8 +49,8 @@ cask. These items gate it.
 Planned in [docs/plans/visual-polish.md](docs/plans/visual-polish.md). Animate only on a change of
 state, never on a loop.
 
-- [ ] One look per agent: a glyph per agent kind, colour for state only, one attention language.
-- [ ] Group the activity feed by turn, with day separators.
+- [x] One look per agent: a glyph per agent kind, colour for state only, one attention language.
+- [x] Group the activity feed by turn, with day separators.
 - [ ] An agent banner that fits its column: two rows when narrow, never a bare "…".
 - [ ] A mini diff bar and file-type icons on each changed file.
 - [ ] Compact sidebar rows: agent glyph and chips for changed, flagged and to-review files.
