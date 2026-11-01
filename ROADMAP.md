@@ -51,7 +51,7 @@ state, never on a loop.
 
 - [x] One look per agent: a glyph per agent kind, colour for state only, one attention language.
 - [x] Group the activity feed by turn, with day separators.
-- [ ] An agent banner that fits its column: two rows when narrow, never a bare "…".
+- [x] An agent banner that fits its column: two rows when narrow, never a bare "…".
 - [ ] A mini diff bar and file-type icons on each changed file.
 - [ ] Compact sidebar rows: agent glyph and chips for changed, flagged and to-review files.
 - [ ] A menu-bar popover that reuses the widget's views.
