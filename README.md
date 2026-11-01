@@ -210,7 +210,7 @@ swift build                     # the same app as a Swift package, for `swift ru
 
 ### App icon
 
-The icon, a paper lantern (chōchin) hung over a branch graph, the worktrees it watches over, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes get bolder lines. After changing the drawing, regenerate it and rebuild:
+The icon, a paper lantern (chōchin) lighting the code behind it, where a diff's hunk shows a line taken out and two put in, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes keep fewer, bolder lines. After changing the drawing, regenerate it and rebuild:
 
 ```bash
 swift Scripts/make-icon.swift
