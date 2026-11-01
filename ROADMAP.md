@@ -62,7 +62,7 @@ state, never on a loop.
 
 ### Agents window
 
-- [x] Agents grouped under pinned headers: Needs you, Working, Ready, Ended.
+- [x] Agents grouped under headings: Needs you, Working, Ready, Ended, each one foldable.
 - [x] Each agent a card tinted like the banner, with the widget's badge: its glyph in a disc the
       colour of its state.
 - [x] Each agent's timer in a pill the colour of its state.

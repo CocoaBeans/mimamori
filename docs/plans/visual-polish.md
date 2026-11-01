@@ -94,8 +94,10 @@ Spanning the window can come later as a status pill in the toolbar (see the list
 Every row had the same weight, divided by hairlines, with urgency only in the colour of the
 status text. Done first:
 
-1. **Sections by state:** Needs you, Working, Ready and Ended, each under a header with a count
-   that stays pinned while its agents scroll. The sort order already put them in this order.
+1. **Sections by state:** Needs you, Working, Ready and Ended, each under a heading with a count
+   that folds the section away. The sort order already put them in this order. The headings scroll
+   with their agents: pinned, one needs an opaque band behind it, which looked out of place
+   against the window's own background.
 2. **Cards and badges:** each agent is a card with the banner's tint (one `agentCard` modifier
    draws both), and the widget's badge, its glyph in a disc the colour of its state, replaces the
    bare glyph in the window and the banner.

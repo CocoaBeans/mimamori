@@ -66,7 +66,7 @@ struct AgentsWindowView: View {
                 // A plain stack rather than a List: a table view keeps its scroll offset when a row
                 // sorts to the top, which pushed the agent waiting on you under the title bar.
                 ScrollView {
-                    LazyVStack(spacing: 8, pinnedViews: [.sectionHeaders]) {
+                    LazyVStack(spacing: 8) {
                         let collapsed = Set(model.settings.agentsWindowCollapsed)
                         ForEach(AgentSection.group(rows), id: \.section) { group in
                             let isCollapsed = collapsed.contains(group.section.key)
@@ -364,8 +364,10 @@ enum AgentSection: Int, Hashable, CaseIterable {
     }
 }
 
-/// "Needs you 2" on a rounded tab of the section's colour, pinned above its agents while they
-/// scroll. Click it to fold the section to its header, which then shows who is in it.
+/// "Needs you 2" on a rounded tab of the section's colour, translucent like the cards below it.
+/// Not pinned: a pinned heading needs something opaque behind it to hide the cards scrolling
+/// under it, and that showed as a dark band around the tab. Click it to fold the section to its
+/// header, which then shows who is in it.
 private struct AgentSectionHeader: View {
     let section: AgentSection
     let rows: [AgentRow]
@@ -406,8 +408,6 @@ private struct AgentSectionHeader: View {
         .onHover { hovering = $0 }
         .padding(.top, 6)
         .padding(.bottom, 2)
-        // Pinned, it hides the cards scrolling under it.
-        .background(Color(nsColor: .windowBackgroundColor))
         .help(collapsed ? "Show these agents" : "Fold these agents away")
         .accessibilityLabel("\(section.title), \(rows.count == 1 ? "1 agent" : "\(rows.count) agents")")
         .accessibilityValue(collapsed ? "collapsed" : "expanded")
