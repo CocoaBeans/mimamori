@@ -1,9 +1,20 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  # Each pull request is built and tested before it merges, and merging rebases it onto main,
+  # so main is not built again: a macOS minute counts ten times against a private repository's
+  # quota. Run the workflow by hand (Actions › CI › Run workflow) to build main.
   pull_request:
+    # Documentation alone needs no build.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+# A new push to a pull request cancels the run still going for the one before it.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
