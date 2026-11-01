@@ -2,7 +2,7 @@
 
 *Mimamori* (見守り, mee-mah-MOH-ree) is Japanese for watching over someone with care: the way you watch children at play, ready to step in. It was called Vigil until November 2026.
 
-[![CI](https://github.com/CocoaBeans/vigil/actions/workflows/ci.yml/badge.svg)](https://github.com/CocoaBeans/vigil/actions/workflows/ci.yml)
+[![CI](https://github.com/CocoaBeans/mimamori/actions/workflows/ci.yml/badge.svg)](https://github.com/CocoaBeans/mimamori/actions/workflows/ci.yml)
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-blue)
 ![Swift 6](https://img.shields.io/badge/Swift-6-orange)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -72,7 +72,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 Until signed releases exist, build it yourself. It takes about a minute:
 
 ```bash
-git clone https://github.com/CocoaBeans/vigil.git
+git clone https://github.com/CocoaBeans/mimamori.git
 cd mimamori
 MIMAMORI_SIGN=adhoc Scripts/make-app.sh release
 open build/Mimamori.app
