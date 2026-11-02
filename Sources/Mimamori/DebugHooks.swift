@@ -277,7 +277,8 @@ enum DebugHooks {
         let hub = model.agentHub
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
         for pending in hub.pendingPermissions.values {
-            lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent)")
+            let plan = pending.autoAnswer.map { "\($0.allow ? "allow" : "deny") in \(Int($0.at.timeIntervalSinceNow.rounded()))s" } ?? "waits"
+            lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent) auto=\(plan) askRule=\(pending.waitsForAskRule ?? "-")")
         }
         lines.append("repositories: \(model.repositories.map(\.rootPath)) offers: \(model.repositoryOffers.map(\.root)) policy: \(model.settings.agentRepositoryPolicy.rawValue)")
         if let hookTestResult { lines.append("hook test: \(hookTestResult)") }

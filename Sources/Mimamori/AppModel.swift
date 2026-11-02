@@ -123,6 +123,9 @@ final class AppModel {
         }
         agentHub.onPermissionRequest = { [weak self] pending in self?.permissionRequested(pending) }
         agentHub.onPermissionSettled = { [weak self] id in self?.notifier.withdrawPermission(id: id) }
+        agentHub.onPermissionAnswered = { [weak self] pending, allow, automatically in
+            self?.permissionAnswered(pending, allow: allow, automatically: automatically)
+        }
         quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                               queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
@@ -767,8 +770,19 @@ final class AppModel {
     private func permissionRequested(_ pending: PendingPermission) {
         guard settings.notifyOnAgentPermission else { return }
         let name = sessions[pending.worktree]?.displayName ?? (pending.worktree as NSString).lastPathComponent
-        notifier.askPermission(id: pending.id, title: "\(pending.agent.displayName) asks to use \(pending.tool)",
-                               body: [pending.detail, name].compactMap { $0 }.joined(separator: " · "))
+        var body = [pending.detail, name].compactMap { $0 }.joined(separator: " · ")
+        if let plan = pending.autoAnswer {
+            body += "\n\(plan.allow ? "Allowing" : "Denying") in \(Format.duration(plan.at.timeIntervalSince(pending.since))) unless you answer."
+        }
+        notifier.askPermission(id: pending.id, title: "\(pending.agent.displayName) asks to use \(pending.tool)", body: body)
+    }
+
+    /// Every answer given in Mimamori goes in the feed, so there is a record of what it allowed.
+    private func permissionAnswered(_ pending: PendingPermission, allow: Bool, automatically: Bool) {
+        let how = automatically ? "by itself, after \(settings.autoAnswerSeconds) s" : "in Mimamori"
+        record([ActivityEntry(worktreePath: pending.worktree, kind: .agentAttention, path: nil,
+                              title: "\(allow ? "Allowed" : "Denied") \(how): \(pending.tool)", detail: pending.detail,
+                              severity: allow && automatically ? .warning : nil, agent: pending.agent.displayName)])
     }
 
     private func record(_ entries: [ActivityEntry]) {

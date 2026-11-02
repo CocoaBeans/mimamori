@@ -97,3 +97,39 @@ struct PermissionTests {
         #expect(ClaudeHooksConfig.uninstall(from: new)["hooks"] == nil)
     }
 }
+
+@Suite("Claude Code ask rules")
+struct ClaudePermissionRulesTests {
+    let rules = ClaudePermissionRules(ask: [
+        "Bash(git push *--force*)", "Bash(git reset --hard *)", "Bash(npm publish:*)", "WebFetch", "Edit(src/secrets/**)",
+    ])
+
+    @Test func shellCommandsMatchByWildcardOrPrefix() {
+        #expect(rules.matchingAskRule(tool: "Bash", command: "git push origin main --force") == "Bash(git push *--force*)")
+        #expect(rules.matchingAskRule(tool: "Bash", command: "git reset --hard HEAD~1") == "Bash(git reset --hard *)")
+        #expect(rules.matchingAskRule(tool: "Bash", command: "npm publish --access public") == "Bash(npm publish:*)")
+        #expect(rules.matchingAskRule(tool: "Bash", command: "git push origin main") == nil)
+        #expect(rules.matchingAskRule(tool: "Bash", command: "npm test") == nil)
+    }
+
+    @Test func compoundCommandsMatchPartByPart() {
+        #expect(rules.matchingAskRule(tool: "Bash", command: "cd repo && git push origin main --force") != nil)
+        #expect(rules.matchingAskRule(tool: "Bash", command: "npm test; git reset --hard origin/main") != nil)
+        #expect(rules.matchingAskRule(tool: "Bash", command: "echo ok\ngit push -u origin x --force-with-lease") != nil)
+        #expect(rules.matchingAskRule(tool: "Bash", command: "cd repo && npm test | tee out.txt") == nil)
+    }
+
+    @Test func otherToolsMatchByNameAndErrTowardsWaiting() {
+        #expect(rules.matchingAskRule(tool: "WebFetch", command: nil) == "WebFetch")
+        // A specifier Mimamori doesn't read counts for every call of that tool.
+        #expect(rules.matchingAskRule(tool: "Edit", command: nil) == "Edit(src/secrets/**)")
+        #expect(rules.matchingAskRule(tool: "Write", command: nil) == nil)
+        #expect(ClaudePermissionRules(ask: ["Bash"]).matchingAskRule(tool: "Bash", command: "ls") == "Bash")
+    }
+
+    @Test func readsTheAskRulesFromSettings() {
+        let settings: [String: Any] = ["permissions": ["allow": ["Bash(ls)"], "ask": ["Bash(git clean *)"]], "model": "opus"]
+        #expect(ClaudePermissionRules.askRules(in: settings) == ["Bash(git clean *)"])
+        #expect(ClaudePermissionRules.askRules(in: [:]).isEmpty)
+    }
+}

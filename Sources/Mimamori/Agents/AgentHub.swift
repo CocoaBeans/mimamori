@@ -86,6 +86,15 @@ struct PendingPermission: Hashable, Identifiable {
     var tool: String
     var detail: String?
     var since: Date
+    /// When Mimamori answers by itself, and how; nil while it waits for you.
+    var autoAnswer: AutoAnswer? = nil
+    /// The Claude Code ask rule that keeps an auto-allow from applying to this call.
+    var waitsForAskRule: String? = nil
+
+    struct AutoAnswer: Hashable {
+        var allow: Bool
+        var at: Date
+    }
 }
 
 /// Collects agent signals for every watched worktree: hook events over the Unix socket,
@@ -130,6 +139,8 @@ final class AgentHub {
     /// in the agent's own prompt, or let go).
     var onPermissionRequest: @MainActor (PendingPermission) -> Void = { _ in }
     var onPermissionSettled: @MainActor (_ id: String) -> Void = { _ in }
+    /// You or the countdown answered a request in Mimamori, for the activity feed.
+    var onPermissionAnswered: @MainActor (_ pending: PendingPermission, _ allow: Bool, _ automatically: Bool) -> Void = { _, _, _ in }
 
     // Bookkeeping that views never read, kept out of observation.
     /// One machine per session (`AgentStatus.key`) in each worktree.
@@ -158,6 +169,8 @@ final class AgentHub {
     @ObservationIgnored private var approvalWatch: Task<Void, Never>?
     /// Where Hermes says each of its sessions works, and when that was looked up.
     @ObservationIgnored private var hermesDirectories: [String: (directory: String?, at: Date)] = [:]
+    /// Countdowns to answering a permission request by itself, by request id.
+    @ObservationIgnored private var autoAnswerTasks: [String: Task<Void, Never>] = [:]
     /// Tests sent from Settings that have arrived, by token, until the test that sent them sees it.
     @ObservationIgnored private var arrivedTests: [String: Date] = [:]
 
@@ -212,6 +225,8 @@ final class AgentHub {
         server?.answersPermissions = settings.answerPermissionsInMimamori
         if !settings.answerPermissionsInMimamori {
             for key in Array(pendingPermissions.keys) { settlePermission(for: key) }
+        } else if !settings.autoAnswerPermissions {
+            for pending in pendingPermissions.values where pending.autoAnswer != nil { stopAutoAnswer(pending.id) }
         }
         if previous.customAgentNames != settings.customAgentNames {
             let classifier = AgentClassifier(customNames: settings.customAgentNames)
@@ -318,9 +333,19 @@ final class AgentHub {
         record(HookLogEntry(event, outcome: .placed(worktree: worktree)))
         if let id = event.permissionRequestID {
             let session = AgentStatus.key(session: event.sessionID, agent: event.agent)
-            let pending = PendingPermission(id: id, session: session, worktree: worktree, agent: event.agent,
+            var pending = PendingPermission(id: id, session: session, worktree: worktree, agent: event.agent,
                                             tool: event.toolName ?? "", detail: event.summary, since: event.receivedAt)
+            if settings.autoAnswerPermissions {
+                let allow = settings.autoAnswer == .allow
+                // A call you asked Claude Code to always ask about is never allowed by itself.
+                if allow, let rule = askRules(cwd: event.cwd, worktree: worktree).matchingAskRule(tool: pending.tool, command: event.command) {
+                    pending.waitsForAskRule = rule
+                } else {
+                    pending.autoAnswer = .init(allow: allow, at: event.receivedAt.addingTimeInterval(TimeInterval(settings.autoAnswerSeconds)))
+                }
+            }
             pendingPermissions[session] = pending
+            scheduleAutoAnswer(pending)
             Log.agents.notice("\(event.agent.displayName, privacy: .public) asks to use \(pending.tool, privacy: .public); waiting for an answer here or in its own prompt")
             onPermissionRequest(pending)
         }
@@ -367,20 +392,56 @@ final class AgentHub {
 
     // MARK: Permission requests
 
-    /// You answered a permission request in Mimamori: the hook hands the agent the decision.
-    func answerPermission(_ id: String, allow: Bool) {
+    /// You answered a permission request in Mimamori, or its countdown did: the hook hands the
+    /// agent the decision.
+    func answerPermission(_ id: String, allow: Bool, automatically: Bool = false) {
         guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
         pendingPermissions.removeValue(forKey: pending.session)
+        autoAnswerTasks.removeValue(forKey: id)?.cancel()
         server?.permissions.answer(id, allow ? .allow : .deny)
         onPermissionSettled(id)
-        Log.agents.notice("\(allow ? "Allowed" : "Denied", privacy: .public) \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) from Mimamori")
+        onPermissionAnswered(pending, allow, automatically)
+        Log.agents.notice("\(allow ? "Allowed" : "Denied", privacy: .public) \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) from Mimamori\(automatically ? " by itself, after waiting" : "", privacy: .public)")
         // Allowed, it gets on with the step: show it working rather than still waiting on you.
         if allow { noteApproved(in: pending.worktree, session: pending.session) }
+    }
+
+    /// Stops a request's countdown: it waits for you.
+    func stopAutoAnswer(_ id: String) {
+        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
+        autoAnswerTasks.removeValue(forKey: id)?.cancel()
+        pendingPermissions[pending.session]?.autoAnswer = nil
+    }
+
+    private func scheduleAutoAnswer(_ pending: PendingPermission) {
+        autoAnswerTasks.removeValue(forKey: pending.id)?.cancel()
+        guard let plan = pending.autoAnswer else { return }
+        autoAnswerTasks[pending.id] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, plan.at.timeIntervalSinceNow)))
+            guard !Task.isCancelled, let self, let current = self.pendingPermissions[pending.session],
+                  current.id == pending.id, current.autoAnswer != nil else { return }
+            self.answerPermission(pending.id, allow: plan.allow, automatically: true)
+        }
+    }
+
+    /// The ask rules in Claude Code's user settings and in the project's own, where the session works.
+    private func askRules(cwd: String?, worktree: String) -> ClaudePermissionRules {
+        var files = [HookInstaller.settingsURL]
+        for root in Set([cwd, worktree].compactMap { $0 }) {
+            let folder = URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent(".claude", isDirectory: true)
+            files += [folder.appendingPathComponent("settings.json"), folder.appendingPathComponent("settings.local.json")]
+        }
+        return ClaudePermissionRules(ask: files.flatMap { file -> [String] in
+            guard let data = try? Data(contentsOf: file),
+                  let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+            return ClaudePermissionRules.askRules(in: settings)
+        })
     }
 
     /// Lets a request go with no decision, leaving it to the agent's own prompt.
     private func settlePermission(for session: String) {
         guard let pending = pendingPermissions.removeValue(forKey: session) else { return }
+        autoAnswerTasks.removeValue(forKey: pending.id)?.cancel()
         server?.permissions.answer(pending.id, nil)
         onPermissionSettled(pending.id)
     }

@@ -31,6 +31,10 @@ struct AppSettings: Codable, Hashable, Sendable {
     var notifyOnAgentTurnFinished: Bool = false
     /// Let Claude Code's permission requests be answered in Mimamori as well as in its own prompt.
     var answerPermissionsInMimamori: Bool = true
+    /// Answer a permission request by itself when you have not, after `autoAnswerSeconds`.
+    var autoAnswerPermissions: Bool = false
+    var autoAnswer: PermissionAutoAnswer = .deny
+    var autoAnswerSeconds: Int = 30
     /// Notify when two agents in one worktree edit the same file.
     var notifyOnAgentCollision: Bool = true
     /// Whether desktop widgets may show agents' tasks and steps, which anyone near the screen can read.
@@ -78,6 +82,9 @@ struct AppSettings: Codable, Hashable, Sendable {
         notifyOnAgentPermission = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentPermission) ?? defaults.notifyOnAgentPermission
         notifyOnAgentTurnFinished = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentTurnFinished) ?? defaults.notifyOnAgentTurnFinished
         answerPermissionsInMimamori = try c.decodeIfPresent(Bool.self, forKey: .answerPermissionsInMimamori) ?? defaults.answerPermissionsInMimamori
+        autoAnswerPermissions = try c.decodeIfPresent(Bool.self, forKey: .autoAnswerPermissions) ?? defaults.autoAnswerPermissions
+        autoAnswer = try c.decodeIfPresent(PermissionAutoAnswer.self, forKey: .autoAnswer) ?? defaults.autoAnswer
+        autoAnswerSeconds = try c.decodeIfPresent(Int.self, forKey: .autoAnswerSeconds) ?? defaults.autoAnswerSeconds
         notifyOnAgentCollision = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentCollision) ?? defaults.notifyOnAgentCollision
         showTasksInWidgets = try c.decodeIfPresent(Bool.self, forKey: .showTasksInWidgets) ?? defaults.showTasksInWidgets
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames
@@ -132,6 +139,13 @@ enum AgentToolCallFeedMode: String, Codable, CaseIterable, Sendable {
         case .all: "Every tool call"
         }
     }
+}
+
+/// How Mimamori answers a permission request you have not answered in time.
+enum PermissionAutoAnswer: String, Codable, CaseIterable, Sendable {
+    case allow, deny
+
+    var title: String { self == .allow ? "Allow" : "Deny" }
 }
 
 /// What happens when an agent works in a git repository Mimamori does not watch.

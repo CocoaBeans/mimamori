@@ -668,30 +668,56 @@ struct HookLogRow: View {
 }
 
 /// Answers an agent's permission request from Mimamori. Its own prompt stays open meanwhile, and
-/// whichever is answered first counts.
+/// whichever is answered first counts. With auto-answer on, a countdown says when Mimamori will
+/// answer by itself, and Wait stops it.
 struct PermissionAnswerButtons: View {
     @Environment(AppModel.self) private var model
     let requestID: String
 
+    private var pending: PendingPermission? {
+        model.agentHub.pendingPermissions.values.first { $0.id == requestID }
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
-            Button {
-                model.agentHub.answerPermission(requestID, allow: true)
-            } label: {
-                Label("Allow", systemImage: "checkmark")
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Button {
+                    model.agentHub.answerPermission(requestID, allow: true)
+                } label: {
+                    Label("Allow", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .help("Let the agent go ahead, as allowing it in its own prompt would")
+                Button {
+                    model.agentHub.answerPermission(requestID, allow: false)
+                } label: {
+                    Label("Deny", systemImage: "xmark")
+                }
+                .buttonStyle(.bordered)
+                .help("Tell the agent no; it carries on without this step")
+                if let plan = pending?.autoAnswer {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text("\(plan.allow ? "Allowing" : "Denying") in \(Format.duration(max(0, plan.at.timeIntervalSince(context.date).rounded(.up))))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(plan.allow ? .orange : .secondary)
+                    }
+                    Button("Wait") { model.agentHub.stopAutoAnswer(requestID) }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .help("Stop the countdown: this request waits for your answer")
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
-            .help("Let the agent go ahead, as allowing it in its own prompt would")
-            Button {
-                model.agentHub.answerPermission(requestID, allow: false)
-            } label: {
-                Label("Deny", systemImage: "xmark")
+            .controlSize(.small)
+            if let rule = pending?.waitsForAskRule {
+                Text("Waits for you: it matches your ask rule \(rule)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help("Mimamori never allows a call by itself that your Claude Code settings say to always ask about")
             }
-            .buttonStyle(.bordered)
-            .help("Tell the agent no; it carries on without this step")
         }
-        .controlSize(.small)
         .fixedSize()
     }
 }
@@ -862,6 +888,7 @@ struct AgentSettingsView: View {
             }
             Toggle("Answer permission requests in Mimamori", isOn: SettingsBinding.make(model).answerPermissionsInMimamori)
                 .help("Show Allow and Deny in the banner, the Agents window and a notification when Claude Code asks permission. Its own prompt stays open too, and whichever you answer first counts.")
+            autoAnswerSettings
         } header: {
             Text("Claude Code")
         } footer: {
@@ -922,6 +949,31 @@ struct AgentSettingsView: View {
             .onAppear { refreshHermes() }
         }
         recentEvents
+    }
+
+    /// Answering a permission request by itself when you have not: off unless you turn it on.
+    @ViewBuilder private var autoAnswerSettings: some View {
+        let settings = SettingsBinding.make(model)
+        let current = model.settings
+        Toggle("Answer by itself if I don't", isOn: settings.autoAnswerPermissions)
+            .disabled(!current.answerPermissionsInMimamori)
+            .help("After a wait, allow or deny a request you have not answered. Each request shows a countdown with a Wait button.")
+        if current.autoAnswerPermissions && current.answerPermissionsInMimamori {
+            Picker("Answer", selection: settings.autoAnswer) {
+                ForEach(PermissionAutoAnswer.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            Picker("After", selection: settings.autoAnswerSeconds) {
+                ForEach([10, 30, 60, 120, 300], id: \.self) { seconds in
+                    Text(seconds < 60 ? "\(seconds) seconds" : seconds == 60 ? "1 minute" : "\(seconds / 60) minutes").tag(seconds)
+                }
+            }
+            Text(current.autoAnswer == .allow
+                 ? "Anything Claude Code asks for goes ahead after the wait, even while you are away, except a call that matches an ask rule in your Claude Code settings: those always wait for you. Each request shows a countdown with a Wait button, and the activity feed records what was allowed."
+                 : "A request you have not answered is denied after the wait, and Claude carries on without that step. Each request shows a countdown with a Wait button.")
+                .font(.caption)
+                .foregroundStyle(current.autoAnswer == .allow ? .orange : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// For your CLAUDE.md or AGENTS.md: an agent that starts a project adds it to Mimamori.

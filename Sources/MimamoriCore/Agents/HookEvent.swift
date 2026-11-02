@@ -51,6 +51,8 @@ public struct HookEvent: Sendable, Hashable {
     public var receivedAt: Date
     /// Set when the agent's hook waits for Mimamori to answer this permission request.
     public var permissionRequestID: String? = nil
+    /// A shell tool's whole command (`summary` has its first line), for matching permission rules.
+    public var command: String? = nil
 
     public init(name: Name, rawName: String, agent: AgentKind = .claudeCode, sessionID: String? = nil, cwd: String? = nil,
                 transcriptPath: String? = nil, toolName: String? = nil, toolUseID: String? = nil, filePath: String? = nil,
@@ -169,7 +171,7 @@ public enum HookEventParser {
         if message == nil, let error = object["error"] as? String { message = firstLine(error) }
         let batch = (object["tool_calls"] as? [[String: Any]] ?? []).compactMap { $0["tool_use_id"] as? String }
 
-        return HookEvent(
+        var event = HookEvent(
             name: name, rawName: rawName, agent: agent,
             sessionID: object["session_id"] as? String,
             cwd: cwd,
@@ -185,6 +187,8 @@ public enum HookEventParser {
             isInterrupt: object["is_interrupt"] as? Bool ?? false,
             batchToolUseIDs: batch,
             receivedAt: receivedAt)
+        event.command = (toolInput?["command"] as? String).map { String($0.prefix(8000)) }
+        return event
     }
 
     /// The first file a patch in the `*** Begin Patch` format changes.
