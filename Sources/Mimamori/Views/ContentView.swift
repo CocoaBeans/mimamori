@@ -24,6 +24,7 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 240, ideal: 420)
                 .diffColumnToolbar(activityOpen: model.showActivity)
         }
+        .endsBesideInspector()
         .inspector(isPresented: $model.showActivity) {
             ActivityFeedView()
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 460)
@@ -164,7 +165,52 @@ extension View {
         self
         #endif
     }
+
+    /// On macOS 26 the split view that `.inspector` makes runs the columns on under the activity
+    /// pane, and the window's minimum width then counts the pane twice: in the diff column's
+    /// minimum, as the inset that keeps the diff clear of the pane, and again as the same inset
+    /// on the hosting view around all the columns. With the pane open the window could not be
+    /// narrower than about 1200 pt, and a narrower one grew when the pane opened. Ending the
+    /// columns at the pane's edge, as on macOS 15, counts it once; all that goes is the faint blur
+    /// of the diff the pane's material let through.
+    @ViewBuilder
+    fileprivate func endsBesideInspector() -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            background(InspectorOverlapRemover())
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
 }
+
+#if compiler(>=6.2)
+/// Turns off the inspector's split view running the columns on under the inspector, once this
+/// view is in its window. See `endsBesideInspector()`.
+@available(macOS 26, *)
+private struct InspectorOverlapRemover: NSViewRepresentable {
+    final class Remover: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // The nearest split view above is the one SwiftUI made for `.inspector`. Should
+            // that change, leave whatever split view this finds alone.
+            var view = superview
+            while let current = view, !(current is NSSplitView) { view = current.superview }
+            guard let controller = (view as? NSSplitView)?.delegate as? NSSplitViewController,
+                  controller.splitViewItems.contains(where: { $0.behavior == .inspector }) else { return }
+            for item in controller.splitViewItems where item.behavior != .inspector {
+                item.automaticallyAdjustsSafeAreaInsets = false
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> Remover { Remover() }
+    func updateNSView(_ view: Remover, context: Context) {}
+}
+#endif
 
 /// Opens the Agents window.
 struct AgentsToolbarButton: View {
