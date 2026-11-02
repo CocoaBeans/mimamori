@@ -32,21 +32,11 @@ struct AgentStatusPill: View {
     }
 }
 
-/// The pill's place in the toolbar. On macOS 26 every toolbar item sits on a glass capsule of
-/// its own; the pill draws its own, tinted, so it leaves the glass off rather than showing a
-/// capsule inside a capsule.
+/// The pill's place in the toolbar before macOS 26: the middle. (On macOS 26 it belongs to the diff
+/// column; see `DiffColumnToolbar`.)
 struct AgentStatusPillItem: ToolbarContent {
     var body: some ToolbarContent {
-        #if compiler(>=6.2)
-        if #available(macOS 26, *) {
-            ToolbarItem(placement: .principal) { AgentStatusPill() }
-                .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .principal) { AgentStatusPill() }
-        }
-        #else
         ToolbarItem(placement: .principal) { AgentStatusPill() }
-        #endif
     }
 }
 

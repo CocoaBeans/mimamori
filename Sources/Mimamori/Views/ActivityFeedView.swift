@@ -68,10 +68,12 @@ struct ActivityFeedView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Text("Activity")
-                        .font(.headline)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
+                    if !ActivityToolbar.isAvailable {
+                        Text("Activity")
+                            .font(.headline)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                    }
                     Picker("Activity from", selection: $model.activityScopeAll) {
                         Text("Worktree").tag(false)
                         Text("All").tag(true)
@@ -81,6 +83,9 @@ struct ActivityFeedView: View {
                     .controlSize(.small)
                     .frame(maxWidth: 130)
                     .help("Show the selected worktree's activity, or every worktree's")
+                    if ActivityToolbar.isAvailable {
+                        Spacer(minLength: 4)
+                    }
                     Menu {
                         Picker("Show", selection: $model.activityAgentFilter) {
                             ForEach(ActivityAgentFilter.allCases, id: \.self) { filter in
@@ -113,7 +118,57 @@ struct ActivityFeedView: View {
             }
             .background(.bar)
         }
+        .activityToolbar(shown: model.showActivity)
         .onChange(of: model.activityScopeAll) { model.persistUISoon() }
+    }
+}
+
+/// The pane's own part of the toolbar, on macOS 26: its title at the leading edge, where it stays
+/// whole however narrow the pane is, then the Agents and Activity buttons at the trailing edge.
+/// Earlier systems keep the title in the pane's header and the buttons in the window's toolbar.
+struct ActivityToolbar {
+    static var isAvailable: Bool {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) { return true }
+        #endif
+        return false
+    }
+}
+
+#if compiler(>=6.2)
+@available(macOS 26, *)
+extension ActivityToolbar: ToolbarContent {
+    var body: some ToolbarContent {
+        // A title, so without the glass capsule a toolbar item sits on.
+        ToolbarItem {
+            Text("Activity")
+                .font(.headline)
+                .fixedSize()
+                .accessibilityAddTraits(.isHeader)
+        }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarSpacer(.flexible)
+        ToolbarItem { AgentsToolbarButton() }
+        ToolbarItem { ActivityToolbarToggle() }
+    }
+}
+#endif
+
+extension View {
+    /// A closed inspector keeps its toolbar items, so they come and go with the pane.
+    @ViewBuilder
+    fileprivate func activityToolbar(shown: Bool) -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            toolbar {
+                if shown { ActivityToolbar() }
+            }
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }
 

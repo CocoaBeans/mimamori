@@ -22,6 +22,7 @@ struct ContentView: View {
         } detail: {
             detailColumn
                 .navigationSplitViewColumnWidth(min: 240, ideal: 420)
+                .diffColumnToolbar(activityOpen: model.showActivity)
         }
         .inspector(isPresented: $model.showActivity) {
             ActivityFeedView()
@@ -104,13 +105,14 @@ struct ContentView: View {
     static let toolbarTips: [String: String] = [
         "Add Repository": "Watch another repository or worktree (⌘O)",
         "Agents": "Show every agent at a glance (⇧⌘A)",
+        "Activity": "Show the activity feed (⌃⌘I)",
     ]
 
     /// Window-level items only. The monitor controls live in the change list header,
-    /// so the inspector's width never affects their spacing.
+    /// so the inspector's width never affects their spacing. On macOS 26 the status pill and the
+    /// Agents and Activity buttons belong to the diff column and the activity pane instead.
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
-        AgentStatusPillItem()
         ToolbarItem(placement: .navigation) {
             Button {
                 model.promptForRepository()
@@ -119,20 +121,74 @@ struct ContentView: View {
             }
             .help(Self.toolbarTips["Add Repository"]!)
         }
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                openWindow(id: "agents")
-            } label: {
-                Label("Agents", systemImage: "sparkles.rectangle.stack")
-            }
-            .help(Self.toolbarTips["Agents"]!)
+        if !ActivityToolbar.isAvailable {
+            AgentStatusPillItem()
+            ToolbarItem(placement: .primaryAction) { AgentsToolbarButton() }
+            ToolbarItem(placement: .primaryAction) { ActivityToolbarToggle() }
         }
-        ToolbarItem(placement: .primaryAction) {
-            Toggle(isOn: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) {
-                Label("Activity", systemImage: "list.bullet.rectangle")
-            }
-            .help("Show the activity feed (⌃⌘I)")
+    }
+}
+
+#if compiler(>=6.2)
+/// The diff column's part of the toolbar on macOS 26, where the columns run up under the toolbar:
+/// the status pill towards the trailing end, so it never sits across the line between two
+/// columns, then the Agents and Activity buttons while the activity pane is closed (open, the
+/// pane holds them, beside its title).
+@available(macOS 26, *)
+struct DiffColumnToolbar: ToolbarContent {
+    let activityOpen: Bool
+
+    var body: some ToolbarContent {
+        ToolbarSpacer(.flexible)
+        // The pill draws its own tinted capsule, so it leaves off the glass one beneath it.
+        ToolbarItem { AgentStatusPill() }
+            .sharedBackgroundVisibility(.hidden)
+        if !activityOpen {
+            ToolbarItem { AgentsToolbarButton() }
+            ToolbarItem { ActivityToolbarToggle() }
         }
+    }
+}
+#endif
+
+extension View {
+    @ViewBuilder
+    fileprivate func diffColumnToolbar(activityOpen: Bool) -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            toolbar { DiffColumnToolbar(activityOpen: activityOpen) }
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}
+
+/// Opens the Agents window.
+struct AgentsToolbarButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button {
+            openWindow(id: "agents")
+        } label: {
+            Label("Agents", systemImage: "sparkles.rectangle.stack")
+        }
+        .help(ContentView.toolbarTips["Agents"]!)
+    }
+}
+
+/// Shows and hides the activity pane.
+struct ActivityToolbarToggle: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { model.showActivity }, set: { model.showActivity = $0 })) {
+            Label("Activity", systemImage: "list.bullet.rectangle")
+        }
+        .help(ContentView.toolbarTips["Activity"]!)
     }
 }
 
@@ -268,6 +324,18 @@ private struct ToolbarTooltips: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self, name: NSToolbar.willAddItemNotification, object: nil)
+            if window != nil {
+                // Items come and go as panes open and close (the activity pane takes the Agents
+                // and Activity buttons with it), and each new one needs its tip.
+                NotificationCenter.default.addObserver(self, selector: #selector(itemWillBeAdded(_:)),
+                                                       name: NSToolbar.willAddItemNotification, object: nil)
+            }
+            apply()
+        }
+
+        @objc private func itemWillBeAdded(_ notification: Notification) {
+            guard (notification.object as? NSToolbar) === window?.toolbar else { return }
             apply()
         }
 
