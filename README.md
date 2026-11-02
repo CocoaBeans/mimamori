@@ -11,13 +11,15 @@ A small, native macOS app that keeps watch over git worktrees while coding agent
 
 Mimamori is strictly read-only. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
 
-![Mimamori watching a worktree while agents work: the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars, a diff, and the activity feed](docs/mimamori-main.png)
+![Mimamori as three agents start work: Claude Code's edits appear in the change list and the diff, the activity feed fills, the sidebar shows each worktree's agent, and the toolbar pill turns to Codex needs you](docs/mimamori-demo.gif)
 
 ## Why
 
 Git clients are built for committing. When an agent is editing on your behalf, you want something closer to a monitor: it should refresh by itself, show you what changed in the last minute, keep showing you the whole session's work even after the agent commits, and point out the handful of changes that deserve a human look before anything ships. Mimamori is that monitor.
 
 ## What it does
+
+![Mimamori watching a worktree while agents work: the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars, a diff, and the activity feed](docs/mimamori-main.png)
 
 - **Watches live.** FSEvents on the worktree and the git directory drive refreshes a few hundred milliseconds after files settle. Recently touched files glow and say "12s ago", so you can see where the agent is working. Each file shows an icon for its kind and a five-block diff bar: the more lines changed, the more blocks light (green for added, red for removed), so the big edits stand out in any list. Bursts that only touch ignored paths (build output, `node_modules`) are discarded without a refresh.
 - **Compares against the right baseline.** Agents commit as they go, so a plain working-tree diff goes blank after each commit. Switch between:
@@ -215,6 +217,18 @@ The icon, a paper lantern (chōchin) lighting the code behind it, where a diff's
 ```bash
 swift Scripts/make-icon.swift
 ```
+
+### Screenshots and recordings
+
+Mimamori's own captures (`MIMAMORI_SCREENSHOT`, below) draw the window into an image, which flattens glass and vibrancy. For README images, `Scripts/capture-window.sh` captures a window as it looks on screen, shadow included, with ScreenCaptureKit. It builds `Tools/WindowCapture` into `build/WindowCapture.app` and runs it as an app of its own, so the Screen Recording permission goes to it alone, not to your terminal or editor. On the first run, allow **WindowCapture** in System Settings › Privacy & Security › Screen & System Audio Recording, then run the command again.
+
+```bash
+Scripts/capture-window.sh list
+Scripts/capture-window.sh shot --app com.kevinross.Mimamori --out docs/shot.png
+Scripts/capture-window.sh record --pid 1234 --out demo.mov --until /tmp/stop --seconds 60 --no-shadow
+```
+
+`shot` keeps the window at full Retina resolution with its shadow around it (`--no-shadow` leaves it out). `record` writes a video until `--seconds` pass or the `--until` file appears. While a window is recorded, macOS shows a "being shared" indicator in place of its traffic lights, so patch that corner from a `shot` when making a GIF. A recording keeps the window's starting size, so make the window big enough not to grow while it runs; the tool warns if it does.
 
 ### Debug hooks
 
