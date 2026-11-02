@@ -43,6 +43,7 @@ struct ContentView: View {
         .onAppear {
             // The Agents window opens again if it was open when Mimamori last quit.
             if model.agentsWindowOpen || model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
+            if model.overviewWindowOpen { openWindow(id: MenuBarPanel.pinnedWindowID) }
             // "settings:<pane>": open Settings on that pane, as the attention popover's button does.
             if let tab = SettingsTab.allCases.first(where: { model.debugFlags.contains("settings:" + $0.rawValue) }) {
                 model.settingsTab = tab

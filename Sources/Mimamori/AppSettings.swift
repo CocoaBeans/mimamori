@@ -45,6 +45,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var agentsWindowDetailed: Bool = true
     /// Sections of the Agents window folded to their headers (`AgentSection.key`).
     var agentsWindowCollapsed: [String] = []
+    /// Sections of the menu-bar panel folded to their headers: "agents", "worktrees".
+    var menuBarCollapsed: [String] = []
     /// The agent banner above the diff shows the task, steps and files; off for one line.
     var agentBannerExpanded: Bool = true
     /// What to do when an agent works in a git repository Mimamori does not watch.
@@ -91,6 +93,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         agentsWindowFloats = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowFloats) ?? defaults.agentsWindowFloats
         agentsWindowDetailed = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowDetailed) ?? defaults.agentsWindowDetailed
         agentsWindowCollapsed = try c.decodeIfPresent([String].self, forKey: .agentsWindowCollapsed) ?? defaults.agentsWindowCollapsed
+        menuBarCollapsed = try c.decodeIfPresent([String].self, forKey: .menuBarCollapsed) ?? defaults.menuBarCollapsed
         agentBannerExpanded = try c.decodeIfPresent(Bool.self, forKey: .agentBannerExpanded) ?? defaults.agentBannerExpanded
         agentRepositoryPolicy = try c.decodeIfPresent(AgentRepositoryPolicy.self, forKey: .agentRepositoryPolicy) ?? defaults.agentRepositoryPolicy
         ignoredAgentRepositories = try c.decodeIfPresent([String].self, forKey: .ignoredAgentRepositories) ?? defaults.ignoredAgentRepositories
@@ -211,11 +214,13 @@ struct PersistedUIState: Codable, Hashable, Sendable {
     var showCommits: Bool = false
     /// Whether the Agents window was open, so it opens again at launch.
     var agentsWindowOpen: Bool = false
+    /// Whether the menu-bar panel was pinned in a window of its own, so it opens again at launch.
+    var overviewWindowOpen: Bool = false
 
     init(showActivity: Bool = true, flaggedOnly: Bool = false, sortOrder: ChangeSortOrder = .recent,
          selectedWorktree: String? = nil, activityScopeAll: Bool = false, hideReviewed: Bool = false,
          sidebarAgentsOnly: Bool = false, activityAgentFilter: ActivityAgentFilter = .all, showCommits: Bool = false,
-         agentsWindowOpen: Bool = false) {
+         agentsWindowOpen: Bool = false, overviewWindowOpen: Bool = false) {
         self.showActivity = showActivity
         self.flaggedOnly = flaggedOnly
         self.sortOrder = sortOrder
@@ -226,6 +231,7 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         self.activityAgentFilter = activityAgentFilter
         self.showCommits = showCommits
         self.agentsWindowOpen = agentsWindowOpen
+        self.overviewWindowOpen = overviewWindowOpen
     }
 
     init(from decoder: Decoder) throws {
@@ -240,6 +246,7 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         activityAgentFilter = try c.decodeIfPresent(ActivityAgentFilter.self, forKey: .activityAgentFilter) ?? .all
         showCommits = try c.decodeIfPresent(Bool.self, forKey: .showCommits) ?? false
         agentsWindowOpen = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowOpen) ?? false
+        overviewWindowOpen = try c.decodeIfPresent(Bool.self, forKey: .overviewWindowOpen) ?? false
     }
 }
 

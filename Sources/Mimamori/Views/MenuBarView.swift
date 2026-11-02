@@ -23,12 +23,18 @@ struct MenuBarLabel: View {
 /// The menu-bar popover: the agents at work, drawn with the desktop widget's rows and live
 /// timers, then the worktrees Mimamori watches and its commands.
 struct MenuBarPanel: View {
+    /// The window the panel is pinned in, floating above the others until you unpin it.
+    static let pinnedWindowID = "overview"
+
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.isRenderingWidgetPreview) private var isPreview
     @Environment(\.openSettings) private var openSettings
-    /// Closes the popover: opening a window does not.
+    /// Closes the popover, or the pinned window: opening a window does not.
     @Environment(\.dismiss) private var dismiss
+    /// Shown in a window of its own rather than the menu bar's popover: it stays open when you
+    /// open something from it, and fills the window's height.
+    var pinned = false
     /// The list's own height: a scroll view has none, and the popover would shrink to nothing.
     @State private var listHeight: CGFloat = 200
     /// Whether the popover is showing: its window stays around while it is closed.
@@ -44,6 +50,9 @@ struct MenuBarPanel: View {
             if isPreview {
                 // ImageRenderer cannot draw a scroll view.
                 list
+            } else if pinned {
+                ScrollView { list }
+                    .frame(maxHeight: .infinity)
             } else if isOpen {
                 ScrollView {
                     list.onGeometryChange(for: CGFloat.self, of: \.size.height) { listHeight = $0 }
@@ -57,9 +66,16 @@ struct MenuBarPanel: View {
             Divider()
             footer
         }
-        .onAppear { isOpen = true }
-        .onDisappear { isOpen = false }
-        .frame(width: 340)
+        .onAppear {
+            isOpen = true
+            if pinned { model.windowChanged(.overview, open: true) }
+        }
+        .onDisappear {
+            isOpen = false
+            if pinned { model.windowChanged(.overview, open: false) }
+        }
+        .frame(minWidth: pinned ? 300 : 340, idealWidth: 340, maxWidth: pinned ? .infinity : 340,
+               minHeight: pinned ? 220 : nil, maxHeight: pinned ? .infinity : nil)
         .buttonStyle(PanelButtonStyle())
         .environment(\.openAgent) { show(worktree: $0.worktreePath) }
     }
@@ -72,15 +88,51 @@ struct MenuBarPanel: View {
         }
     }
 
+    private func isFolded(_ section: String) -> Bool { model.settings.menuBarCollapsed.contains(section) }
+
+    private func toggleFold(_ section: String) {
+        var copy = model.settings
+        if let index = copy.menuBarCollapsed.firstIndex(of: section) {
+            copy.menuBarCollapsed.remove(at: index)
+        } else {
+            copy.menuBarCollapsed.append(section)
+        }
+        withAnimation(.easeOut(duration: 0.15)) { model.updateSettings(copy) }
+    }
+
+    /// A section's header, which folds the section away to just itself, and back.
+    private func foldingHeader(_ section: String, title: String, @ViewBuilder content: () -> some View) -> some View {
+        let folded = isFolded(section)
+        return Button { toggleFold(section) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                content()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(folded ? 0 : 90))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(folded ? "Show \(title)" : "Fold \(title) away")
+        .accessibilityLabel(title)
+        .accessibilityValue(folded ? "Folded" : "Shown")
+    }
+
     private var agents: some View {
         let snapshot = AgentWidgetSnapshot(agents: model.widgetAgents(details: true))
         // The most pressing state washes the top, as on the widget.
         let mood = snapshot.agents.first.map { $0.collision != nil ? Color.orange : $0.state.tint } ?? .secondary
+        let folded = isFolded("agents")
         return VStack(alignment: .leading, spacing: 4) {
-            WidgetHeader(snapshot: snapshot)
-                .padding(.horizontal, 6)
-                .padding(.bottom, 4)
-            if snapshot.agents.isEmpty {
+            foldingHeader("agents", title: "Agents") {
+                WidgetHeader(snapshot: snapshot)
+            }
+            .padding(.horizontal, 6)
+            .padding(.bottom, folded ? 0 : 4)
+            if folded {
+                EmptyView()
+            } else if snapshot.agents.isEmpty {
                 Label("No agents at work", systemImage: "moon.stars.fill")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -99,7 +151,7 @@ struct MenuBarPanel: View {
 
     private var worktrees: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
+            foldingHeader("worktrees", title: "Worktrees") {
                 Text("Worktrees")
                     .font(.headline)
                 Spacer()
@@ -108,17 +160,20 @@ struct MenuBarPanel: View {
                     .foregroundStyle(model.totalFlagged > 0 ? Color.orange : Color.secondary)
             }
             .padding(.horizontal, 6)
-            if model.repositories.isEmpty {
+            if isFolded("worktrees") {
+                EmptyView()
+            } else if model.repositories.isEmpty {
                 Text("No repositories watched")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
                 Button("Add Repository…") {
-                    dismiss()
+                    close()
                     model.promptForRepository()
                 }
             }
+            if !isFolded("worktrees") {
             ForEach(model.repositories) { repo in
                 let sessions = model.visibleSessions(for: repo)
                 Text(repo.displayName)
@@ -147,6 +202,7 @@ struct MenuBarPanel: View {
                             .help("Show \(session.displayName) in Mimamori")
                     }
                 }
+            }
             }
         }
         .padding(8)
@@ -180,17 +236,27 @@ struct MenuBarPanel: View {
             Button("Agents") {
                 openWindow(id: "agents")
                 NSApplication.shared.activate(ignoringOtherApps: true)
-                dismiss()
+                close()
             }
             .help("Open the Agents window (⇧⌘A)")
             Spacer()
+            Button {
+                if pinned {
+                    dismiss()
+                } else {
+                    openWindow(id: Self.pinnedWindowID)
+                    dismiss()
+                }
+            } label: { Image(systemName: pinned ? "pin.slash" : "pin") }
+                .help(pinned ? "Unpin: close this window" : "Pin: keep this open in a window that floats above the others")
+                .accessibilityLabel(pinned ? "Unpin" : "Pin")
             Button { model.refreshAll() } label: { Image(systemName: "arrow.clockwise") }
                 .help("Refresh every worktree")
                 .accessibilityLabel("Refresh All")
             Button {
                 openSettings()
                 NSApplication.shared.activate(ignoringOtherApps: true)
-                dismiss()
+                close()
             } label: { Image(systemName: "gearshape") }
                 .help("Settings… (⌘,)")
                 .accessibilityLabel("Settings")
@@ -206,7 +272,12 @@ struct MenuBarPanel: View {
         openWindow(id: "main")
         NSApplication.shared.activate(ignoringOtherApps: true)
         if let worktree { model.select(worktree: worktree) }
-        dismiss()
+        close()
+    }
+
+    /// The popover closes once you open something from it; the pinned window stays.
+    private func close() {
+        if !pinned { dismiss() }
     }
 }
 

@@ -85,6 +85,8 @@ final class AppModel {
     /// Whether the Agents window is open; saved, so it opens again at launch. Windows that close
     /// because Mimamori quits leave it as it was.
     @ObservationIgnored var agentsWindowOpen = false
+    /// Whether the menu-bar panel is pinned in a window of its own; saved like `agentsWindowOpen`.
+    @ObservationIgnored var overviewWindowOpen = false
     @ObservationIgnored var isQuitting = false
     /// Repositories agents work in that Mimamori could watch, waiting for your answer.
     var repositoryOffers: [RepositoryOffer] = []
@@ -109,6 +111,7 @@ final class AppModel {
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
         self.agentsWindowOpen = persisted.ui.agentsWindowOpen
+        self.overviewWindowOpen = persisted.ui.overviewWindowOpen
         self.collapsedRepositories = persisted.collapsedRepositories
         self.hiddenWorktrees = persisted.hiddenWorktrees
         self.activityLog = ActivityLog(url: Persistence.activityURL,
@@ -819,11 +822,21 @@ final class AppModel {
 
     // MARK: Persistence
 
-    /// The Agents window opened or closed. Closing because Mimamori quits does not count, so a
+    /// The windows whose being open is remembered, so they open again at launch.
+    enum RememberedWindow { case agents, overview }
+
+    /// A remembered window opened or closed. Closing because Mimamori quits does not count, so a
     /// window open at quit opens again at launch.
-    func agentsWindowChanged(open: Bool) {
-        guard !isQuitting, agentsWindowOpen != open else { return }
-        agentsWindowOpen = open
+    func windowChanged(_ window: RememberedWindow, open: Bool) {
+        guard !isQuitting else { return }
+        switch window {
+        case .agents:
+            guard agentsWindowOpen != open else { return }
+            agentsWindowOpen = open
+        case .overview:
+            guard overviewWindowOpen != open else { return }
+            overviewWindowOpen = open
+        }
         persistUISoon()
     }
 
@@ -832,7 +845,7 @@ final class AppModel {
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
                                         activityAgentFilter: activityAgentFilter, showCommits: showCommits,
-                                        agentsWindowOpen: agentsWindowOpen)
+                                        agentsWindowOpen: agentsWindowOpen, overviewWindowOpen: overviewWindowOpen)
         persistSoon()
     }
 
@@ -851,7 +864,7 @@ final class AppModel {
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
                                         activityAgentFilter: activityAgentFilter, showCommits: showCommits,
-                                        agentsWindowOpen: agentsWindowOpen)
+                                        agentsWindowOpen: agentsWindowOpen, overviewWindowOpen: overviewWindowOpen)
         saveTask?.cancel()
         Persistence.save(persisted)
     }

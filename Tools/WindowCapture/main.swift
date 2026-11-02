@@ -68,10 +68,11 @@ struct Options {
     }
 }
 
-/// Ordinary windows: on screen, in the normal layer, and big enough to be more than a sliver.
+/// Apps' windows: on screen, from the normal layer up to floating and utility windows (SwiftUI's
+/// floating level is 19; the Dock is 20 and the menu bar above), and more than a sliver.
 func windows() async throws -> [SCWindow] {
     let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-    return content.windows.filter { $0.windowLayer == 0 && $0.frame.width >= 60 && $0.frame.height >= 60 }
+    return content.windows.filter { (0...19).contains($0.windowLayer) && $0.frame.width >= 60 && $0.frame.height >= 60 }
 }
 
 func window(for options: Options) async throws -> SCWindow {

@@ -48,6 +48,17 @@ struct MimamoriApp: App {
         .keyboardShortcut("a", modifiers: [.command, .shift])
         .windowLevel(model.settings.agentsWindowFloats ? .floating : .normal)
 
+        // The menu-bar panel, pinned: a window of its own above the others, until you unpin it.
+        Window("Mimamori Overview", id: MenuBarPanel.pinnedWindowID) {
+            MenuBarPanel(pinned: true)
+                .environment(model)
+        }
+        .defaultSize(width: 340, height: 560)
+        .windowResizability(.contentMinSize)
+        .windowLevel(.floating)
+        .handlesExternalEvents(matching: [])
+        .restorationBehavior(.disabled)
+
         Settings {
             SettingsView()
                 .environment(model)

@@ -283,6 +283,7 @@ enum DebugHooks {
             lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent) auto=\(plan) askRule=\(pending.waitsForAskRule ?? "-")")
         }
         lines.append("repositories: \(model.repositories.map(\.rootPath)) offers: \(model.repositoryOffers.map(\.root)) policy: \(model.settings.agentRepositoryPolicy.rawValue)")
+        lines.append("windows: " + NSApp.windows.map { "\($0.title.isEmpty ? "-" : $0.title)[\($0.isVisible ? "shown" : "hidden"), level \($0.level.rawValue), \($0.identifier?.rawValue ?? "-")]" }.joined(separator: ", "))
         if let hookTestResult { lines.append("hook test: \(hookTestResult)") }
         if model.debugFlags.contains("hook-test") {
             try? model.diagnostics().text().write(toFile: path + ".diagnostics.txt", atomically: true, encoding: .utf8)

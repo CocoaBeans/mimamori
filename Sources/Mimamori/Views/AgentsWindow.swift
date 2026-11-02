@@ -103,8 +103,8 @@ struct AgentsWindowView: View {
         .frame(minWidth: 360, minHeight: 180)
         .navigationTitle("Agents")
         // Remembered, so the window opens again at launch.
-        .onAppear { model.agentsWindowChanged(open: true) }
-        .onDisappear { model.agentsWindowChanged(open: false) }
+        .onAppear { model.windowChanged(.agents, open: true) }
+        .onDisappear { model.windowChanged(.agents, open: false) }
         .navigationSubtitle(summaryLine(rows))
         .toolbar {
             ToolbarItemGroup {
