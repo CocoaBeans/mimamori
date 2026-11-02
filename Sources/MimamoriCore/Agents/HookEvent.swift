@@ -49,6 +49,8 @@ public struct HookEvent: Sendable, Hashable {
     /// PostToolBatch: the tool calls that resolved.
     public var batchToolUseIDs: [String]
     public var receivedAt: Date
+    /// Set when the agent's hook waits for Mimamori to answer this permission request.
+    public var permissionRequestID: String? = nil
 
     public init(name: Name, rawName: String, agent: AgentKind = .claudeCode, sessionID: String? = nil, cwd: String? = nil,
                 transcriptPath: String? = nil, toolName: String? = nil, toolUseID: String? = nil, filePath: String? = nil,

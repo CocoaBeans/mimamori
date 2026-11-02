@@ -24,7 +24,8 @@ enum HookInstaller {
         guard mayUpdateOnLaunch else { return nil }
         let settings = try load()
         guard ClaudeHooksConfig.hasFormerHooks(in: settings) else { return nil }
-        return try write(ClaudeHooksConfig.install(into: settings, command: ClaudeHooksConfig.command(socketPath: socketPath)))
+        return try write(ClaudeHooksConfig.install(into: settings, command: ClaudeHooksConfig.command(socketPath: socketPath),
+                                                   permissionCommand: ClaudeHooksConfig.permissionCommand(socketPath: socketPath)))
     }
 
     static func load() throws -> [String: Any] {
@@ -44,18 +45,21 @@ enum HookInstaller {
     static func install(socketPath: String) throws -> URL {
         let settings = try load()
         let command = ClaudeHooksConfig.command(socketPath: socketPath)
-        return try write(ClaudeHooksConfig.install(into: settings, command: command))
+        return try write(ClaudeHooksConfig.install(into: settings, command: command,
+                                                   permissionCommand: ClaudeHooksConfig.permissionCommand(socketPath: socketPath)))
     }
 
     /// Adds the events a newer Mimamori listens to when an older one installed the rest, so a
-    /// status does not stick for want of the event that ends it. Returns the backup, if written.
+    /// status does not stick for want of the event that ends it, and makes PermissionRequest wait
+    /// for an answer from Mimamori. Returns the backup, if written.
     @discardableResult
     static func updateIfOutdated(socketPath: String) throws -> URL? {
         guard mayUpdateOnLaunch else { return nil }
         let settings = try load()
         let command = ClaudeHooksConfig.command(socketPath: socketPath)
-        guard ClaudeHooksConfig.isOutdated(in: settings, command: command) else { return nil }
-        return try write(ClaudeHooksConfig.install(into: settings, command: command))
+        let permissionCommand = ClaudeHooksConfig.permissionCommand(socketPath: socketPath)
+        guard ClaudeHooksConfig.isOutdated(in: settings, command: command, permissionCommand: permissionCommand) else { return nil }
+        return try write(ClaudeHooksConfig.install(into: settings, command: command, permissionCommand: permissionCommand))
     }
 
     static func uninstall() throws -> URL {

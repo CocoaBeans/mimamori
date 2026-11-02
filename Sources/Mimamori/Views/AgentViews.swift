@@ -371,6 +371,10 @@ struct AgentStatusBanner: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
+                if let id = presence.permissionRequestID {
+                    PermissionAnswerButtons(requestID: id)
+                        .padding(.top, 2)
+                }
                 if expanded, let details {
                     expandedContent(details)
                 }
@@ -663,6 +667,35 @@ struct HookLogRow: View {
     }
 }
 
+/// Answers an agent's permission request from Mimamori. Its own prompt stays open meanwhile, and
+/// whichever is answered first counts.
+struct PermissionAnswerButtons: View {
+    @Environment(AppModel.self) private var model
+    let requestID: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                model.agentHub.answerPermission(requestID, allow: true)
+            } label: {
+                Label("Allow", systemImage: "checkmark")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            .help("Let the agent go ahead, as allowing it in its own prompt would")
+            Button {
+                model.agentHub.answerPermission(requestID, allow: false)
+            } label: {
+                Label("Deny", systemImage: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .help("Tell the agent no; it carries on without this step")
+        }
+        .controlSize(.small)
+        .fixedSize()
+    }
+}
+
 /// The parts of Settings › Agents, each a pane of its own.
 enum AgentSettingsSection: String, CaseIterable, Identifiable {
     case hooks
@@ -827,10 +860,12 @@ struct AgentSettingsView: View {
             if let lastMessage {
                 Text(lastMessage).font(.callout).foregroundStyle(.secondary)
             }
+            Toggle("Answer permission requests in Mimamori", isOn: SettingsBinding.make(model).answerPermissionsInMimamori)
+                .help("Show Allow and Deny in the banner, the Agents window and a notification when Claude Code asks permission. Its own prompt stays open too, and whichever you answer first counts.")
         } header: {
             Text("Claude Code")
         } footer: {
-            Text("Hooks let Claude Code tell Mimamori exactly what it is doing: when a turn starts and ends, every tool call, and when it needs your permission or asks you a question. Installing adds entries to ~/.claude/settings.json that post each event to Mimamori's local socket with curl; a backup is saved first and your other hooks are left untouched. If Mimamori is not running the command fails silently in under a second.")
+            Text("Hooks let Claude Code tell Mimamori exactly what it is doing: when a turn starts and ends, every tool call, and when it needs your permission or asks you a question. Its permission requests can be answered here too: Claude Code shows its own prompt as well, and takes whichever answer comes first. Installing adds entries to ~/.claude/settings.json that post each event to Mimamori's local socket with curl; a backup is saved first and your other hooks are left untouched. If Mimamori is not running the command fails silently in under a second.")
         }
         if hermesState != .notPresent {
             Section {

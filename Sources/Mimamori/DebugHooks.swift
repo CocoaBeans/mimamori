@@ -22,6 +22,7 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=sidebar              render the sidebar rows with agents or changes, light and dark
 ///     MIMAMORI_DEBUG_FLAGS=diff-line:120        scroll the selected file's diff to new-file line 120
 ///     MIMAMORI_DEBUG_FLAGS=about                open the About window
+///     MIMAMORI_DEBUG_FLAGS=permission:allow     answer a permission request once it has waited 5 s (or permission:deny)
 ///     MIMAMORI_DEBUG_FLAGS=hook-test            send a test event through the hook command once (result in the dump,
 ///                                               Copy Diagnostics' report in <dump>.diagnostics.txt)
 ///
@@ -80,6 +81,12 @@ enum DebugHooks {
                 if model.debugFlags.contains("about"), !openedAbout {
                     openedAbout = true
                     BuildInfo.showAboutPanel()
+                }
+                // "permission:allow" / "permission:deny": answer a waiting request, as its buttons do.
+                for answer in ["allow", "deny"] where model.debugFlags.contains("permission:" + answer) {
+                    for pending in model.agentHub.pendingPermissions.values where Date().timeIntervalSince(pending.since) > 5 {
+                        model.agentHub.answerPermission(pending.id, allow: answer == "allow")
+                    }
                 }
                 // "hook-test": what Settings › Agents › Send Test Event does, once.
                 if model.debugFlags.contains("hook-test"), !ranHookTest, model.agentHub.isListening {
@@ -269,6 +276,9 @@ enum DebugHooks {
         }
         let hub = model.agentHub
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
+        for pending in hub.pendingPermissions.values {
+            lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent)")
+        }
         lines.append("repositories: \(model.repositories.map(\.rootPath)) offers: \(model.repositoryOffers.map(\.root)) policy: \(model.settings.agentRepositoryPolicy.rawValue)")
         if let hookTestResult { lines.append("hook test: \(hookTestResult)") }
         if model.debugFlags.contains("hook-test") {

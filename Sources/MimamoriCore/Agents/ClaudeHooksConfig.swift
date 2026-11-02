@@ -25,14 +25,32 @@ public enum ClaudeHooksConfig {
         return "curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' --unix-socket \"\(portable)\" --data-binary @- http://mimamori/event >/dev/null 2>&1 || true"
     }
 
+    /// The command for PermissionRequest: like `command`, but it waits for Mimamori's answer and
+    /// prints it, which Claude Code takes as the decision. Claude Code shows its own prompt at the
+    /// same time and takes whichever answer comes first; with no answer, or Mimamori not running,
+    /// it prints nothing and the prompt decides.
+    public static func permissionCommand(socketPath: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let portable = socketPath.hasPrefix(home + "/") ? "$HOME" + socketPath.dropFirst(home.count) : socketPath
+        return "curl -s -m 595 -H 'Expect:' -H 'Content-Type: application/json' --unix-socket \"\(portable)\" --data-binary @- http://mimamori/permission 2>/dev/null || true"
+    }
+
+    /// The address only the waiting PermissionRequest command posts to.
+    static let permissionAddress = "mimamori/permission"
+    /// Seconds Claude Code gives the waiting command: past curl's own limit.
+    static let permissionTimeout = 600
+
     /// Returns a copy of `settings` with Mimamori's hooks present for every event, leaving
-    /// other hooks untouched. Idempotent.
-    public static func install(into settings: [String: Any], command: String) -> [String: Any] {
+    /// other hooks untouched. Idempotent. With `permissionCommand`, PermissionRequest runs it, so
+    /// you can answer permission requests in Mimamori.
+    public static func install(into settings: [String: Any], command: String, permissionCommand: String? = nil) -> [String: Any] {
         var result = uninstall(from: settings)
         var hooks = result["hooks"] as? [String: Any] ?? [:]
         for event in events {
             var entries = hooks[event.name] as? [[String: Any]] ?? []
-            var entry: [String: Any] = ["hooks": [["type": "command", "command": command, "timeout": 5]]]
+            let waits = event.name == "PermissionRequest" && permissionCommand != nil
+            var entry: [String: Any] = ["hooks": [["type": "command", "command": waits ? permissionCommand! : command,
+                                                   "timeout": waits ? permissionTimeout : 5]]]
             if let matcher = event.matcher { entry["matcher"] = matcher }
             entries.append(entry)
             hooks[event.name] = entries
@@ -80,12 +98,28 @@ public enum ClaudeHooksConfig {
     }
 
     /// True when an older Mimamori installed `command` for some events but not for every event
-    /// Mimamori now listens to. Hooks pointing at another socket are left alone.
-    public static func isOutdated(in settings: [String: Any], command: String) -> Bool {
-        guard let hooks = settings["hooks"] as? [String: Any], !isInstalled(in: settings) else { return false }
-        return hooks.values.contains { value in
+    /// Mimamori now listens to, or, given `permissionCommand`, installed them all before
+    /// PermissionRequest waited for an answer. Hooks pointing at another socket are left alone.
+    public static func isOutdated(in settings: [String: Any], command: String, permissionCommand: String? = nil) -> Bool {
+        guard let hooks = settings["hooks"] as? [String: Any] else { return false }
+        let ours = hooks.values.contains { value in
             (value as? [[String: Any]] ?? []).contains { entry in
                 (entry["hooks"] as? [[String: Any]] ?? []).contains { $0["command"] as? String == command }
+            }
+        }
+        guard ours else { return false }
+        if !isInstalled(in: settings) { return true }
+        guard permissionCommand != nil else { return false }
+        return !answersPermissions(in: settings)
+    }
+
+    /// True when PermissionRequest runs the command that waits for Mimamori's answer.
+    public static func answersPermissions(in settings: [String: Any]) -> Bool {
+        let entries = (settings["hooks"] as? [String: Any])?["PermissionRequest"] as? [[String: Any]] ?? []
+        return entries.contains { entry in
+            (entry["hooks"] as? [[String: Any]] ?? []).contains {
+                guard let command = $0["command"] as? String else { return false }
+                return command.contains(marker) && command.contains(permissionAddress)
             }
         }
     }

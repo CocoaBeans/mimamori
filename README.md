@@ -180,6 +180,20 @@ For an agent of your own, use the plain names with the fields Claude Code uses: 
 
 What Mimamori can show depends on what an agent sends: start and end of a turn give working and ready; tool events add each step and which edit changed which file; permission and question events make it count as needing you, with notifications. Without a session id, a worktree holds one session at a time.
 
+### Answering permission requests
+
+When Claude Code asks permission for a tool call, Mimamori shows **Allow** and **Deny** in the agent's banner (and the toolbar pill's popover), on its card in the Agents window, and in a notification with the same buttons. Claude Code shows its own prompt at the same time and takes whichever answer comes first, so you can answer in either place. An allowed call goes ahead as if you allowed it in the prompt; a denied one tells Claude no, and it carries on without that step. An allow never gets past a `deny` rule in your Claude Code settings.
+
+This works through Mimamori's `PermissionRequest` hook. Unlike its other hooks, this one waits for an answer and prints it:
+
+```bash
+curl -s -m 595 -H 'Expect:' -H 'Content-Type: application/json' \
+  --unix-socket "$HOME/Library/Application Support/Mimamori/mimamori.sock" \
+  --data-binary @- http://mimamori/permission 2>/dev/null || true
+```
+
+Mimamori lets a request go with no decision as soon as the session moves on (you answered in the prompt, the step ran or was refused, the turn ended), and when you turn **Answer permission requests in Mimamori** off in Settings › Agents › Hooks. With no decision, or Mimamori not running, the hook prints nothing and Claude Code's prompt decides. Hooks installed by an earlier Mimamori are updated at launch, with a backup of the settings file first; sessions already running keep the hooks they started with.
+
 ### New repositories
 
 When an agent starts work in a git repository Mimamori doesn't watch, **Settings › Agents › Hooks › New Repositories** decides what happens:
@@ -305,6 +319,7 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `sidebar` | Render the sidebar rows that have agents or changes |
 | `diff-line:<n>` | Scroll the selected file's diff to new-file line n |
 | `about` | Open the About window |
+| `permission:allow` | Answer a waiting permission request once it has waited 5 s, as Allow does (`permission:deny` for Deny) |
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
 | `settings:<pane>` | Open Settings on that pane; with `settings:agents`, `agents:hooks`, `agents:other`, `agents:widgets` or `agents:notifications` opens that part of it |
 

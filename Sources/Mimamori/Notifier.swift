@@ -6,6 +6,14 @@ import MimamoriCore
 /// when run bare via `swift run` the notification center is unavailable, so every call is a no-op.
 /// The notifications that offer to watch a repository an agent works in.
 private let repositoryOfferCategory = "repository-offer"
+/// The notifications that let you answer an agent's permission request.
+private let permissionCategory = "permission-request"
+
+/// What you answered in a notification's buttons.
+enum NotificationAnswer: Sendable {
+    case repository(root: String, RepositoryOfferAnswer)
+    case permission(id: String, allow: Bool)
+}
 
 @MainActor
 final class Notifier {
@@ -67,8 +75,9 @@ final class Notifier {
         post(request)
     }
 
-    /// Registers the offer's Watch and Don't Ask Again buttons, and where the answers go.
-    func handleRepositoryOffers(_ handler: @escaping @MainActor @Sendable (_ root: String, _ answer: RepositoryOfferAnswer) -> Void) {
+    /// Registers the notifications' buttons (Watch and Don't Ask Again on an offer, Allow and
+    /// Deny on a permission request) and where the answers go.
+    func handleAnswers(_ handler: @escaping @MainActor @Sendable (NotificationAnswer) -> Void) {
         guard isAvailable else { return }
         let responder = NotificationResponder(handler: handler)
         self.responder = responder
@@ -76,9 +85,30 @@ final class Notifier {
         center.delegate = responder
         let watch = UNNotificationAction(identifier: "watch", title: "Watch", options: [.foreground])
         let never = UNNotificationAction(identifier: "never", title: "Don't Ask Again")
+        let allow = UNNotificationAction(identifier: "allow", title: "Allow")
+        let deny = UNNotificationAction(identifier: "deny", title: "Deny", options: [.destructive])
         center.setNotificationCategories([
             UNNotificationCategory(identifier: repositoryOfferCategory, actions: [watch, never], intentIdentifiers: []),
+            UNNotificationCategory(identifier: permissionCategory, actions: [allow, deny], intentIdentifiers: []),
         ])
+    }
+
+    /// "Codex asks to use Bash": Allow, or Deny. The agent's own prompt is open meanwhile.
+    func askPermission(id: String, title: String, body: String) {
+        guard isAvailable else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = permissionCategory
+        content.userInfo = ["permission": id]
+        post(UNNotificationRequest(identifier: "permission:" + id, content: content, trigger: nil))
+    }
+
+    /// Takes a request answered elsewhere, or let go, off the screen.
+    func withdrawPermission(id: String) {
+        guard isAvailable else { return }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["permission:" + id])
     }
 
     /// "Claude Code is working in new-app": Watch, or Don't Ask Again.
@@ -122,32 +152,37 @@ final class Notifier {
     }
 }
 
-/// Hands answers to offers back to Mimamori. Offers show even while Mimamori is in front, since
-/// they wait for an answer; other notifications show only when it is not, as before.
+/// Hands answers from notifications' buttons back to Mimamori. Offers and permission requests
+/// show even while Mimamori is in front, since they wait for an answer; other notifications show
+/// only when it is not, as before.
 private final class NotificationResponder: NSObject, UNUserNotificationCenterDelegate, Sendable {
-    let handler: @MainActor @Sendable (String, RepositoryOfferAnswer) -> Void
+    let handler: @MainActor @Sendable (NotificationAnswer) -> Void
 
-    init(handler: @escaping @MainActor @Sendable (String, RepositoryOfferAnswer) -> Void) {
+    init(handler: @escaping @MainActor @Sendable (NotificationAnswer) -> Void) {
         self.handler = handler
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        let root = response.notification.request.content.userInfo["repository"] as? String
-        let answer: RepositoryOfferAnswer? = switch response.actionIdentifier {
-        case "watch": .watch
-        case "never": .never
-        default: nil  // a click on the notification itself only opens Mimamori, offer and all
+        let info = response.notification.request.content.userInfo
+        // A click on the notification itself only opens Mimamori, the question still open.
+        let answer: NotificationAnswer? = switch (response.actionIdentifier, info["repository"] as? String, info["permission"] as? String) {
+        case ("watch", let root?, _): .repository(root: root, .watch)
+        case ("never", let root?, _): .repository(root: root, .never)
+        case ("allow", _, let id?): .permission(id: id, allow: true)
+        case ("deny", _, let id?): .permission(id: id, allow: false)
+        default: nil
         }
-        if let root, let answer {
+        if let answer {
             let handler = handler
-            Task { @MainActor in handler(root, answer) }
+            Task { @MainActor in handler(answer) }
         }
         completionHandler()
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler(notification.request.content.categoryIdentifier == repositoryOfferCategory ? [.banner, .sound] : [])
+        let category = notification.request.content.categoryIdentifier
+        completionHandler(category == repositoryOfferCategory || category == permissionCategory ? [.banner, .sound] : [])
     }
 }

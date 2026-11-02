@@ -81,6 +81,12 @@ public final class HookSocketServer: @unchecked Sendable {
     private var eventCount = 0
     private var agentClassifier = AgentClassifier()
     private var noteHandler: (@Sendable (Note) -> Void)?
+    private var answering = false
+    /// Permission requests waiting on an answer from Mimamori.
+    public let permissions = PermissionBroker()
+    /// The longest a permission request waits: under the hook's own timeout, so the hook ends
+    /// on its own terms.
+    public var permissionTimeout: TimeInterval = 590
 
     public init(path: String, handler: @escaping Handler) {
         self.path = path
@@ -105,6 +111,13 @@ public final class HookSocketServer: @unchecked Sendable {
     }
 
     private func note(_ note: Note) { onNote?(note) }
+
+    /// Whether `/permission` waits for an answer from Mimamori. Off, it reports the request like
+    /// any other event and answers at once with no decision.
+    public var answersPermissions: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return answering }
+        set { lock.lock(); answering = newValue; lock.unlock() }
+    }
 
     public func start() throws {
         lock.lock(); defer { lock.unlock() }
@@ -237,6 +250,22 @@ public final class HookSocketServer: @unchecked Sendable {
         switch (method, url?.path ?? target) {
         case ("GET", "/health"):
             return (200, "OK", "ok\n")
+        case ("POST", "/permission"):
+            // A permission request whose hook waits for an answer: reported like any event, then
+            // held until answered here, let go, or timed out. No decision answers 204, empty.
+            let caller = peer.map { HookCaller.identify(pid: $0, classifier: classifier) }
+            guard var event = AgentEventTranslator.translate(body, agent: query["agent"].flatMap(AgentKind.named) ?? .claudeCode,
+                                                             caller: caller, eventName: query["event"]) else {
+                note(.rejected(HookRejection(status: 400, reason: "not a hook event", target: target, keys: HookRejection.keys(of: body))))
+                return (400, "Bad Request", "not a hook event\n")
+            }
+            lock.lock(); eventCount += 1; lock.unlock()
+            let id = answersPermissions ? UUID().uuidString : nil
+            event.permissionRequestID = id
+            if let id { permissions.open(id) }
+            deliveryQueue.sync { handler(event) }
+            guard let id, let answer = permissions.wait(id, timeout: permissionTimeout) else { return (204, "No Content", "") }
+            return (200, "OK", answer.hookResponse + "\n")
         case ("POST", "/event"), ("POST", "/event/hermes"):
             // A test from Settings: the cheap byte search keeps agents' events from being parsed twice.
             if body.range(of: Data("mimamori_test".utf8)) != nil,
@@ -263,7 +292,7 @@ public final class HookSocketServer: @unchecked Sendable {
 
     private func respond(_ fd: Int32, status: Int, reason: String, body: String) {
         var head = "HTTP/1.1 \(status) \(reason)\r\nConnection: close\r\nContent-Length: \(body.utf8.count)\r\n"
-        if !body.isEmpty { head += "Content-Type: text/plain; charset=utf-8\r\n" }
+        if !body.isEmpty { head += "Content-Type: \(body.hasPrefix("{") ? "application/json" : "text/plain; charset=utf-8")\r\n" }
         head += "\r\n"
         let bytes = Array((head + body).utf8)
         var sent = 0

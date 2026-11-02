@@ -346,8 +346,12 @@ struct AgentDashboardRow: View {
         .animation(.easeOut(duration: 0.12), value: hovering)
     }
 
-    /// For an agent waiting on you: Go to agent, tinted, where you answer it.
+    /// For an agent waiting on you: Allow and Deny when Mimamori can answer it, and Go to agent,
+    /// tinted, where you answer it otherwise.
     @ViewBuilder private var answerButton: some View {
+        if let id = presence.permissionRequestID {
+            PermissionAnswerButtons(requestID: id)
+        }
         if answerHere {
             Button(action: onGoToAgent) {
                 Label("Go to agent", systemImage: "arrow.up.forward.app")

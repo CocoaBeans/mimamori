@@ -115,7 +115,14 @@ final class AppModel {
         agentHub.onStatusChange = { [weak self] in self?.agentStatusChanged() }
         agentHub.onAgentsChange = { [weak self] in self?.publishWidgets() }
         agentHub.onUnwatchedWork = { [weak self] folders, agent in self?.agentWorks(in: folders, agent: agent) }
-        notifier.handleRepositoryOffers { [weak self] root, action in self?.answerOffer(for: root, action) }
+        notifier.handleAnswers { [weak self] answer in
+            switch answer {
+            case .repository(let root, let choice): self?.answerOffer(for: root, choice)
+            case .permission(let id, let allow): self?.agentHub.answerPermission(id, allow: allow)
+            }
+        }
+        agentHub.onPermissionRequest = { [weak self] pending in self?.permissionRequested(pending) }
+        agentHub.onPermissionSettled = { [weak self] id in self?.notifier.withdrawPermission(id: id) }
         quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                               queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
@@ -742,7 +749,9 @@ final class AppModel {
         record(entries)
         let name = sessions[worktree]?.displayName ?? (worktree as NSString).lastPathComponent
         for note in notes {
-            if note.kind == .needsPermission || note.kind == .waiting, settings.notifyOnAgentPermission {
+            // A request Mimamori can answer has a notification of its own, with Allow and Deny.
+            let answerable = note.kind == .needsPermission && agentHub.pendingPermissions.values.contains { $0.worktree == worktree }
+            if note.kind == .needsPermission || note.kind == .waiting, settings.notifyOnAgentPermission, !answerable {
                 notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "permission:" + worktree)
             }
             if note.kind == .collision, settings.notifyOnAgentCollision {
@@ -752,6 +761,14 @@ final class AppModel {
                 notifier.notify(title: note.title, body: [note.detail, name].compactMap { $0 }.joined(separator: " · "), key: "turn:" + worktree)
             }
         }
+    }
+
+    /// An agent asks permission and its hook waits for an answer from Mimamori too.
+    private func permissionRequested(_ pending: PendingPermission) {
+        guard settings.notifyOnAgentPermission else { return }
+        let name = sessions[pending.worktree]?.displayName ?? (pending.worktree as NSString).lastPathComponent
+        notifier.askPermission(id: pending.id, title: "\(pending.agent.displayName) asks to use \(pending.tool)",
+                               body: [pending.detail, name].compactMap { $0 }.joined(separator: " · "))
     }
 
     private func record(_ entries: [ActivityEntry]) {

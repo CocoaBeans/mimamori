@@ -29,6 +29,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var agentToolCallsInFeed: AgentToolCallFeedMode = .mutating
     var notifyOnAgentPermission: Bool = true
     var notifyOnAgentTurnFinished: Bool = false
+    /// Let Claude Code's permission requests be answered in Mimamori as well as in its own prompt.
+    var answerPermissionsInMimamori: Bool = true
     /// Notify when two agents in one worktree edit the same file.
     var notifyOnAgentCollision: Bool = true
     /// Whether desktop widgets may show agents' tasks and steps, which anyone near the screen can read.
@@ -75,6 +77,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         agentToolCallsInFeed = try c.decodeIfPresent(AgentToolCallFeedMode.self, forKey: .agentToolCallsInFeed) ?? defaults.agentToolCallsInFeed
         notifyOnAgentPermission = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentPermission) ?? defaults.notifyOnAgentPermission
         notifyOnAgentTurnFinished = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentTurnFinished) ?? defaults.notifyOnAgentTurnFinished
+        answerPermissionsInMimamori = try c.decodeIfPresent(Bool.self, forKey: .answerPermissionsInMimamori) ?? defaults.answerPermissionsInMimamori
         notifyOnAgentCollision = try c.decodeIfPresent(Bool.self, forKey: .notifyOnAgentCollision) ?? defaults.notifyOnAgentCollision
         showTasksInWidgets = try c.decodeIfPresent(Bool.self, forKey: .showTasksInWidgets) ?? defaults.showTasksInWidgets
         customAgentNames = try c.decodeIfPresent([String].self, forKey: .customAgentNames) ?? defaults.customAgentNames

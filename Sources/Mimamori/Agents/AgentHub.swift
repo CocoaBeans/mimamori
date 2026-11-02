@@ -22,6 +22,8 @@ struct AgentPresence: Hashable {
     var processIDs: [Int32] = []
     /// The step waiting on your permission, when it is known.
     var awaitingCallID: String? = nil
+    /// A permission request you can answer in Mimamori, with `AgentHub.answerPermission`.
+    var permissionRequestID: String? = nil
     /// For a process-only presence: whether this agent's hooks are installed, or nil for an
     /// agent Mimamori has no hooks for.
     var hooksInstalled: Bool? = nil
@@ -74,6 +76,18 @@ struct AgentContact: Hashable, Identifiable {
     var id: String { agent.id }
 }
 
+/// A permission request whose hook waits for an answer from Mimamori.
+struct PendingPermission: Hashable, Identifiable {
+    var id: String
+    /// The session asking (`AgentStatus.key`).
+    var session: String
+    var worktree: String
+    var agent: AgentKind
+    var tool: String
+    var detail: String?
+    var since: Date
+}
+
 /// Collects agent signals for every watched worktree: hook events over the Unix socket,
 /// and agent processes found by scanning.
 @MainActor
@@ -97,6 +111,8 @@ final class AgentHub {
     private(set) var contacts: [String: AgentContact] = [:]
     /// The latest requests to the hook socket and what became of them, newest first.
     private(set) var hookLog: [HookLogEntry] = []
+    /// Permission requests you can answer in Mimamori, by session (`AgentStatus.key`).
+    private(set) var pendingPermissions: [String: PendingPermission] = [:]
     static let hookLogCapacity = 200
 
     let socketPath: String = Persistence.supportDirectory.appendingPathComponent("mimamori.sock").path
@@ -110,6 +126,10 @@ final class AgentHub {
     /// Called with the folders an event that fit no watched worktree came from: where the agent
     /// works, and the files and paths its tool named.
     var onUnwatchedWork: @MainActor (_ directories: [String], _ agent: AgentKind) -> Void = { _, _ in }
+    /// A permission request waits for an answer from Mimamori, or no longer does (answered here,
+    /// in the agent's own prompt, or let go).
+    var onPermissionRequest: @MainActor (PendingPermission) -> Void = { _ in }
+    var onPermissionSettled: @MainActor (_ id: String) -> Void = { _ in }
 
     // Bookkeeping that views never read, kept out of observation.
     /// One machine per session (`AgentStatus.key`) in each worktree.
@@ -189,6 +209,10 @@ final class AgentHub {
     func updateSettings(_ settings: AppSettings) {
         let previous = self.settings
         self.settings = settings
+        server?.answersPermissions = settings.answerPermissionsInMimamori
+        if !settings.answerPermissionsInMimamori {
+            for key in Array(pendingPermissions.keys) { settlePermission(for: key) }
+        }
         if previous.customAgentNames != settings.customAgentNames {
             let classifier = AgentClassifier(customNames: settings.customAgentNames)
             server?.classifier = classifier
@@ -216,6 +240,7 @@ final class AgentHub {
             Task { @MainActor [weak self] in self?.handle(note) }
         }
         server.classifier = AgentClassifier(customNames: settings.customAgentNames)
+        server.answersPermissions = settings.answerPermissionsInMimamori
         do {
             try server.start()
             self.server = server
@@ -257,6 +282,7 @@ final class AgentHub {
 
     private func handle(_ event: HookEvent) {
         eventsReceived += 1
+        settlePermission(movedOnBy: event)
         lastEventAt = event.receivedAt
         let listening = server?.isListening ?? false
         if listening != isListening { isListening = listening }
@@ -280,6 +306,8 @@ final class AgentHub {
             eventsUnmatched += 1
             record(HookLogEntry(event, outcome: .unplaced(directory: event.cwd, held: event.sessionID != nil)))
             Log.agents.info("\(event.agent.displayName, privacy: .public) \(event.rawName, privacy: .public) fits no watched worktree; it works in \(event.cwd ?? "an unknown folder")")
+            // A request from outside the watched worktrees has nowhere to be answered here.
+            if let id = event.permissionRequestID { server?.permissions.answer(id, nil) }
             hold(event)
             var directories = event.cwd.map { [$0] } ?? []
             if let file = event.filePath, file.hasPrefix("/") { directories.append((file as NSString).deletingLastPathComponent) }
@@ -288,6 +316,14 @@ final class AgentHub {
             return
         }
         record(HookLogEntry(event, outcome: .placed(worktree: worktree)))
+        if let id = event.permissionRequestID {
+            let session = AgentStatus.key(session: event.sessionID, agent: event.agent)
+            let pending = PendingPermission(id: id, session: session, worktree: worktree, agent: event.agent,
+                                            tool: event.toolName ?? "", detail: event.summary, since: event.receivedAt)
+            pendingPermissions[session] = pending
+            Log.agents.notice("\(event.agent.displayName, privacy: .public) asks to use \(pending.tool, privacy: .public); waiting for an answer here or in its own prompt")
+            onPermissionRequest(pending)
+        }
         // The session moved on: do not leave its old status behind. That includes a status taken
         // from Claude Code's record of the session where its process started.
         let key = AgentStatus.key(session: event.sessionID, agent: event.agent)
@@ -327,6 +363,40 @@ final class AgentHub {
     private func record(_ entry: HookLogEntry) {
         hookLog.insert(entry, at: 0)
         if hookLog.count > Self.hookLogCapacity { hookLog.removeLast(hookLog.count - Self.hookLogCapacity) }
+    }
+
+    // MARK: Permission requests
+
+    /// You answered a permission request in Mimamori: the hook hands the agent the decision.
+    func answerPermission(_ id: String, allow: Bool) {
+        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
+        pendingPermissions.removeValue(forKey: pending.session)
+        server?.permissions.answer(id, allow ? .allow : .deny)
+        onPermissionSettled(id)
+        Log.agents.notice("\(allow ? "Allowed" : "Denied", privacy: .public) \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) from Mimamori")
+        // Allowed, it gets on with the step: show it working rather than still waiting on you.
+        if allow { noteApproved(in: pending.worktree, session: pending.session) }
+    }
+
+    /// Lets a request go with no decision, leaving it to the agent's own prompt.
+    private func settlePermission(for session: String) {
+        guard let pending = pendingPermissions.removeValue(forKey: session) else { return }
+        server?.permissions.answer(pending.id, nil)
+        onPermissionSettled(pending.id)
+    }
+
+    /// The agent's own prompt was answered, or the session moved on: the step finished or was
+    /// denied, the turn ended, or another request came. Claude Code's reminder that it is waiting
+    /// (a Notification) and other agents' events leave the request open.
+    private func settlePermission(movedOnBy event: HookEvent) {
+        let session = AgentStatus.key(session: event.sessionID, agent: event.agent)
+        guard let pending = pendingPermissions[session], event.permissionRequestID != pending.id else { return }
+        let settles: Bool = switch event.name {
+        case .postToolUse, .postToolUseFailure, .permissionDenied: event.toolName == nil || event.toolName == pending.tool
+        case .postToolBatch, .permissionRequest, .stop, .stopFailure, .userPromptSubmit, .sessionStart, .sessionEnd: true
+        default: false
+        }
+        if settles { settlePermission(for: session) }
     }
 
     enum HookTestResult: Equatable {
@@ -405,6 +475,7 @@ final class AgentHub {
     }
 
     private func noteApproved(in worktree: String, session key: String) {
+        settlePermission(for: key)
         guard var machine = machines[worktree]?[key], machine.noteApproved() else { return }
         machines[worktree]?[key] = machine
         schedulePublish(urgent: true)
@@ -698,7 +769,8 @@ final class AgentHub {
                              task: status.task, turnSteps: status.turnToolCalls,
                              turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
                              processIDs: processIDs,
-                             awaitingCallID: status.pendingPermission?.callID)
+                             awaitingCallID: status.pendingPermission?.callID,
+                             permissionRequestID: pendingPermissions[status.key]?.id)
     }
 
     private func processPresence(_ running: [AgentProcess]) -> AgentPresence {
