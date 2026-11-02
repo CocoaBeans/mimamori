@@ -1,3 +1,5 @@
+// Debug builds only: release builds leave every debug hook out (see the README's Debug hooks).
+#if DEBUG
 import AppKit
 import Foundation
 import SwiftUI
@@ -462,3 +464,4 @@ enum DebugHooks {
     }
 
 }
+#endif

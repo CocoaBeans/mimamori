@@ -290,7 +290,7 @@ Scripts/capture-window.sh record --pid 1234 --out demo.mov --until /tmp/stop --s
 
 ### Debug hooks
 
-Environment variables for driving the app headlessly, useful on machines without screen-recording permission:
+Environment variables for driving the app headlessly, useful on machines without screen-recording permission. They exist only in debug builds (Xcode's Debug configuration, `Scripts/make-app.sh debug`, `swift build` and `swift run`): a release build, such as `Scripts/make-app.sh` makes by default, leaves `DebugHooks.swift` and every `MIMAMORI_DEBUG_*` switch out, so none of them can be set on an installed copy. `MIMAMORI_SUPPORT_DIR` is the exception and works in every build, for running a second copy against separate state.
 
 | Variable | Effect |
 |---|---|

@@ -26,6 +26,8 @@ cask. These items gate it.
 - [ ] Make it clear which files the hook installers change (`~/.claude/settings.json`,
       `~/.hermes/config.yaml`), where backups go, and how to uninstall cleanly.
 - [ ] Remove Mimamori's hooks when the app is deleted, or document how to.
+- [x] Troubleshooting for hooks: what became of each event, a test event, and diagnostics to
+      copy into a bug report.
 
 ### Compatibility
 
@@ -36,7 +38,7 @@ cask. These items gate it.
 
 ### Cleanup
 
-- [ ] Keep the debug hooks (`MIMAMORI_DEBUG_*`, `DebugHooks.swift`) out of release builds,
+- [x] Keep the debug hooks (`MIMAMORI_DEBUG_*`, `DebugHooks.swift`) out of release builds,
       or gate them behind a build flag.
 - [x] Every control has a tooltip and an accessibility label.
 

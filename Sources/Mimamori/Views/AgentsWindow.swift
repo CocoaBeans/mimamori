@@ -212,8 +212,12 @@ struct AgentDashboardRow: View {
     private var answerHere: Bool { canGoToAgent && presence.source == .hooks && presence.activity.needsAttention }
 
     /// A working agent that has gone this long without a tool call is probably stuck, or thinking
-    /// hard. MIMAMORI_QUIET_AFTER (seconds) shortens it for screenshots.
+    /// hard. In a debug build MIMAMORI_QUIET_AFTER (seconds) shortens it for screenshots.
+    #if DEBUG
     static let quietAfter: TimeInterval = Double(ProcessInfo.processInfo.environment["MIMAMORI_QUIET_AFTER"] ?? "") ?? 3 * 60
+    #else
+    static let quietAfter: TimeInterval = 3 * 60
+    #endif
 
     /// "quiet 4m": how long a working agent has gone without a tool call, once that is a while.
     private func quiet(in timeline: TurnTimeline) -> String? {

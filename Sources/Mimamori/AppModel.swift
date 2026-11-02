@@ -59,8 +59,13 @@ final class AppModel {
     var filterText = ""
     var filterFocusToken = 0
     /// Developer switches from MIMAMORI_DEBUG_FLAGS (comma separated), e.g. "popover:sidebar".
+    /// Debug builds only: a release build has none, so the switches cannot be set there.
+    #if DEBUG
     let debugFlags: Set<String> = Set((ProcessInfo.processInfo.environment["MIMAMORI_DEBUG_FLAGS"] ?? "")
         .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+    #else
+    let debugFlags: Set<String> = []
+    #endif
 
     private var persisted: PersistedState
     private var saveTask: Task<Void, Never>?
@@ -130,7 +135,9 @@ final class AppModel {
                                                               queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
         }
+        #if DEBUG
         DebugHooks.start(model: self)
+        #endif
         // Review marks and other edits are saved after a short delay; do not lose them on quit.
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
