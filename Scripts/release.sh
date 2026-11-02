@@ -125,8 +125,12 @@ for part in $APP $WIDGETS; do
   [[ $entitlements == *application-groups* ]] || { echo "$part was signed without its app group entitlement" >&2; exit 1; }
   [[ $details == *flags=*runtime* ]] || { echo "$part was signed without the hardened runtime" >&2; exit 1; }
 done
+# With more than one certificate of the kind (an old one beside its renewal), Xcode signs with the
+# newest; the DMG is signed below with the same one, named by its SHA-1.
+codesign -d --extract-certificates=$OUT/certificate $APP 2>/dev/null
+CERTIFICATE="$(shasum -a 1 < $OUT/certificate0 | cut -d' ' -f1 | tr a-f A-F)"
 for line in ${(f)"$(codesign -dvv $APP 2>&1)"}; do
-  [[ $line == Authority=* ]] && { echo "Signed by: ${line#Authority=}"; break; }
+  [[ $line == Authority=* ]] && { echo "Signed by: ${line#Authority=}, $(openssl x509 -inform DER -in $OUT/certificate0 -noout -enddate | sed 's/notAfter=/until /')"; break; }
 done
 
 if [[ $DRY_RUN != 1 ]]; then
@@ -143,13 +147,13 @@ rm -f $DMG
 hdiutil create -volname "Mimamori $VERSION" -srcfolder $STAGE -fs HFS+ -format UDZO -ov -quiet $DMG
 
 if [[ $DRY_RUN != 1 ]]; then
-  # Signing the DMG needs the certificate in the keychain; a cloud-managed one cannot. The
-  # notarization ticket stapled to it is what Gatekeeper checks either way.
-  IDENTITY="$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')"
-  if [[ -n $IDENTITY ]]; then
-    codesign --sign "$IDENTITY" --timestamp $DMG
+  # Signing the DMG needs the app's certificate in the keychain; a cloud-managed one cannot. By
+  # name, codesign would refuse when an older certificate shares it. The notarization ticket
+  # stapled to the DMG is what Gatekeeper checks either way.
+  if [[ "$(security find-identity -v -p codesigning)" == *" $CERTIFICATE "* ]]; then
+    codesign --sign "$CERTIFICATE" --timestamp $DMG
   else
-    echo "No Developer ID certificate in the keychain: the DMG itself is left unsigned."
+    echo "The app's certificate is not in the keychain: the DMG itself is left unsigned."
   fi
   notarize $DMG
   xcrun stapler staple $DMG
