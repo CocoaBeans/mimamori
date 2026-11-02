@@ -100,6 +100,8 @@ struct MimamoriCommands: Commands {
                 openSettings()
             }
             Button("Copy Diagnostics") { model.copyDiagnostics() }
+            Divider()
+            Button("Mimamori on GitHub") { NSWorkspace.shared.open(BuildInfo.repository) }
         }
         CommandGroup(replacing: .newItem) {
             Button("Add Repository…") { model.promptForRepository() }
