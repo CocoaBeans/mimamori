@@ -231,15 +231,31 @@ struct SmallAgentView: View {
             Text(agent.worktree)
                 .font(.headline)
                 .lineLimit(1)
-            Text("\(agent.agent) · \(agent.repository)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            AgentAndRepository(agent: agent)
             StateTimer(agent: agent)
                 .font(.caption.weight(.semibold))
                 .padding(.top, 2)
         }
         .widgetURL(agent.link)
+    }
+}
+
+/// "Claude Code", then the repository's tag in its color.
+struct AgentAndRepository: View {
+    let agent: AgentWidgetSnapshot.Agent
+    @Environment(\.repositoryIcons) private var icons
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(agent.agent)
+                .layoutPriority(1)
+            if !agent.repository.isEmpty {
+                RepositoryTag(name: agent.repository, color: agent.repositoryColor, icon: icons[agent.worktreePath])
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
 }
 
@@ -263,10 +279,7 @@ struct AgentRowView: View {
                         }
                     }
                     .lineLimit(1)
-                    Text("\(agent.agent) · \(agent.repository)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    AgentAndRepository(agent: agent)
                 }
                 Spacer(minLength: 4)
                 StateTimer(agent: agent)

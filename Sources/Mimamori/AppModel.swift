@@ -8,6 +8,9 @@ struct RepositoryEntry: Identifiable, Hashable {
     var rootPath: String
     var worktrees: [WorktreeInfo] = []
     var error: String?
+    /// The color picked for it by hand, and whether its own icon is set aside (saved).
+    var color: RepositoryColor?
+    var hidesIcon = false
 
     var displayName: String { (rootPath as NSString).lastPathComponent }
 }
@@ -17,6 +20,8 @@ struct RepositoryEntry: Identifiable, Hashable {
 @Observable
 final class AppModel {
     private(set) var repositories: [RepositoryEntry] = []
+    /// Icons found in repositories' files, with the color each suggests.
+    private(set) var repositoryIcons: [UUID: FoundRepositoryIcon] = [:]
     private(set) var sessions: [String: WorktreeSession] = [:]
     private(set) var settings: AppSettings
     private(set) var activity: [ActivityEntry] = []
@@ -386,10 +391,61 @@ final class AppModel {
 
     private func loadRepository(id: UUID, rootPath: String) async {
         if !repositories.contains(where: { $0.id == id }) {
-            repositories.append(RepositoryEntry(id: id, rootPath: rootPath))
+            let saved = persisted.repositories.first { $0.id == id }
+            repositories.append(RepositoryEntry(id: id, rootPath: rootPath, color: saved?.color, hidesIcon: saved?.hidesIcon ?? false))
         }
+        Task { await findIcon(for: id) }
         await rediscoverWorktrees(for: id)
         startRepositoryWatcher(id: id, rootPath: rootPath)
+    }
+
+    // MARK: Repository looks
+
+    /// How a repository is marked: its own icon if it has one, else its initials, on its color.
+    func look(for repo: RepositoryEntry) -> RepositoryLook {
+        let found = repositoryIcons[repo.id]
+        return RepositoryLook(color: repo.color ?? found?.color ?? .automatic(for: repo.displayName),
+                              icon: repo.hidesIcon ? nil : found?.image,
+                              monogram: RepositoryMonogram.initials(for: repo.displayName))
+    }
+
+    /// Each worktree's repository icon, by worktree path, for the agents' rows.
+    var repositoryIconsByWorktree: [String: NSImage] {
+        var icons: [String: NSImage] = [:]
+        for repo in repositories {
+            guard let icon = look(for: repo).icon else { continue }
+            for worktree in repo.worktrees { icons[worktree.path] = icon }
+        }
+        return icons
+    }
+
+    func hasIcon(_ repo: RepositoryEntry) -> Bool { repositoryIcons[repo.id] != nil }
+
+    /// Looks for the repository's icon in its files, away from the main thread.
+    func findIcon(for id: UUID) async {
+        guard let rootPath = repositories.first(where: { $0.id == id })?.rootPath else { return }
+        let (url, color) = await Task.detached(priority: .utility) {
+            let url = RepositoryIconFinder.icon(in: URL(fileURLWithPath: rootPath))
+            return (url, url.flatMap(RepositoryColor.dominant(in:)))
+        }.value
+        repositoryIcons[id] = url.flatMap(RepositoryIconImage.load).map { FoundRepositoryIcon(image: $0, color: color) }
+        publishWidgets()
+    }
+
+    /// Picks a repository's color by hand; nil goes back to following its icon or name.
+    func setColor(_ color: RepositoryColor?, for id: UUID) {
+        updateRepository(id) { $0.color = color } saved: { $0.color = color }
+    }
+
+    func setHidesIcon(_ hides: Bool, for id: UUID) {
+        updateRepository(id) { $0.hidesIcon = hides } saved: { $0.hidesIcon = hides ? true : nil }
+    }
+
+    private func updateRepository(_ id: UUID, _ change: (inout RepositoryEntry) -> Void, saved: (inout PersistedRepository) -> Void) {
+        if let index = repositories.firstIndex(where: { $0.id == id }) { change(&repositories[index]) }
+        if let index = persisted.repositories.firstIndex(where: { $0.id == id }) { saved(&persisted.repositories[index]) }
+        persistSoon()
+        publishWidgets()
     }
 
     func requestRemoval(of repo: RepositoryEntry) {
@@ -639,7 +695,7 @@ final class AppModel {
                                          running: step.finishedAt == nil)
             } : []
             return AgentWidgetSnapshot.Agent(
-                worktreePath: row.session.id, repository: row.repositoryName, worktree: row.session.displayName,
+                worktreePath: row.session.id, repository: row.repositoryName, repositoryColor: row.look?.color, worktree: row.session.displayName,
                 agent: presence.kind.displayName, symbol: presence.kind.symbolName, state: state, status: AgentText.shortenPaths(presence.statusText, in: row.session.id),
                 since: presence.since, task: details ? presence.task : nil, steps: steps, others: presence.others.count,
                 collision: presence.collision?.title)

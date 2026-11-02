@@ -168,6 +168,10 @@ struct PersistedRepository: Codable, Hashable, Identifiable, Sendable {
     var id: UUID
     var path: String
     var addedAt: Date
+    /// The color picked for it by hand; nil to follow its icon or name.
+    var color: RepositoryColor? = nil
+    /// Whether its own icon is set aside for its initials.
+    var hidesIcon: Bool? = nil
 }
 
 struct PersistedWorktreeSettings: Codable, Hashable, Sendable {

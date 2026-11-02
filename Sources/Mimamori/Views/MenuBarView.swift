@@ -78,6 +78,7 @@ struct MenuBarPanel: View {
                minHeight: pinned ? 220 : nil, maxHeight: pinned ? .infinity : nil)
         .buttonStyle(PanelButtonStyle())
         .environment(\.openAgent) { show(worktree: $0.worktreePath) }
+        .environment(\.repositoryIcons, model.repositoryIconsByWorktree)
     }
 
     private var list: some View {
@@ -176,11 +177,19 @@ struct MenuBarPanel: View {
             if !isFolded("worktrees") {
             ForEach(model.repositories) { repo in
                 let sessions = model.visibleSessions(for: repo)
-                Text(repo.displayName)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.top, 8)
+                if repo.id != model.repositories.first?.id {
+                    Divider()
+                        .padding(.horizontal, 6)
+                        .padding(.top, 6)
+                }
+                HStack(spacing: 5) {
+                    RepositoryBadge(look: model.look(for: repo), size: 14)
+                    Text(repo.displayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 6)
+                .padding(.top, repo.id == model.repositories.first?.id ? 8 : 4)
                 if sessions.isEmpty {
                     Text("No visible worktrees")
                         .font(.callout)

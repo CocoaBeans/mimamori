@@ -5,6 +5,8 @@ import MimamoriCore
 struct AgentRow: Identifiable {
     let session: WorktreeSession
     let repositoryName: String
+    /// Its repository's icon or initials and color.
+    let look: RepositoryLook?
     let presence: AgentPresence
     /// Changed files the agent touched in its current (or last) turn, most recent first.
     let files: [FileChange]
@@ -17,7 +19,8 @@ extension AppModel {
     var agentRows: [AgentRow] {
         let rows = orderedSessions.compactMap { session -> AgentRow? in
             guard let presence = agentHub.presence(for: session.id) else { return nil }
-            return AgentRow(session: session, repositoryName: repository(for: session)?.displayName ?? "",
+            let repo = repository(for: session)
+            return AgentRow(session: session, repositoryName: repo?.displayName ?? "", look: repo.map(look(for:)),
                             presence: presence, files: filesTouched(in: session, by: presence))
         }
         return rows.sorted { a, b in
@@ -272,6 +275,10 @@ struct AgentDashboardRow: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     // Project first, then the branch: the project is what you recognize at a glance.
                     if !row.repositoryName.isEmpty {
+                        if let look = row.look {
+                            RepositoryBadge(look: look, size: 18)
+                                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
+                        }
                         Text(row.repositoryName)
                             .font(.title3.weight(.semibold))
                             .lineLimit(1)

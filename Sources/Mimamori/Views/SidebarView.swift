@@ -85,6 +85,37 @@ struct SidebarView: View {
     }
 }
 
+/// A repository's section header: its badge and name, and folded, what changed in it.
+struct RepositoryHeader: View {
+    @Environment(AppModel.self) private var model
+    let repo: RepositoryEntry
+    /// How many of its worktrees are hidden.
+    let hidden: Int
+    let collapsed: Bool
+    let sessions: [WorktreeSession]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RepositoryBadge(look: model.look(for: repo), size: 16)
+            Text(repo.displayName)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if hidden > 0 {
+                Image(systemName: "eye.slash")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help(hidden == 1 ? "1 hidden worktree" : "\(hidden) hidden worktrees")
+            }
+            if collapsed {
+                let flagged = sessions.reduce(0) { $0 + $1.flaggedCount }
+                let changed = sessions.reduce(0) { $0 + $1.changes.count }
+                if flagged > 0 { CountBadge(count: flagged, tint: .orange) }
+                if changed > 0 { CountBadge(count: changed) }
+            }
+        }
+    }
+}
+
 /// One collapsible repository with its visible worktrees.
 private struct RepositorySection: View {
     @Environment(AppModel.self) private var model
@@ -128,23 +159,7 @@ private struct RepositorySection: View {
                     .foregroundStyle(.red)
             }
         } header: {
-            HStack(spacing: 6) {
-                Text(repo.displayName)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if !hidden.isEmpty {
-                    Image(systemName: "eye.slash")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .help(hidden.count == 1 ? "1 hidden worktree" : "\(hidden.count) hidden worktrees")
-                }
-                if collapsed {
-                    let flagged = sessions.reduce(0) { $0 + $1.flaggedCount }
-                    let changed = sessions.reduce(0) { $0 + $1.changes.count }
-                    if flagged > 0 { CountBadge(count: flagged, tint: .orange) }
-                    if changed > 0 { CountBadge(count: changed) }
-                }
-            }
+            RepositoryHeader(repo: repo, hidden: hidden.count, collapsed: collapsed, sessions: sessions)
             .contentShape(Rectangle())
             .help(Format.abbreviate(path: repo.rootPath))
             .contextMenu {
@@ -153,7 +168,12 @@ private struct RepositorySection: View {
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: repo.rootPath)])
                 }
-                Button("Rediscover Worktrees") { Task { await model.rediscoverWorktrees(for: repo.id) } }
+                Button("Rediscover Worktrees") {
+                    Task {
+                        await model.rediscoverWorktrees(for: repo.id)
+                        await model.findIcon(for: repo.id)
+                    }
+                }
                 if !hidden.isEmpty {
                     Menu("Show Hidden Worktree") {
                         ForEach(hidden) { worktree in
@@ -163,6 +183,8 @@ private struct RepositorySection: View {
                         Button("Show All (\(hidden.count))") { model.showAllWorktrees(for: repo.id) }
                     }
                 }
+                Divider()
+                RepositoryLookMenu(repo: repo)
                 Divider()
                 Button("Stop Watching…", role: .destructive) { model.requestRemoval(of: repo) }
             }

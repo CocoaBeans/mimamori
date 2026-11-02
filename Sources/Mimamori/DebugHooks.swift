@@ -136,10 +136,16 @@ enum DebugHooks {
                     }
                     let view = VStack(alignment: .leading, spacing: 6) {
                         ForEach(model.repositoryOffers) { RepositoryOfferRow(offer: $0) }
-                        ForEach(rows, id: \.path) { worktree in
-                            WorktreeRow(info: worktree, session: model.sessions[worktree.path], now: model.now,
-                                        recencyWindow: model.settings.recencyWindowSeconds,
-                                        presence: model.agentHub.presence(for: worktree.path))
+                        ForEach(model.repositories) { repo in
+                            RepositoryHeader(repo: repo, hidden: 0, collapsed: false, sessions: [])
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 4)
+                            ForEach(rows.filter { row in repo.worktrees.contains(row) }, id: \.path) { worktree in
+                                WorktreeRow(info: worktree, session: model.sessions[worktree.path], now: model.now,
+                                            recencyWindow: model.settings.recencyWindowSeconds,
+                                            presence: model.agentHub.presence(for: worktree.path))
+                            }
                         }
                     }
                     .padding(10)
