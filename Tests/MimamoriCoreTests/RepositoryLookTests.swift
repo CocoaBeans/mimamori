@@ -16,7 +16,7 @@ struct RepositoryLookTests {
 
     @Test func automaticColorsAreStableAndVaried() {
         #expect(RepositoryColor.automatic(for: "AcmeStore") == RepositoryColor.automatic(for: "acmestore"))
-        let names = ["Vigil", "harbor", "AcmeStore", "TideTable", "atlas", "QWRTY", "Pebble", "99 Bottles v2"]
+        let names = ["mimamori", "garden", "AcmeStore", "TideTable", "atlas", "QWRTY", "Pebble", "99 Bottles v2"]
         let colors = names.map(RepositoryColor.automatic(for:))
         #expect(Set(colors).count >= 4)
         #expect(!colors.contains(.brown))
