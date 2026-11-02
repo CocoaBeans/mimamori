@@ -270,12 +270,12 @@ struct CopyButton: View {
         Button {
             copy()
             AccessibilityNotification.Announcement("Copied").post()
-            withAnimation(.easeOut(duration: 0.15)) { copied = true }
+            withAnimation(.easeOut(duration: 0.1)) { copied = true }
             reset?.cancel()
             reset = Task {
                 try? await Task.sleep(for: .seconds(1.5))
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeIn(duration: 0.2)) { copied = false }
+                withAnimation(.easeIn(duration: 0.15)) { copied = false }
             }
         } label: {
             if let title {
@@ -289,7 +289,7 @@ struct CopyButton: View {
                 }
             } else {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .contentTransition(.symbolEffect(.replace))
+                    .contentTransition(.symbolEffect(.replace, options: .speed(1.4)))
                     .foregroundStyle(copied ? AnyShapeStyle(Color.green) : AnyShapeStyle(.foreground))
             }
         }
