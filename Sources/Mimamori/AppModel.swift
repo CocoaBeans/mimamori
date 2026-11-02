@@ -44,6 +44,8 @@ final class AppModel {
     var summaryWindowRequest: String?
     /// The pane the Settings window shows; set it before opening Settings to land on that pane.
     var settingsTab: SettingsTab = .general
+    /// The topic the Help window shows; set it before opening Help to land on that topic.
+    var helpTopic: HelpTopic.ID = .gettingStarted
     let launchedAt = Date()
     /// Where the activity record begins: the oldest entry kept on disk, or this launch.
     private(set) var activityHistoryStart = Date()

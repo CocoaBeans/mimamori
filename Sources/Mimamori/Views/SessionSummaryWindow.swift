@@ -257,6 +257,8 @@ struct SessionSummaryView: View {
 /// code (diffs colored by line). Each line is its own row, so long diffs stay lazy.
 struct MarkdownPreview: View {
     let markdown: String
+    /// The summary's paragraphs are asides between its lists; Help's are its text.
+    var dimsParagraphs = true
 
     private enum Block {
         case title(String), heading(String), subheading(String)
@@ -323,7 +325,7 @@ struct MarkdownPreview: View {
         case .note(let text):
             Text(inline(text)).italic().foregroundStyle(.secondary)
         case .paragraph(let text):
-            Text(inline(text)).foregroundStyle(.secondary)
+            Text(inline(text)).foregroundStyle(dimsParagraphs ? .secondary : .primary)
         case .code(let text, let diff):
             Text(text.isEmpty ? " " : text)
                 .font(.system(.caption, design: .monospaced))

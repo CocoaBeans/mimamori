@@ -71,6 +71,16 @@ struct MimamoriApp: App {
         .restorationBehavior(.disabled)
         .handlesExternalEvents(matching: [])
 
+        // Help › Mimamori Help: a short guide, to keep beside your work.
+        Window("Mimamori Help", id: "help") {
+            HelpWindowView()
+                .environment(model)
+        }
+        .defaultSize(width: 860, height: 700)
+        .defaultPosition(.center)
+        .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
+
         Window("Uninstall Mimamori", id: "uninstall") {
             UninstallView()
                 .environment(model)
@@ -121,7 +131,12 @@ struct MimamoriCommands: Commands {
                     .disabled(!updates.canCheck)
             }
         }
-        CommandGroup(after: .help) {
+        // In place of the default Mimamori Help, which has no help book to open.
+        CommandGroup(replacing: .help) {
+            Button("Mimamori Help") { openWindow(id: "help") }
+                .keyboardShortcut("?")
+            Button("Welcome to Mimamori") { openWindow(id: "welcome") }
+            Divider()
             Button("Troubleshoot Agent Hooks…") {
                 model.settingsTab = .agents
                 openSettings()
@@ -129,7 +144,6 @@ struct MimamoriCommands: Commands {
             Button("Copy Diagnostics") { model.copyDiagnostics() }
             Divider()
             Button("Mimamori on GitHub") { NSWorkspace.shared.open(BuildInfo.repository) }
-            Button("Welcome to Mimamori") { openWindow(id: "welcome") }
         }
         CommandGroup(before: .appTermination) {
             Button("Uninstall Mimamori…") {

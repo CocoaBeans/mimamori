@@ -87,7 +87,7 @@ MIMAMORI_SIGN=adhoc Scripts/make-app.sh release
 open build/Mimamori.app
 ```
 
-The first time it opens, a welcome window says what Mimamori reads and writes, what hooks are, and exactly which file connecting Claude Code or Hermes changes, before anything is installed; Help › Welcome to Mimamori brings it back.
+The first time it opens, a welcome window says what Mimamori reads and writes, what hooks are, and exactly which file connecting Claude Code or Hermes changes, before anything is installed; Help › Welcome to Mimamori brings it back. **Help › Mimamori Help** (⌘?) is a short guide to the rest: reviewing changes, agents and hooks, the menu bar, snapshots, keyboard shortcuts and troubleshooting.
 
 Or `Scripts/run.sh` for a debug build that opens immediately. You can also run `swift run Mimamori`, or open `Package.swift` in Xcode and run the `Mimamori` scheme. Notifications only work from the app bundle.
 
@@ -350,6 +350,8 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
 | `sidebar:show` | Unfold the main window's sidebar at its usual width; the window remembers it folded across launches |
 | `welcome` | Open the welcome window |
+| `help:<topic>` | Open the Help window on that topic (`getting-started`, `agents`, `shortcuts`, … as in `HelpTopics.swift`); `help` alone opens it on the first |
+| `appearance:light` | Draw every window light, whatever the system's setting (`appearance:dark` for dark), for live captures of both |
 | `uninstall` | Open the Uninstall Mimamori window |
 | `uninstall:run` | Run Uninstall with its default choices, keeping the app out of the Trash; its report goes in `<dump>.uninstall.txt`. Point it at a scratch setup (`MIMAMORI_SUPPORT_DIR`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`) |
 | `settings:<pane>` | Open Settings on that pane; with `settings:agents`, `agents:hooks`, `agents:other`, `agents:widgets` or `agents:notifications` opens that part of it |

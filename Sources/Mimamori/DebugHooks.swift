@@ -29,6 +29,8 @@ import WidgetKit
 ///                                               Copy Diagnostics' report in <dump>.diagnostics.txt)
 ///     MIMAMORI_DEBUG_FLAGS=sidebar:show         unfold the main window's sidebar at its usual width
 ///     MIMAMORI_DEBUG_FLAGS=welcome              open the welcome window (uninstall: the Uninstall window)
+///     MIMAMORI_DEBUG_FLAGS=help:agents          open the Help window on that topic (help alone: the first)
+///     MIMAMORI_DEBUG_FLAGS=appearance:light     draw every window light (appearance:dark: dark), whatever the system's setting
 ///     MIMAMORI_DEBUG_FLAGS=uninstall:run        run Uninstall's default choices, app kept out of the Trash
 ///                                               (report in <dump>.uninstall.txt; use a scratch setup)
 ///
@@ -46,6 +48,9 @@ enum DebugHooks {
         let dump = value("MIMAMORI_DEBUG_DUMP")
         let select = value("MIMAMORI_DEBUG_SELECT")
         var toReview = Set((value("MIMAMORI_DEBUG_REVIEW") ?? "").split(separator: ",").map(String.init))
+        // "appearance:light" or "appearance:dark": draw every window that way, whatever the system's setting.
+        if model.debugFlags.contains("appearance:light") { NSApplication.shared.appearance = NSAppearance(named: .aqua) }
+        if model.debugFlags.contains("appearance:dark") { NSApplication.shared.appearance = NSAppearance(named: .darkAqua) }
         guard screenshot != nil || dump != nil || select != nil || !toReview.isEmpty else { return }
         let interval = Double(value("MIMAMORI_SCREENSHOT_INTERVAL") ?? "") ?? 0
 

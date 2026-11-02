@@ -46,6 +46,11 @@ struct ContentView: View {
             // The first launch, with nothing watched yet: say what Mimamori does before anything is installed.
             if !model.welcomeShown || model.debugFlags.contains("welcome") { openWindow(id: "welcome") }
             if model.debugFlags.contains("uninstall") { openWindow(id: "uninstall") }
+            // "help", or "help:<topic>" to open it on that topic.
+            if let flag = model.debugFlags.first(where: { $0 == "help" || $0.hasPrefix("help:") }) {
+                if let topic = HelpTopic.ID(rawValue: String(flag.dropFirst("help:".count))) { model.helpTopic = topic }
+                openWindow(id: "help")
+            }
             if model.overviewWindowOpen { openWindow(id: MenuBarPanel.pinnedWindowID) }
             // "settings:<pane>": open Settings on that pane, as the attention popover's button does.
             if let tab = SettingsTab.allCases.first(where: { model.debugFlags.contains("settings:" + $0.rawValue) }) {
@@ -326,9 +331,13 @@ struct WelcomeView: View {
             Button("Add Repository…") { model.promptForRepository() }
                 .keyboardShortcut("o")
                 .help("Choose a repository or worktree folder to watch (⌘O)")
-            Button("What Mimamori does, and connecting agents") { openWindow(id: "welcome") }
-                .buttonStyle(.link)
-                .help("Open the welcome window again")
+            VStack(spacing: 6) {
+                Button("What Mimamori does, and connecting agents") { openWindow(id: "welcome") }
+                    .help("Open the welcome window again")
+                Button("Mimamori Help") { openWindow(id: "help") }
+                    .help("A short guide to Mimamori (⌘?)")
+            }
+            .buttonStyle(.link)
             if let error = model.gitError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.callout)

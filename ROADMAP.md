@@ -46,11 +46,11 @@ cask. These items gate it.
 
 ### Trust and docs
 
-- [ ] A privacy statement: no network access, no telemetry, what is written to disk and where
-      (expanding the README's "Privacy and footprint").
+- [x] A privacy statement: no telemetry, the one network request (the update check), what is
+      written to disk and where: the README's "Privacy and footprint", and Help's Privacy topic.
 - [x] Add CONTRIBUTING and a security contact (the code is already MIT licensed).
-- [ ] Screenshots and a short demo for the README and release page.
-- [ ] A short in-app guide under Help › Mimamori Help (⌘?): what Mimamori does and how to use it.
+- [x] Screenshots and a short demo for the README and release page.
+- [x] A short in-app guide under Help › Mimamori Help (⌘?): what Mimamori does and how to use it.
       Planned in [docs/plans/help-window.md](docs/plans/help-window.md).
 
 ## Visual polish
