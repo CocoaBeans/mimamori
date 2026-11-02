@@ -809,6 +809,7 @@ struct AgentSettingsView: View {
         } footer: {
             Text("Hooks are commands an agent runs whenever something happens: a prompt, a tool call, a permission request. Mimamori's post each event to its local socket, so it knows what the agent is doing. Mimamori installs them for Claude Code and Hermes with one click; any other agent takes a setup you paste into its own settings (see Other Agents).")
         }
+        newRepositories
         Section {
             LabeledContent("Hooks") {
                 Text(hooksInstalled ? "Installed" : "Not installed")
@@ -888,6 +889,55 @@ struct AgentSettingsView: View {
             .onAppear { refreshHermes() }
         }
         recentEvents
+    }
+
+    /// For your CLAUDE.md or AGENTS.md: an agent that starts a project adds it to Mimamori.
+    static let newRepositoryInstruction = "When you create a new git repository, run `open -g -a Mimamori \"<path>\"` so Mimamori watches it."
+
+    /// What happens when an agent works in a repository Mimamori does not watch, and how agents
+    /// can add one they create.
+    @ViewBuilder private var newRepositories: some View {
+        let settings = SettingsBinding.make(model)
+        let ignored = model.settings.ignoredAgentRepositories
+        Section {
+            Picker("When an agent works in an unwatched repository", selection: settings.agentRepositoryPolicy) {
+                ForEach(AgentRepositoryPolicy.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .help("Offer to watch it asks in the sidebar and in a notification; Watch it adds it straight away")
+            ForEach(model.repositoryOffers) { RepositoryOfferRow(offer: $0) }
+            if !ignored.isEmpty {
+                LabeledContent("Not offered again") {
+                    HStack {
+                        Text(ignored.count == 1 ? "1 repository" : "\(ignored.count) repositories")
+                            .foregroundStyle(.secondary)
+                            .help(ignored.map { ($0 as NSString).abbreviatingWithTildeInPath }.joined(separator: "\n"))
+                        Button("Forget") {
+                            var copy = model.settings
+                            copy.ignoredAgentRepositories = []
+                            model.updateSettings(copy)
+                        }
+                        .help("Offer these repositories again when an agent works in them")
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("An agent can add a repository it creates. Put this in your CLAUDE.md or AGENTS.md:")
+                    .font(.callout)
+                HStack(alignment: .top) {
+                    Text(Self.newRepositoryInstruction)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Copy") { Workspace.copy(Self.newRepositoryInstruction) }
+                        .help("Copy the instruction for your agents")
+                }
+            }
+        } header: {
+            Text("New Repositories")
+        } footer: {
+            Text("Mimamori only offers git repositories, never your home folder, temporary folders or the dot folders agents keep in your home. A new worktree of a repository you watch is found at once. You can also add a repository by dropping its folder on Mimamori's Dock icon or sidebar, or with open -a Mimamori <folder>.")
+        }
     }
 
     /// The latest requests to the socket and what became of each.

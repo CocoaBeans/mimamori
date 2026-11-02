@@ -120,6 +120,7 @@ enum DebugHooks {
                         model.agentHub.presence(for: worktree.path) != nil || !(model.sessions[worktree.path]?.changes.isEmpty ?? true)
                     }
                     let view = VStack(alignment: .leading, spacing: 6) {
+                        ForEach(model.repositoryOffers) { RepositoryOfferRow(offer: $0) }
                         ForEach(rows, id: \.path) { worktree in
                             WorktreeRow(info: worktree, session: model.sessions[worktree.path], now: model.now,
                                         recencyWindow: model.settings.recencyWindowSeconds,
@@ -262,6 +263,7 @@ enum DebugHooks {
         }
         let hub = model.agentHub
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
+        lines.append("repositories: \(model.repositories.map(\.rootPath)) offers: \(model.repositoryOffers.map(\.root)) policy: \(model.settings.agentRepositoryPolicy.rawValue)")
         if let hookTestResult { lines.append("hook test: \(hookTestResult)") }
         if model.debugFlags.contains("hook-test") {
             try? model.diagnostics().text().write(toFile: path + ".diagnostics.txt", atomically: true, encoding: .utf8)

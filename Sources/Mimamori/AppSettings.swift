@@ -41,6 +41,10 @@ struct AppSettings: Codable, Hashable, Sendable {
     var agentsWindowCollapsed: [String] = []
     /// The agent banner above the diff shows the task, steps and files; off for one line.
     var agentBannerExpanded: Bool = true
+    /// What to do when an agent works in a git repository Mimamori does not watch.
+    var agentRepositoryPolicy: AgentRepositoryPolicy = .ask
+    /// Repositories you asked not to be offered again.
+    var ignoredAgentRepositories: [String] = []
 
     init() {}
 
@@ -78,6 +82,8 @@ struct AppSettings: Codable, Hashable, Sendable {
         agentsWindowDetailed = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowDetailed) ?? defaults.agentsWindowDetailed
         agentsWindowCollapsed = try c.decodeIfPresent([String].self, forKey: .agentsWindowCollapsed) ?? defaults.agentsWindowCollapsed
         agentBannerExpanded = try c.decodeIfPresent(Bool.self, forKey: .agentBannerExpanded) ?? defaults.agentBannerExpanded
+        agentRepositoryPolicy = try c.decodeIfPresent(AgentRepositoryPolicy.self, forKey: .agentRepositoryPolicy) ?? defaults.agentRepositoryPolicy
+        ignoredAgentRepositories = try c.decodeIfPresent([String].self, forKey: .ignoredAgentRepositories) ?? defaults.ignoredAgentRepositories
     }
 }
 
@@ -121,6 +127,19 @@ enum AgentToolCallFeedMode: String, Codable, CaseIterable, Sendable {
         case .none: "None"
         case .mutating: "Edits and commands"
         case .all: "Every tool call"
+        }
+    }
+}
+
+/// What happens when an agent works in a git repository Mimamori does not watch.
+enum AgentRepositoryPolicy: String, Codable, CaseIterable, Sendable {
+    case ask, watch, ignore
+
+    var title: String {
+        switch self {
+        case .ask: "Offer to watch it"
+        case .watch: "Watch it"
+        case .ignore: "Do nothing"
         }
     }
 }

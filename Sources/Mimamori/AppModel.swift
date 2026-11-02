@@ -76,7 +76,13 @@ final class AppModel {
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     private var repositoryWatchers: [UUID: FSEventsWatcher] = [:]
     private var rediscoverTasks: [UUID: Task<Void, Never>] = [:]
-    private let notifier = Notifier()
+    let notifier = Notifier()
+    /// Repositories agents work in that Mimamori could watch, waiting for your answer.
+    var repositoryOffers: [RepositoryOffer] = []
+    /// What git said about folders agents worked in, so each is asked about once.
+    @ObservationIgnored var checkedAgentFolders: [String: CheckedFolder] = [:]
+    /// Repositories offered since launch, so each is offered once.
+    @ObservationIgnored var offeredRepositories: Set<String> = []
     @ObservationIgnored private let widgets = WidgetPublisher()
     @ObservationIgnored private var quitObserver: NSObjectProtocol?
 
@@ -103,6 +109,8 @@ final class AppModel {
         agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
         agentHub.onStatusChange = { [weak self] in self?.agentStatusChanged() }
         agentHub.onAgentsChange = { [weak self] in self?.publishWidgets() }
+        agentHub.onUnwatchedWork = { [weak self] folders, agent in self?.agentWorks(in: folders, agent: agent) }
+        notifier.handleRepositoryOffers { [weak self] root, action in self?.answerOffer(for: root, action) }
         quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                               queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
@@ -306,11 +314,14 @@ final class AppModel {
         }
     }
 
-    func addRepository(at url: URL) async {
+    /// Watches the repository holding `url`. `select` shows it once added. Added from outside
+    /// (a script, an agent, a notification) while Mimamori is in the background, a folder that is
+    /// no repository is reported in a notification rather than an alert waiting on screen.
+    func addRepository(at url: URL, select: Bool = true, fromOutside: Bool = false) async {
         guard let git else {
             await locateGit()
             if self.git == nil { return }
-            await addRepository(at: url)
+            await addRepository(at: url, select: select, fromOutside: fromOutside)
             return
         }
         do {
@@ -318,19 +329,27 @@ final class AppModel {
             guard let root = list.first?.path else { return }
             if let existing = repositories.first(where: { $0.rootPath == root }) {
                 await rediscoverWorktrees(for: existing.id)
-                selectedWorktreeID = (try? await git.layout(of: url).topLevel.path) ?? selectedWorktreeID
+                if select { selectedWorktreeID = (try? await git.layout(of: url).topLevel.path) ?? selectedWorktreeID }
                 return
             }
             let id = UUID()
             persisted.repositories.append(PersistedRepository(id: id, path: root, addedAt: Date()))
             persistSoon()
             await loadRepository(id: id, rootPath: root)
+            Log.state.notice("Watching \(root)")
+            guard select else { return }
             if let top = try? await git.layout(of: url).topLevel.path, sessions[top] != nil {
                 selectedWorktreeID = top
             } else {
                 selectedWorktreeID = repositories.first { $0.id == id }?.worktrees.first?.path
             }
         } catch {
+            Log.state.error("Could not watch \(url.path): \(error.localizedDescription, privacy: .public)")
+            if fromOutside, !NSApp.isActive {
+                notifier.notify(title: "Mimamori can't watch \(url.lastPathComponent)",
+                                body: "It isn't in a git repository: \(url.path)", key: "add:" + url.path)
+                return
+            }
             NSSound.beep()
             let alert = NSAlert()
             alert.messageText = "Not a git repository"

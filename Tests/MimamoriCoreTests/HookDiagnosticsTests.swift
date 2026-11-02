@@ -95,3 +95,23 @@ struct HookDiagnosticsTests {
         #expect(HookDiagnostics.shorten("/Users/someone", home: "/Users/someone") == "~")
     }
 }
+
+@Suite("Offering to watch repositories agents work in")
+struct UnwatchedRepositoryFilterTests {
+    @Test func skipsHomeTemporaryAndAgentFolders() {
+        let filter = UnwatchedRepositoryFilter(home: "/Users/someone")
+        #expect(filter.allows("/Users/someone/Projects/new-app"))
+        #expect(filter.allows("/Users/someone/Projects/new-app/src"))
+        #expect(filter.allows("/Volumes/Work/shop"))
+        #expect(!filter.allows("/Users/someone"))
+        #expect(!filter.allows("/Users"))
+        #expect(!filter.allows("/"))
+        #expect(!filter.allows("/Users/someone/.hermes"))
+        #expect(!filter.allows("/Users/someone/.claude/projects/x"))
+        #expect(!filter.allows("/tmp/experiment"))
+        #expect(!filter.allows("/private/var/folders/7v/x/T/scratch"))
+        #expect(!filter.allows("relative/path"))
+        // Only the home folder's own dot folders: a dot folder deeper in is a project's own.
+        #expect(filter.allows("/Users/someone/Projects/app/.github"))
+    }
+}

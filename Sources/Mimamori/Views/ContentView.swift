@@ -49,7 +49,12 @@ struct ContentView: View {
             }
         }
         // A desktop widget's agent opens its worktree; mimamori://open just brings Mimamori forward.
+        // A folder opened with Mimamori (the Dock icon, Open With, `open -a`) is watched.
         .onOpenURL { url in
+            if url.isFileURL {
+                model.openFromOutside(url)
+                return
+            }
             if let worktree = AgentWidgetSnapshot.worktree(in: url), model.sessions[worktree] != nil {
                 model.select(worktree: worktree)
             }

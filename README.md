@@ -27,7 +27,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - *Since branch point*: everything since the branch diverged from the default branch (or from its upstream when you are on the default branch).
   - *Since start*: everything since you pressed **Mark Start**.
   - *Since snapshot*: any earlier snapshot Mimamori recorded.
-- **Follows every worktree.** Add a repository and Mimamori discovers its linked worktrees (for example the ones agent tools create under `.claude/worktrees/`) and watches them all. Repositories collapse in the sidebar; worktrees you do not care about can be hidden, and the filter button at the bottom narrows the list to worktrees with an agent at work. Stop watching a repository from any of its rows' context menu, the File menu (⌘⌫), or the Delete key.
+- **Follows every worktree.** Add a repository (⌘O, or drop its folder on the sidebar or on Mimamori's Dock icon, or run `open -a Mimamori <folder>`) and Mimamori discovers its linked worktrees (for example the ones agent tools create under `.claude/worktrees/`) and watches them all. Repositories collapse in the sidebar; worktrees you do not care about can be hidden, and the filter button at the bottom narrows the list to worktrees with an agent at work. Stop watching a repository from any of its rows' context menu, the File menu (⌘⌫), or the Delete key.
 - **Flags what deserves a look.** Lockfiles, `.env` and key material, secret-looking strings in added lines, CI and agent instruction files, `.gitignore` edits, mass deletions, deleted or skipped tests, conflict markers, lint suppressions, debug leftovers, permission changes, huge files, and edits outside a scope you define. Click the orange count to see every flagged file and why. Every rule can be switched off and thresholds are adjustable.
 - **Shows diffs the way you read them.**
   - Unified or side-by-side (⌥⌘L), with line numbers, syntax colors for about 25 languages and formats, and word-level emphasis on the parts of a line that actually changed.
@@ -179,6 +179,24 @@ For an agent of your own, use the plain names with the fields Claude Code uses: 
 - `event=<name>` names the event, for an agent whose hook sends no JSON or names its events in a way Mimamori does not know. An empty body is fine with it: `curl … --data-binary '' 'http://mimamori/event?agent=aider&event=turn_end'`. Without a `cwd` in the payload, Mimamori uses the hook command's working directory.
 
 What Mimamori can show depends on what an agent sends: start and end of a turn give working and ready; tool events add each step and which edit changed which file; permission and question events make it count as needing you, with notifications. Without a session id, a worktree holds one session at a time.
+
+### New repositories
+
+When an agent starts work in a git repository Mimamori doesn't watch, **Settings › Agents › Hooks › New Repositories** decides what happens:
+
+- **Offer to watch it** (the default): the repository appears at the top of the sidebar under **Not Watched Yet**, with **Watch**, **Not Now** and **Don't Ask Again**. Mimamori also posts a notification with the same buttons, if you allow notifications.
+- **Watch it**: Mimamori adds it straight away, without changing what you are looking at.
+- **Do nothing**: its events stay in Recent Events as not placed.
+
+Only git repositories are offered: never your home folder, temporary folders, or the dot folders agents keep in your home (`~/.hermes`, `~/.claude`). A folder that isn't a repository yet is asked about again 30 seconds later, so a project the agent runs `git init` in still gets offered. A new worktree of a repository you already watch is picked up at once rather than offered.
+
+An agent without hooks can add a repository it creates itself. Put this line in your `CLAUDE.md` or `AGENTS.md`; the same pane has a Copy button for it:
+
+```text
+When you create a new git repository, run `open -g -a Mimamori "<path>"` so Mimamori watches it.
+```
+
+`open -g` adds the repository without bringing Mimamori to the front, and starts Mimamori if it isn't running. A folder that is no repository gets a notification instead of an alert, so nothing waits on screen.
 
 ### Troubleshooting hooks
 

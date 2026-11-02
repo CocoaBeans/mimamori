@@ -107,6 +107,9 @@ final class AgentHub {
     var onStatusChange: @MainActor () -> Void = {}
     /// Called when who works where changes: statuses, processes, collisions.
     var onAgentsChange: @MainActor () -> Void = {}
+    /// Called with the folders an event that fit no watched worktree came from: where the agent
+    /// works, and the files and paths its tool named.
+    var onUnwatchedWork: @MainActor (_ directories: [String], _ agent: AgentKind) -> Void = { _, _ in }
 
     // Bookkeeping that views never read, kept out of observation.
     /// One machine per session (`AgentStatus.key`) in each worktree.
@@ -278,6 +281,10 @@ final class AgentHub {
             record(HookLogEntry(event, outcome: .unplaced(directory: event.cwd, held: event.sessionID != nil)))
             Log.agents.info("\(event.agent.displayName, privacy: .public) \(event.rawName, privacy: .public) fits no watched worktree; it works in \(event.cwd ?? "an unknown folder")")
             hold(event)
+            var directories = event.cwd.map { [$0] } ?? []
+            if let file = event.filePath, file.hasPrefix("/") { directories.append((file as NSString).deletingLastPathComponent) }
+            directories += event.absolutePathHints
+            onUnwatchedWork(directories, event.agent)
             return
         }
         record(HookLogEntry(event, outcome: .placed(worktree: worktree)))

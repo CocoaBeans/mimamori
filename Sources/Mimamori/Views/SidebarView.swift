@@ -6,6 +6,11 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: Binding(get: { model.selectedWorktreeID }, set: { model.select(worktree: $0) })) {
+            if !model.repositoryOffers.isEmpty {
+                Section("Not Watched Yet") {
+                    ForEach(model.repositoryOffers) { RepositoryOfferRow(offer: $0) }
+                }
+            }
             ForEach(model.repositories) { repo in
                 // With the agents filter on, a repository with no agent at work drops out entirely.
                 if !model.sidebarAgentsOnly || !model.listedWorktrees(for: repo).isEmpty {
@@ -257,5 +262,45 @@ struct ReviewCountBadge: View {
             CountChip(symbol: "eye", count: left, tint: .accentColor)
                 .help("\(left) of \(total) changed files left to review")
         }
+    }
+}
+
+/// A repository an agent works in that Mimamori does not watch: watch it, or not.
+struct RepositoryOfferRow: View {
+    @Environment(AppModel.self) private var model
+    let offer: RepositoryOffer
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: offer.agent.symbolName)
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(offer.name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                // The section's heading says the rest: "Not Watched Yet".
+                Text(offer.agent.displayName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Button("Watch") { model.answerOffer(for: offer.root, .watch) }
+                .controlSize(.small)
+                .help("Watch \((offer.root as NSString).abbreviatingWithTildeInPath)")
+            Menu {
+                Button("Not Now") { model.answerOffer(for: offer.root, .notNow) }
+                Button("Don't Ask Again") { model.answerOffer(for: offer.root, .never) }
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Not now, or don't ask again for this repository")
+            .accessibilityLabel("Dismiss")
+        }
+        .help((offer.root as NSString).abbreviatingWithTildeInPath)
     }
 }
