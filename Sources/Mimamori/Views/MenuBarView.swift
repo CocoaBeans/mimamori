@@ -224,8 +224,11 @@ struct MenuBarPanel: View {
             glyph: presence.map(AgentGlyph.init(presence:))
                 ?? AgentGlyph(symbol: session.info.isMain ? "shippingbox" : "arrow.triangle.branch", tint: .secondary),
             title: session.displayName,
-            status: status(changed: session.changes.count, flagged: session.flaggedCount,
-                           toReview: left < session.changes.count ? left : nil),
+            status: session.state?.operation.map { operation in
+                    ([operation.verb, operation.progress, operation.conflicted > 0 ? "\(operation.conflicted) conflicted" : nil]
+                        .compactMap { $0 }.joined(separator: " · "), true)
+                } ?? status(changed: session.changes.count, flagged: session.flaggedCount,
+                            toReview: left < session.changes.count ? left : nil),
             diff: (session.changes.totalAdditions, session.changes.totalDeletions))
     }
 

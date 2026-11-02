@@ -36,11 +36,12 @@ enum DiffText {
     }
 }
 
-/// Everything drawn over a diff's text, by line id: syntax colors and word-level emphasis.
-/// Computed once per loaded diff, off the main thread.
+/// Everything drawn over a diff's text, by line id: syntax colors and word-level emphasis, and
+/// the merge conflicts in it. Computed once per loaded diff, off the main thread.
 struct DiffDecorations: Sendable {
     var syntax: [Int: [SyntaxSpan]] = [:]
     var emphasis: [Int: [Range<Int>]] = [:]
+    var conflicts = MergeConflicts.none
     /// The widest line in monospaced columns, for laying out unwrapped lines without
     /// measuring every row.
     var widestLineColumns = 0
@@ -53,6 +54,7 @@ struct DiffDecorations: Sendable {
     static func compute(for diff: FileDiff, path: String, highlightSyntax: Bool) -> DiffDecorations {
         var result = DiffDecorations()
         result.widestLineColumns = diff.hunks.lazy.flatMap(\.lines).map { columns(of: $0.text) }.max() ?? 0
+        result.conflicts = MergeConflicts(diff: diff)
         if diff.lineCount <= maxEmphasisLines {
             result.emphasis = emphasis(for: diff.hunks)
         }

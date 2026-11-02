@@ -106,7 +106,22 @@ public actor WorktreeInspector {
             changes: primary,
             headChanges: headChanges,
             excludedLargeFiles: excluded,
-            shadowTreeOID: tree)
+            shadowTreeOID: tree,
+            operation: await operation(status: status))
+    }
+
+    /// The merge, rebase, cherry-pick, revert or bisect under way, with its commits named.
+    private func operation(status: PorcelainStatus) async -> WorktreeOperation? {
+        guard let found = WorktreeOperationReader.read(gitDir: layout.gitDir) else { return nil }
+        var operation = found.operation
+        operation.conflicted = status.entries.filter(\.isUnmerged).count
+        if let onto = found.ontoOID {
+            operation.onto = await git.name(pointingAt: onto, in: worktree) ?? String(onto.prefix(7))
+        }
+        if let incoming = found.incomingOID {
+            operation.incoming = await git.commitTitle(incoming, in: worktree) ?? String(incoming.prefix(7))
+        }
+        return operation
     }
 
     /// Commits made between two HEADs when the move was a fast-forward; empty otherwise.
@@ -485,7 +500,8 @@ public actor WorktreeInspector {
             return FileChange(
                 path: entry.path,
                 oldPath: entry.oldPath,
-                kind: ChangeKind(rawStatus: entry.status),
+                // Unmerged, whatever the comparison with the baseline makes of it.
+                kind: statusEntry?.isUnmerged == true ? .unmerged : ChangeKind(rawStatus: entry.status),
                 oldMode: entry.oldMode,
                 newMode: entry.newMode,
                 oldOID: entry.isNullOld ? nil : entry.oldOID,

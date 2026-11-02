@@ -153,10 +153,12 @@ public enum AttentionRules {
                 let trimmed = text.trimmingCharacters(in: .whitespaces)
                 let number = line.newNumber
 
+                // One count per conflict, at its opening marker; a closing marker with none
+                // before it is a leftover, and counts too.
                 if trimmed.hasPrefix("<<<<<<< ") {
                     sawConflictOpen = true
                     record(.conflictMarkers, "Conflict markers", line: number, sample: trimmed)
-                } else if trimmed.hasPrefix(">>>>>>> ") || (sawConflictOpen && trimmed == "=======") {
+                } else if !sawConflictOpen, trimmed.hasPrefix(">>>>>>> ") {
                     record(.conflictMarkers, "Conflict markers", line: number, sample: trimmed)
                 }
 

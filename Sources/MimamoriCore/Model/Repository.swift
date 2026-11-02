@@ -149,9 +149,12 @@ public struct WorktreeState: Sendable, Hashable {
     public var excludedLargeFiles: [String]
     /// Tree id of the working tree as captured by the shadow index.
     public var shadowTreeOID: String?
+    /// A merge, rebase, cherry-pick or revert the worktree is in the middle of.
+    public var operation: WorktreeOperation?
 
     public init(timestamp: Date, branch: BranchInfo, baseline: ResolvedBaseline, defaultBranch: String?,
-                changes: [FileChange], headChanges: [FileChange], excludedLargeFiles: [String], shadowTreeOID: String?) {
+                changes: [FileChange], headChanges: [FileChange], excludedLargeFiles: [String], shadowTreeOID: String?,
+                operation: WorktreeOperation? = nil) {
         self.timestamp = timestamp
         self.branch = branch
         self.baseline = baseline
@@ -160,5 +163,6 @@ public struct WorktreeState: Sendable, Hashable {
         self.headChanges = headChanges
         self.excludedLargeFiles = excludedLargeFiles
         self.shadowTreeOID = shadowTreeOID
+        self.operation = operation
     }
 }

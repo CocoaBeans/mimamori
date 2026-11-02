@@ -519,6 +519,9 @@ struct WorktreeHeaderView: View {
                         .lineLimit(1)
                 }
             }
+            if let state = session.state, let operation = state.operation {
+                OperationBanner(operation: operation, currentBranch: state.branch.branch)
+            }
             if !model.showCommits {
                 HStack(spacing: 8) {
                     BaselinePicker(session: session)

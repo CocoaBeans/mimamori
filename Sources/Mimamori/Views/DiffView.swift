@@ -101,7 +101,8 @@ struct DiffView: View {
                 DiffContentView(diff: diff, decorations: decorations, wrap: model.settings.wrapDiffLines,
                                 sideBySide: model.settings.diffLayout == .sideBySide,
                                 fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID,
-                                flags: AttentionFlag.byLine(change.flags))
+                                flags: AttentionFlag.byLine(change.flags),
+                                currentBranch: commit == nil ? currentSideName : nil)
             }
         } else if let errorText {
             ContentUnavailableView("Could Not Load Diff", systemImage: "exclamationmark.triangle",
@@ -110,6 +111,13 @@ struct DiffView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// What a conflict's current side ("HEAD") is: the branch, or in a rebase what it replays onto.
+    private var currentSideName: String? {
+        guard let state = session.state else { return nil }
+        if let operation = state.operation, operation.kind == .rebase { return operation.onto }
+        return state.branch.branch
     }
 
     private func emptyDiffDescription(_ diff: FileDiff) -> String {
@@ -507,6 +515,8 @@ struct DiffContentView: View {
     @Binding var targetLineID: Int?
     /// The most severe flag on each line of the new file, so those lines stand out.
     var flags: [Int: AttentionFlag] = [:]
+    /// The branch checked out, to name a conflict's current side ("HEAD (main)").
+    var currentBranch: String? = nil
 
     private static let initialLimit = 2500
     /// Narrower than this, two columns are too cramped to read; show one instead.
@@ -613,7 +623,7 @@ struct DiffContentView: View {
                     }
                     if showsOverview {
                         DiffOverviewStrip(overview: DiffOverview(hunks: visible.hunks, sideBySide: split,
-                                                                 flaggedLines: flags.mapValues(\.severity)),
+                                                                 flaggedLines: overviewMarks),
                                           viewport: viewport) { row in
                             if let id = row.id { proxy.scrollTo(DiffRowKey(hunk: row.hunk, row: id), anchor: .center) }
                         }
@@ -625,9 +635,23 @@ struct DiffContentView: View {
     }
 
     /// The flag on a line of the new file; removed lines have none, since flags point at new lines.
+    /// A line in a merge conflict is drawn as part of it instead.
     private func flag(for line: DiffLine?) -> AttentionFlag? {
-        guard let line, line.kind != .deletion, let number = line.newNumber else { return nil }
+        guard let line, line.kind != .deletion, let number = line.newNumber, placement(for: line) == nil else { return nil }
         return flags[number]
+    }
+
+    /// Where a line of the new file falls in a merge conflict, if it does.
+    private func placement(for line: DiffLine?) -> MergeConflicts.Placement? {
+        guard !decorations.conflicts.isEmpty, let line, line.kind != .deletion, let number = line.newNumber else { return nil }
+        return decorations.conflicts.placement(ofLine: number)
+    }
+
+    /// Flagged lines, and where each conflict starts, for the strip beside a long diff.
+    private var overviewMarks: [Int: Severity] {
+        var marks = flags.mapValues(\.severity)
+        for conflict in decorations.conflicts.conflicts { marks[conflict.opening] = .critical }
+        return marks
     }
 
     /// The row showing a line: its own, or in two columns the pair it is in.
@@ -648,7 +672,8 @@ struct DiffContentView: View {
                 ForEach(hunk.lines) { line in
                     DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
                                 syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
-                                isTarget: line.id == targetLineID, flag: flag(for: line))
+                                isTarget: line.id == targetLineID, flag: flag(for: line),
+                                conflict: placement(for: line), currentBranch: currentBranch)
                         .id(DiffRowKey(hunk: hunk.id, row: line.id))
                 }
             } header: {
@@ -665,7 +690,7 @@ struct DiffContentView: View {
                 ForEach(SideBySide.rows(for: hunk)) { row in
                     SplitLineRow(row: row, decorations: decorations, fontSize: fontSize, numberWidth: numberWidth,
                                  isTarget: targetLineID != nil && (row.left?.id == targetLineID || row.right?.id == targetLineID),
-                                 flag: flag(for: row.right))
+                                 flag: flag(for: row.right), conflict: placement(for: row.right), currentBranch: currentBranch)
                         .id(DiffRowKey(hunk: hunk.id, row: row.id))
                 }
             } header: {
@@ -804,9 +829,15 @@ struct DiffLineRow: View {
     let isTarget: Bool
     /// An attention flag on this line: it takes the flag's colour, with a stripe at its edge.
     var flag: AttentionFlag? = nil
+    /// Where the line falls in a merge conflict: a side takes the side's colour, a marker
+    /// becomes a labelled divider.
+    var conflict: MergeConflicts.Placement? = nil
+    var currentBranch: String? = nil
 
     private var marker: String {
-        switch line.kind {
+        // Inside a conflict, + and − say nothing about who wrote a line.
+        if conflict != nil { return " " }
+        return switch line.kind {
         case .addition: "+"
         case .deletion: "−"
         case .context: " "
@@ -826,19 +857,27 @@ struct DiffLineRow: View {
             Text(marker)
                 .frame(width: 12, alignment: .center)
                 .foregroundStyle(line.kind == .addition ? .green : line.kind == .deletion ? .red : .secondary)
-            Text(DiffLineStyle.text(line, syntax: syntax, emphasis: emphasis))
-                .lineLimit(wrap ? nil : 1)
-                .fixedSize(horizontal: !wrap, vertical: false)
-                .foregroundStyle(line.kind == .noNewline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                .textSelection(.enabled)
-                .frame(maxWidth: wrap ? .infinity : nil, alignment: .leading)
-                .padding(.trailing, 12)
+            if let conflict, conflict.part.isMarker {
+                ConflictStyle.label(conflict, currentBranch: currentBranch, fontSize: fontSize)
+                    .padding(.trailing, 12)
+                    .help(line.text)
+            } else {
+                Text(DiffLineStyle.text(line, syntax: syntax, emphasis: emphasis))
+                    .lineLimit(wrap ? nil : 1)
+                    .fixedSize(horizontal: !wrap, vertical: false)
+                    .foregroundStyle(line.kind == .noNewline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: wrap ? .infinity : nil, alignment: .leading)
+                    .padding(.trailing, 12)
+            }
         }
         .font(.system(size: fontSize, design: .monospaced))
         .padding(.vertical, 1)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DiffLineStyle.background(line.kind, flag: flag))
-        .overlay(alignment: .leading) { DiffLineStyle.flagStripe(flag) }
+        .background(conflict.map { ConflictStyle.background($0.part) } ?? DiffLineStyle.background(line.kind, flag: flag))
+        .overlay(alignment: .leading) {
+            if let conflict { ConflictStyle.stripe(conflict.part) } else { DiffLineStyle.flagStripe(flag) }
+        }
         .overlay {
             if isTarget {
                 Rectangle()
@@ -899,6 +938,9 @@ struct SplitLineRow: View {
     let isTarget: Bool
     /// An attention flag on the new side's line.
     var flag: AttentionFlag? = nil
+    /// Where the new side's line falls in a merge conflict.
+    var conflict: MergeConflicts.Placement? = nil
+    var currentBranch: String? = nil
 
     var body: some View {
         HStack(spacing: 0) {
@@ -912,7 +954,7 @@ struct SplitLineRow: View {
             SplitCell(line: row.right, number: row.right?.newNumber,
                       syntax: row.right.flatMap { decorations.syntax[$0.id] },
                       emphasis: row.right.flatMap { decorations.emphasis[$0.id] },
-                      numberWidth: numberWidth, flag: flag)
+                      numberWidth: numberWidth, flag: flag, conflict: conflict, currentBranch: currentBranch)
         }
         // Both cells take the taller one's height, so their backgrounds line up.
         .fixedSize(horizontal: false, vertical: true)
@@ -933,6 +975,8 @@ private struct SplitCell: View {
     let emphasis: [Range<Int>]?
     let numberWidth: CGFloat
     var flag: AttentionFlag? = nil
+    var conflict: MergeConflicts.Placement? = nil
+    var currentBranch: String? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -940,7 +984,11 @@ private struct SplitCell: View {
                 .frame(width: numberWidth, alignment: .trailing)
                 .foregroundStyle(.tertiary)
                 .padding(.trailing, 8)
-            if let line {
+            if let conflict, conflict.part.isMarker, let line {
+                ConflictStyle.label(conflict, currentBranch: currentBranch, fontSize: nil)
+                    .padding(.trailing, 8)
+                    .help(line.text)
+            } else if let line {
                 Text(DiffLineStyle.text(line, syntax: syntax, emphasis: emphasis))
                     .foregroundStyle(line.kind == .noNewline ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                     .textSelection(.enabled)
@@ -953,9 +1001,59 @@ private struct SplitCell: View {
         .padding(.vertical, 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // A missing side reads as a gap, not as unchanged text.
-        .background(line.map { DiffLineStyle.background($0.kind, flag: flag) } ?? Color.secondary.opacity(0.06))
-        .overlay(alignment: .leading) { DiffLineStyle.flagStripe(flag) }
+        .background(conflict.map { ConflictStyle.background($0.part) }
+                     ?? line.map { DiffLineStyle.background($0.kind, flag: flag) } ?? Color.secondary.opacity(0.06))
+        .overlay(alignment: .leading) {
+            if let conflict { ConflictStyle.stripe(conflict.part) } else { DiffLineStyle.flagStripe(flag) }
+        }
         .flagHelp(flag)
+    }
+}
+
+/// How a merge conflict is drawn: the current side (what the branch had) in blue, the incoming
+/// side in purple, the common ancestor in gray, and each marker as a labelled divider.
+enum ConflictStyle {
+    static func color(_ part: MergeConflicts.Part) -> Color {
+        switch part {
+        case .opening, .current: .blue
+        case .baseMarker, .base: .gray
+        case .divider, .incoming, .closing: .purple
+        }
+    }
+
+    static func background(_ part: MergeConflicts.Part) -> Color {
+        color(part).opacity(part.isMarker ? 0.26 : 0.12)
+    }
+
+    static func stripe(_ part: MergeConflicts.Part) -> some View {
+        Rectangle()
+            .fill(color(part))
+            .frame(width: 3)
+    }
+
+    /// "Conflict 1 of 2 · Current: HEAD (main)", "Incoming: feature/euros". `fontSize` nil keeps
+    /// the row's own.
+    static func label(_ placement: MergeConflicts.Placement, currentBranch: String?, fontSize: Double?) -> some View {
+        let conflict = placement.conflict
+        let text: String = switch placement.part {
+        case .opening: "Conflict \(conflict.number) of \(placement.total) · Current: \(name(conflict.current, currentBranch: currentBranch))"
+        case .baseMarker: "Common ancestor" + (conflict.base.flatMap { $0.isEmpty ? nil : ": \($0)" } ?? "")
+        case .divider: "Incoming: " + (conflict.incoming.isEmpty ? "the other side" : conflict.incoming)
+        case .closing: "End of conflict \(conflict.number)"
+        case .current, .base, .incoming: ""
+        }
+        return Text(text)
+            .font(fontSize.map { .system(size: $0, weight: .semibold) } ?? .body.weight(.semibold))
+            .foregroundStyle(color(placement.part))
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The current side's label, with the branch when it is "HEAD".
+    private static func name(_ label: String, currentBranch: String?) -> String {
+        guard label == "HEAD", let currentBranch else { return label.isEmpty ? "this branch" : label }
+        return "HEAD (\(currentBranch))"
     }
 }
 

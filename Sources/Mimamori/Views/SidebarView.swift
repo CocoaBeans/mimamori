@@ -252,6 +252,9 @@ struct WorktreeRow: View {
                             .help("Changed recently")
                     }
                 }
+                if let state = session.state, let operation = state.operation {
+                    OperationChip(operation: operation, currentBranch: state.branch.branch)
+                }
                 if session.flaggedCount > 0 {
                     CountChip(symbol: "exclamationmark.triangle.fill", count: session.flaggedCount, tint: .orange)
                         .help(session.flaggedCount == 1 ? "1 file needs a look" : "\(session.flaggedCount) files need a look")

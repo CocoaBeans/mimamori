@@ -110,7 +110,9 @@ struct AttentionRulesTests {
         #expect(byRule[.testDisabled] != nil)
         #expect(byRule[.lintSuppressed] != nil)
         #expect(byRule[.debugLeftover] != nil)
-        #expect(byRule[.conflictMarkers]?.first?.message.contains("3 places") == true)
+        // One conflict, counted once rather than per marker line.
+        #expect(byRule[.conflictMarkers]?.first?.message == "Conflict markers")
+        #expect(byRule[.conflictMarkers]?.first?.line == 7)
     }
 
     @Test func swiftUIDisabledModifierIsNotATestFlag() {

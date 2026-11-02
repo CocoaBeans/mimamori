@@ -195,6 +195,27 @@ public struct GitClient: Sendable {
         return nil
     }
 
+    /// A name for a commit: a local branch pointing at it, else a remote branch, else a tag.
+    public func name(pointingAt oid: String, in worktree: URL) async -> String? {
+        guard let result = try? await run(["for-each-ref", "--points-at", oid, "--format=%(refname)",
+                                           "refs/heads", "refs/remotes", "refs/tags"], in: worktree),
+              result.status == 0 else { return nil }
+        let refs = result.stdoutText.split(separator: "\n").map(String.init).filter { !$0.hasSuffix("/HEAD") }
+        for prefix in ["refs/heads/", "refs/remotes/", "refs/tags/"] {
+            if let ref = refs.first(where: { $0.hasPrefix(prefix) }) { return String(ref.dropFirst(prefix.count)) }
+        }
+        return nil
+    }
+
+    /// "1a2b3c4 Subject" for a commit.
+    public func commitTitle(_ oid: String, in worktree: URL) async -> String? {
+        guard let result = try? await run(["log", "-1", "--format=%h %s", oid], in: worktree,
+                                          options: Options(allowedExitCodes: [0, 128])),
+              result.status == 0 else { return nil }
+        let title = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
     public func mergeBase(_ a: String, _ b: String, in worktree: URL) async -> String? {
         guard let result = try? await run(["merge-base", a, b], in: worktree, options: Options(allowedExitCodes: [0, 1])),
               result.status == 0 else { return nil }

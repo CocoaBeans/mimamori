@@ -95,7 +95,8 @@ final class WorktreeSession: Identifiable {
         self.onSettingsChanged = onSettingsChanged
     }
 
-    var displayName: String { info.branch ?? (info.isDetached ? "detached" : info.name) }
+    /// The branch; mid-rebase, when HEAD is detached, the branch being rebased.
+    var displayName: String { info.branch ?? state?.operation?.branch ?? (info.isDetached ? "detached" : info.name) }
     var startSnapshot: SnapshotRecord? { snapshots.first { $0.isStart } }
     var flaggedCount: Int { changes.flaggedCount }
     var isBusy: Bool { phase == .refreshing || phase == .indexing || phase == .starting }
