@@ -330,7 +330,11 @@ Example: `open --env MIMAMORI_SCREENSHOT=/tmp/mimamori.png build/Mimamori.app`
 
 ### Releasing
 
-`Scripts/release.sh` builds, signs with a Developer ID certificate, notarizes with `notarytool` and staples the ticket. It needs the certificate in the login keychain and an App Store Connect API key passed as `ASC_KEY_ID` and `ASC_ISSUER_ID` (the key file is read from `~/.appstoreconnect/private_keys/`).
+`Scripts/release.sh` archives Mimamori, exports it signed with Developer ID (the app and its widget extension, each with its entitlements and the hardened runtime), notarizes and staples it, then packs it into `build/Mimamori-<version>.dmg`, notarized and stapled in turn, and prints the DMG's SHA-256 for a Homebrew cask.
+
+- It needs a Developer ID Application certificate for the team, in the login keychain or cloud-managed (xcodebuild can sign with one when the API key has the Admin role), and an App Store Connect API key passed as `ASC_KEY_ID` and `ASC_ISSUER_ID` (the key file is read from `~/.appstoreconnect/private_keys/`).
+- It refuses uncommitted changes, so About names the commit released. Raise `CFBundleVersion` in `Resources/Info.plist` for every release.
+- `RELEASE_DRY_RUN=1 Scripts/release.sh` checks the archive, the entitlements and the DMG with the everyday development signing, without notarizing.
 
 ## Ideas not built yet
 
