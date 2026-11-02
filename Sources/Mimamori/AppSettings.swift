@@ -220,11 +220,13 @@ struct PersistedUIState: Codable, Hashable, Sendable {
     var agentsWindowOpen: Bool = false
     /// Whether the menu-bar panel was pinned in a window of its own, so it opens again at launch.
     var overviewWindowOpen: Bool = false
+    /// Whether the welcome window has been seen, so it opens only on the first launch.
+    var welcomeShown: Bool = false
 
     init(showActivity: Bool = true, flaggedOnly: Bool = false, sortOrder: ChangeSortOrder = .recent,
          selectedWorktree: String? = nil, activityScopeAll: Bool = false, hideReviewed: Bool = false,
          sidebarAgentsOnly: Bool = false, activityAgentFilter: ActivityAgentFilter = .all, showCommits: Bool = false,
-         agentsWindowOpen: Bool = false, overviewWindowOpen: Bool = false) {
+         agentsWindowOpen: Bool = false, overviewWindowOpen: Bool = false, welcomeShown: Bool = false) {
         self.showActivity = showActivity
         self.flaggedOnly = flaggedOnly
         self.sortOrder = sortOrder
@@ -236,6 +238,7 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         self.showCommits = showCommits
         self.agentsWindowOpen = agentsWindowOpen
         self.overviewWindowOpen = overviewWindowOpen
+        self.welcomeShown = welcomeShown
     }
 
     init(from decoder: Decoder) throws {
@@ -251,6 +254,7 @@ struct PersistedUIState: Codable, Hashable, Sendable {
         showCommits = try c.decodeIfPresent(Bool.self, forKey: .showCommits) ?? false
         agentsWindowOpen = try c.decodeIfPresent(Bool.self, forKey: .agentsWindowOpen) ?? false
         overviewWindowOpen = try c.decodeIfPresent(Bool.self, forKey: .overviewWindowOpen) ?? false
+        welcomeShown = try c.decodeIfPresent(Bool.self, forKey: .welcomeShown) ?? false
     }
 }
 

@@ -75,6 +75,7 @@ enum HookInstaller {
         let backup = directory.appendingPathComponent("settings.json.\(stamp).mimamori-backup")
         if FileManager.default.fileExists(atPath: settingsURL.path) {
             try FileManager.default.copyItem(at: settingsURL, to: backup)
+            HookBackups.prune(settingsURL)
         }
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try data.write(to: settingsURL, options: .atomic)

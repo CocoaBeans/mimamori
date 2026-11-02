@@ -54,6 +54,7 @@ enum DebugHooks {
         var renderedWidgets = false
         var openedCommit = false
         var openedMenuBar = false
+        var ranUninstall = false
         var renderedPillPopover = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
@@ -161,6 +162,16 @@ enum DebugHooks {
                     openedMenuBar = clickStatusItem()
                     // The live capture loses the popover's vibrant colours; render it as well.
                     if let dump { writeMenuBarPreviews(model: model, to: dump) }
+                }
+                // "uninstall:run": what Uninstall does, with the default choices but keeping the app
+                // out of the Trash; its report goes next to the dump.
+                if model.debugFlags.contains("uninstall:run"), !ranUninstall, model.agentHub.isListening, let dump {
+                    ranUninstall = true
+                    let leftovers = await Uninstaller.find(model: model)
+                    var plan = UninstallPlan()
+                    plan.trashApp = false
+                    let report = await Uninstaller.run(plan, leftovers: leftovers, model: model)
+                    try? report.joined(separator: "\n").write(toFile: dump + ".uninstall.txt", atomically: true, encoding: .utf8)
                 }
                 if model.debugFlags.contains("cycle") {
                     let ids = model.orderedSessions.map(\.id)

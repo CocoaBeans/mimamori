@@ -43,6 +43,9 @@ struct ContentView: View {
         .onAppear {
             // The Agents window opens again if it was open when Mimamori last quit.
             if model.agentsWindowOpen || model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
+            // The first launch, with nothing watched yet: say what Mimamori does before anything is installed.
+            if !model.welcomeShown || model.debugFlags.contains("welcome") { openWindow(id: "welcome") }
+            if model.debugFlags.contains("uninstall") { openWindow(id: "uninstall") }
             if model.overviewWindowOpen { openWindow(id: MenuBarPanel.pinnedWindowID) }
             // "settings:<pane>": open Settings on that pane, as the attention popover's button does.
             if let tab = SettingsTab.allCases.first(where: { model.debugFlags.contains("settings:" + $0.rawValue) }) {
@@ -307,6 +310,7 @@ struct BaselinePicker: View {
 
 struct WelcomeView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 18) {
@@ -322,6 +326,9 @@ struct WelcomeView: View {
             Button("Add Repository…") { model.promptForRepository() }
                 .keyboardShortcut("o")
                 .help("Choose a repository or worktree folder to watch (⌘O)")
+            Button("What Mimamori does, and connecting agents") { openWindow(id: "welcome") }
+                .buttonStyle(.link)
+                .help("Open the welcome window again")
             if let error = model.gitError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.callout)

@@ -14,18 +14,20 @@ cask. These items gate it.
 
 ### Distribution
 
-- [ ] Sign with a Developer ID certificate and notarize each build (`notarytool`), stapling the ticket.
-- [ ] Package a DMG and publish it from GitHub Releases or a small site.
+- [x] Sign with a Developer ID certificate and notarize each build (`notarytool`), stapling the ticket.
+- [x] Package a DMG (`Scripts/release.sh`).
+- [ ] Publish 1.0.0 on GitHub Releases, from the public repository.
 - [ ] Publish a Homebrew cask (`brew install --cask mimamori`).
 - [x] Add automatic updates with Sparkle (signed appcast), published with each GitHub release.
 - [ ] Release workflow in CI: build, sign, notarize, attach the DMG, update the appcast and cask.
 
 ### First run and hooks
 
-- [ ] Onboarding that explains what Mimamori watches and what hooks are, before anything is installed.
-- [ ] Make it clear which files the hook installers change (`~/.claude/settings.json`,
+- [x] Onboarding that explains what Mimamori watches and what hooks are, before anything is installed.
+- [x] Make it clear which files the hook installers change (`~/.claude/settings.json`,
       `~/.hermes/config.yaml`), where backups go, and how to uninstall cleanly.
-- [ ] Remove Mimamori's hooks when the app is deleted, or document how to.
+- [x] Remove Mimamori's hooks when the app is deleted, or document how to: Mimamori › Uninstall
+      Mimamori…, and the README's manual steps.
 - [x] Troubleshooting for hooks: what became of each event, a test event, and diagnostics to
       copy into a bug report.
 

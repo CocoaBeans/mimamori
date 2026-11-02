@@ -94,6 +94,7 @@ enum HermesHookInstaller {
         let backup = hermesHome.appendingPathComponent("config.yaml.\(stamp).mimamori-backup")
         if FileManager.default.fileExists(atPath: configURL.path) {
             try FileManager.default.copyItem(at: configURL, to: backup)
+            HookBackups.prune(configURL)
         }
         try yaml.write(to: configURL, atomically: true, encoding: .utf8)
         return backup

@@ -61,6 +61,25 @@ struct MimamoriApp: App {
         .handlesExternalEvents(matching: [])
         .restorationBehavior(.disabled)
 
+        // The first launch's introduction, and the way out.
+        Window("Welcome to Mimamori", id: "welcome") {
+            WelcomeWindowView()
+                .environment(model)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
+
+        Window("Uninstall Mimamori", id: "uninstall") {
+            UninstallView()
+                .environment(model)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
+
         Settings {
             SettingsView()
                 .environment(model)
@@ -110,6 +129,14 @@ struct MimamoriCommands: Commands {
             Button("Copy Diagnostics") { model.copyDiagnostics() }
             Divider()
             Button("Mimamori on GitHub") { NSWorkspace.shared.open(BuildInfo.repository) }
+            Button("Welcome to Mimamori") { openWindow(id: "welcome") }
+        }
+        CommandGroup(before: .appTermination) {
+            Button("Uninstall Mimamori…") {
+                openWindow(id: "uninstall")
+                NSApplication.shared.activate()
+            }
+            Divider()
         }
         CommandGroup(replacing: .newItem) {
             Button("Add Repository…") { model.promptForRepository() }

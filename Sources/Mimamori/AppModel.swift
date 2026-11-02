@@ -93,6 +93,11 @@ final class AppModel {
     /// Whether the menu-bar panel is pinned in a window of its own; saved like `agentsWindowOpen`.
     @ObservationIgnored var overviewWindowOpen = false
     @ObservationIgnored var isQuitting = false
+    /// Set by Uninstall Mimamori once its settings are gone: quitting must not write them back.
+    @ObservationIgnored var isUninstalling = false
+    /// Whether the welcome window has been seen. Someone already watching repositories has no
+    /// need of it, however they got there.
+    @ObservationIgnored private(set) var welcomeShown = false
     /// Repositories agents work in that Mimamori could watch, waiting for your answer.
     var repositoryOffers: [RepositoryOffer] = []
     /// What git said about folders agents worked in, so each is asked about once.
@@ -116,6 +121,7 @@ final class AppModel {
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
         self.agentsWindowOpen = persisted.ui.agentsWindowOpen
+        self.welcomeShown = persisted.ui.welcomeShown || !persisted.repositories.isEmpty
         self.overviewWindowOpen = persisted.ui.overviewWindowOpen
         self.collapsedRepositories = persisted.collapsedRepositories
         self.hiddenWorktrees = persisted.hiddenWorktrees
@@ -150,6 +156,11 @@ final class AppModel {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.isQuitting = true
+                if self?.isUninstalling == true {
+                    // Whatever was written since, gone again on the way out.
+                    Uninstaller.removeData()
+                    return
+                }
                 self?.persistNow()
                 self?.activityLog.flush()
             }
@@ -901,12 +912,14 @@ final class AppModel {
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
                                         activityAgentFilter: activityAgentFilter, showCommits: showCommits,
-                                        agentsWindowOpen: agentsWindowOpen, overviewWindowOpen: overviewWindowOpen)
+                                        agentsWindowOpen: agentsWindowOpen, overviewWindowOpen: overviewWindowOpen,
+                                        welcomeShown: welcomeShown)
         persistSoon()
     }
 
     private func persistSoon() {
         saveTask?.cancel()
+        guard !isUninstalling else { return }
         let snapshot = persisted
         saveTask = Task.detached(priority: .utility) {
             try? await Task.sleep(for: .milliseconds(500))
@@ -915,12 +928,24 @@ final class AppModel {
         }
     }
 
+    /// The roots of the repositories you watch, as saved: known before they have loaded.
+    var repositoryRoots: [String] { persisted.repositories.map(\.path) }
+
+    /// The welcome window was closed: it does not open by itself again.
+    func finishWelcome() {
+        guard !welcomeShown else { return }
+        welcomeShown = true
+        persistUISoon()
+    }
+
     func persistNow() {
+        guard !isUninstalling else { return }
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
                                         activityAgentFilter: activityAgentFilter, showCommits: showCommits,
-                                        agentsWindowOpen: agentsWindowOpen, overviewWindowOpen: overviewWindowOpen)
+                                        agentsWindowOpen: agentsWindowOpen, overviewWindowOpen: overviewWindowOpen,
+                                        welcomeShown: welcomeShown)
         saveTask?.cancel()
         Persistence.save(persisted)
     }

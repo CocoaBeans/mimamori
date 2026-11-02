@@ -745,6 +745,7 @@ enum AgentSettingsSection: String, CaseIterable, Identifiable {
 /// each on a pane of its own.
 struct AgentSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     @State private var section: AgentSettingsSection = .hooks
     @State private var hooksInstalled = HookInstaller.isInstalled()
     @State private var confirmInstall = false
@@ -886,6 +887,7 @@ struct AgentSettingsView: View {
             if let lastMessage {
                 Text(lastMessage).font(.callout).foregroundStyle(.secondary)
             }
+            backups(of: HookInstaller.settingsURL)
             Toggle("Answer permission requests in Mimamori", isOn: SettingsBinding.make(model).answerPermissionsInMimamori)
                 .help("Show Allow and Deny in the banner, the Agents window and a notification when Claude Code asks permission. Its own prompt stays open too, and whichever you answer first counts.")
             autoAnswerSettings
@@ -938,6 +940,7 @@ struct AgentSettingsView: View {
                 if let hermesMessage {
                     Text(hermesMessage).font(.callout).foregroundStyle(.secondary)
                 }
+                backups(of: HermesHookInstaller.configURL)
             } header: {
                 Text("Hermes Agent")
             } footer: {
@@ -948,7 +951,37 @@ struct AgentSettingsView: View {
             }
             .onAppear { refreshHermes() }
         }
+        Section {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Deleting the app leaves its hooks in your agents' settings, its snapshots in your repositories and its settings folder behind. Uninstall Mimamori removes them first, each one by your choice, and moves the app to the Trash.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Uninstall Mimamori…") { openWindow(id: "uninstall") }
+                    .help("Choose what of Mimamori's to remove from this Mac, then quit")
+            }
+        } header: {
+            Text("Removing Mimamori")
+        }
         recentEvents
+    }
+
+    /// Where the backups of an agent's settings file went, and how many are kept.
+    @ViewBuilder private func backups(of file: URL) -> some View {
+        let backups = HookBackups.list(of: file)
+        if let newest = backups.first {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(backups.count == 1 ? "1 backup" : "\(backups.count) backups") beside \(file.lastPathComponent), the newest \(newest.lastPathComponent). Mimamori keeps its newest \(HookBackups.kept).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Show Backups") { NSWorkspace.shared.activateFileViewerSelecting(backups) }
+                    .controlSize(.small)
+                    .help("Show the copies Mimamori saved of \(file.lastPathComponent) in Finder")
+            }
+        }
     }
 
     /// Answering a permission request by itself when you have not: off unless you turn it on.

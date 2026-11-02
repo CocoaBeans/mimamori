@@ -87,6 +87,8 @@ MIMAMORI_SIGN=adhoc Scripts/make-app.sh release
 open build/Mimamori.app
 ```
 
+The first time it opens, a welcome window says what Mimamori reads and writes, what hooks are, and exactly which file connecting Claude Code or Hermes changes, before anything is installed; Help › Welcome to Mimamori brings it back.
+
 Or `Scripts/run.sh` for a debug build that opens immediately. You can also run `swift run Mimamori`, or open `Package.swift` in Xcode and run the `Mimamori` scheme. Notifications only work from the app bundle.
 
 `MIMAMORI_SIGN=adhoc` signs the app ad hoc, since the Xcode project is set up for the maintainer's team; the first launch may ask you to confirm in System Settings › Privacy & Security, or you can right-click the app and choose Open. An ad-hoc build's desktop widget cannot read Mimamori's data, which needs a team-signed App Group; [CONTRIBUTING](CONTRIBUTING.md#signing-with-your-own-team) explains how to build with your own team.
@@ -257,8 +259,26 @@ Mimamori talks to nothing but your local `git`, and a Unix-domain socket that on
 
 - `~/Library/Application Support/Mimamori/`: settings, the list of watched repositories, review marks, the shadow index files, and `activity.jsonl`, the activity feed (one JSON entry per line, kept for the number of days you choose).
 - `refs/monitor/…` inside watched repositories, for snapshots (see above).
-- `~/.claude/settings.json`, only when you click Install Hooks or a newer Mimamori adds events to hooks you installed, with a backup beside it.
+- `~/.claude/settings.json`, only when you connect Claude Code (Install Hooks, or Connect in the welcome window) or a newer Mimamori adds events to hooks you installed, with a backup beside it. For Hermes, `~/.hermes/agent-hooks/mimamori.sh` and a marked block in `~/.hermes/config.yaml`, likewise backed up. Mimamori keeps its newest five backups of each file; Settings › Agents › Hooks shows them.
 - In release builds, Sparkle's settings (when it last checked, and whether to check by itself) in Mimamori's preferences, and a downloaded update in `~/Library/Caches/com.kevinross.Mimamori/` until it is installed.
+
+### Uninstalling
+
+macOS gives an app no word when it is deleted, so remove what Mimamori added first: **Mimamori › Uninstall Mimamori…** (also in Settings › Agents › Hooks) lists each thing, with a checkbox, then removes them and quits:
+
+- its hooks in Claude Code's and Hermes's settings (your own hooks stay, and each file is backed up first);
+- its snapshots, the refs under `refs/monitor/` in the repositories you watch (your branches and commits are untouched);
+- its settings folder, preferences, caches and the widgets' data;
+- and the app itself, to the Trash.
+
+Agent sessions already running keep the hooks until they restart; the commands fail silently in the meantime. If you deleted the app first, remove Mimamori's entries (the commands mentioning `mimamori.sock`) from `~/.claude/settings.json` or with an older copy's Settings › Agents › Hooks, then:
+
+```bash
+rm -rf ~/Library/Application\ Support/Mimamori ~/Library/Caches/com.kevinross.Mimamori
+defaults delete com.kevinross.Mimamori
+# in each repository Mimamori watched:
+git for-each-ref --format='%(refname)' refs/monitor/ | xargs -n1 git update-ref -d
+```
 
 ## Development
 
