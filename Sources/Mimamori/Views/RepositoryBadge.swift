@@ -56,13 +56,14 @@ struct RepositoryBadge: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size, height: size)
         } else {
+            // An outline, like the symbols beside it, in its color.
             RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
-                .fill(look.color.muted)
+                .strokeBorder(look.color.muted, lineWidth: max(1, size / 14))
                 .frame(width: size, height: size)
                 .overlay {
                     Text(look.monogram)
-                        .font(.system(size: size * (look.monogram.count > 1 ? 0.42 : 0.56), weight: .bold, design: .rounded))
-                        .foregroundStyle(look.color.onColor)
+                        .font(.system(size: size * (look.monogram.count > 1 ? 0.4 : 0.52), weight: .semibold, design: .rounded))
+                        .foregroundStyle(look.color.muted)
                         .minimumScaleFactor(0.5)
                 }
         }

@@ -20,11 +20,8 @@ extension RepositoryColor {
         }
     }
 
-    /// The color half grayed, for fills: marks that tell repositories apart without shouting.
+    /// The color half grayed: marks that tell repositories apart without shouting.
     var muted: Color { color.mix(with: .gray, by: 0.45) }
-
-    /// Letters drawn on it: white, except on yellow, where white would not read.
-    var onColor: Color { self == .yellow ? .black.opacity(0.7) : .white }
 }
 
 extension EnvironmentValues {
