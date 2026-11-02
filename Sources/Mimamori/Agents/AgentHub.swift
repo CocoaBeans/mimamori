@@ -95,6 +95,9 @@ final class AgentHub {
     private(set) var claudeHooksInstalled = false
     /// Every agent heard from since launch, by agent id.
     private(set) var contacts: [String: AgentContact] = [:]
+    /// The latest requests to the hook socket and what became of them, newest first.
+    private(set) var hookLog: [HookLogEntry] = []
+    static let hookLogCapacity = 200
 
     let socketPath: String = Persistence.supportDirectory.appendingPathComponent("mimamori.sock").path
 
@@ -132,6 +135,8 @@ final class AgentHub {
     @ObservationIgnored private var approvalWatch: Task<Void, Never>?
     /// Where Hermes says each of its sessions works, and when that was looked up.
     @ObservationIgnored private var hermesDirectories: [String: (directory: String?, at: Date)] = [:]
+    /// Tests sent from Settings that have arrived, by token, until the test that sent them sees it.
+    @ObservationIgnored private var arrivedTests: [String: Date] = [:]
 
     /// A busy agent sends several hook events a second, and every change to `statuses` repaints
     /// each window that shows an agent. A change of state (to waiting on you, ready, ended)
@@ -146,24 +151,24 @@ final class AgentHub {
         // Hooks the app installed under its former name post to its old socket: point them at this one.
         do {
             if let backup = try HookInstaller.migrateFormerHooks(socketPath: socketPath) {
-                NSLog("Mimamori: moved Claude Code's hooks over from \(FormerName.supportFolder); previous settings saved to \(backup.path)")
+                Log.migration.notice("Moved Claude Code's hooks over from \(FormerName.supportFolder, privacy: .public); previous settings saved to \(backup.path)")
             }
         } catch {
-            NSLog("Mimamori: could not move Claude Code's hooks over from \(FormerName.supportFolder): \(error)")
+            Log.migration.error("Could not move Claude Code's hooks over from \(FormerName.supportFolder, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
         do {
             if let backup = try HermesHookInstaller.migrateFormerHooks(socketPath: socketPath) {
-                NSLog("Mimamori: moved Hermes's hooks over from \(FormerName.supportFolder); previous config saved to \(backup.path)")
+                Log.migration.notice("Moved Hermes's hooks over from \(FormerName.supportFolder, privacy: .public); previous config saved to \(backup.path)")
             }
         } catch {
-            NSLog("Mimamori: could not move Hermes's hooks over from \(FormerName.supportFolder): \(error)")
+            Log.migration.error("Could not move Hermes's hooks over from \(FormerName.supportFolder, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
         do {
             if let backup = try HookInstaller.updateIfOutdated(socketPath: socketPath) {
-                NSLog("Mimamori: added newer Claude Code hook events; previous settings saved to \(backup.path)")
+                Log.hooks.notice("Added newer Claude Code hook events; previous settings saved to \(backup.path)")
             }
         } catch {
-            NSLog("Mimamori: could not update Claude Code hooks: \(error)")
+            Log.hooks.error("Could not update Claude Code's hooks: \(error.localizedDescription, privacy: .public)")
         }
         refreshHookState()
         restartScanning()
@@ -204,11 +209,15 @@ final class AgentHub {
         let server = HookSocketServer(path: socketPath) { [weak self] event in
             Task { @MainActor [weak self] in self?.handle(event) }
         }
+        server.onNote = { [weak self] note in
+            Task { @MainActor [weak self] in self?.handle(note) }
+        }
         server.classifier = AgentClassifier(customNames: settings.customAgentNames)
         do {
             try server.start()
             self.server = server
             socketError = nil
+            Log.hooks.notice("Listening for hook events at \(self.socketPath)")
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(300))
                 self?.isListening = server.isListening
@@ -216,6 +225,7 @@ final class AgentHub {
         } catch {
             socketError = error.localizedDescription
             isListening = false
+            Log.hooks.error("Could not open the hook socket at \(self.socketPath): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -265,9 +275,12 @@ final class AgentHub {
                                                 lastWorktree: decision.worktree)
         guard let worktree = decision.worktree else {
             eventsUnmatched += 1
+            record(HookLogEntry(event, outcome: .unplaced(directory: event.cwd, held: event.sessionID != nil)))
+            Log.agents.info("\(event.agent.displayName, privacy: .public) \(event.rawName, privacy: .public) fits no watched worktree; it works in \(event.cwd ?? "an unknown folder")")
             hold(event)
             return
         }
+        record(HookLogEntry(event, outcome: .placed(worktree: worktree)))
         // The session moved on: do not leave its old status behind. That includes a status taken
         // from Claude Code's record of the session where its process started.
         let key = AgentStatus.key(session: event.sessionID, agent: event.agent)
@@ -290,6 +303,65 @@ final class AgentHub {
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
         if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
         watchForApprovals()
+    }
+
+    private func handle(_ note: HookSocketServer.Note) {
+        switch note {
+        case .rejected(let rejection):
+            record(HookLogEntry(at: rejection.at, agent: nil, event: "", outcome: .rejected(rejection)))
+            Log.hooks.error("Turned down a request to \(rejection.target, privacy: .public): \(rejection.status) \(rejection.reason, privacy: .public); JSON keys: \((rejection.keys ?? []).joined(separator: ", "), privacy: .public)")
+        case .test(let token):
+            arrivedTests[token] = Date()
+            record(HookLogEntry(at: Date(), agent: nil, event: "MimamoriTest", outcome: .test))
+            Log.hooks.notice("A test event arrived through the hook command")
+        }
+    }
+
+    private func record(_ entry: HookLogEntry) {
+        hookLog.insert(entry, at: 0)
+        if hookLog.count > Self.hookLogCapacity { hookLog.removeLast(hookLog.count - Self.hookLogCapacity) }
+    }
+
+    enum HookTestResult: Equatable {
+        case arrived(milliseconds: Int)
+        case noAnswer(String)
+    }
+
+    /// Sends a test event the way an agent does: the hook command Mimamori installs, run by the
+    /// shell with the event on its standard input. That command never fails, so as not to hold
+    /// an agent up, so only the event's arrival tells whether it works.
+    func sendTestEvent() async -> HookTestResult {
+        guard isListening else {
+            return .noAnswer("The socket is not listening" + (socketError.map { ": \($0)" } ?? "."))
+        }
+        let token = UUID().uuidString
+        let command = ClaudeHooksConfig.command(socketPath: socketPath)
+        let payload = Data(#"{"hook_event_name":"MimamoriTest","mimamori_test":"\#(token)"}"#.utf8)
+        let sentAt = Date()
+        Log.hooks.notice("Sending a test event through the hook command")
+        let ran = await Task.detached(priority: .userInitiated) { () -> Bool in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", command]
+            let input = Pipe()
+            process.standardInput = input
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            do { try process.run() } catch { return false }
+            input.fileHandleForWriting.write(payload)
+            try? input.fileHandleForWriting.close()
+            process.waitUntilExit()
+            return true
+        }.value
+        guard ran else { return .noAnswer("Could not run /bin/sh.") }
+        for _ in 0..<40 {
+            if let arrived = arrivedTests.removeValue(forKey: token) {
+                return .arrived(milliseconds: max(1, Int(arrived.timeIntervalSince(sentAt) * 1000)))
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        Log.hooks.error("The test event did not arrive within 2 seconds")
+        return .noAnswer("Nothing arrived within 2 seconds. The hook command needs curl at /usr/bin/curl.")
     }
 
     // MARK: Approvals

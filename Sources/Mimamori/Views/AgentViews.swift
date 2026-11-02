@@ -606,6 +606,49 @@ struct AttentionNeededButton: View {
     }
 }
 
+/// One request to the hook socket in Settings: what it was, when, and what became of it.
+struct HookLogRow: View {
+    let entry: HookLogEntry
+    private static let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+    private var tint: Color {
+        switch entry.outcome {
+        case .placed: .secondary
+        case .test: .green
+        case .unplaced: .orange
+        case .rejected: .red
+        }
+    }
+
+    /// A placed event names just its worktree's folder; the whole path is in the tooltip.
+    private var detail: String {
+        if case .placed(let worktree) = entry.outcome { return "→ " + (worktree as NSString).lastPathComponent }
+        return entry.detail(home: Self.home)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(entry.title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 8)
+                Text(entry.at.formatted(.dateTime.hour().minute().second()))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(tint)
+                .lineLimit(3)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+        }
+        .help(entry.detail(home: Self.home))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// The parts of Settings › Agents, each a pane of its own.
 enum AgentSettingsSection: String, CaseIterable, Identifiable {
     case hooks
@@ -641,6 +684,9 @@ struct AgentSettingsView: View {
     @State private var hermesMessage: String?
     @State private var hermesUnapproved = HermesHookInstaller.unapprovedEvents()
     @State private var recipe: AgentHookRecipe = .codex
+    @State private var testing = false
+    @State private var testResult: AgentHub.HookTestResult?
+    @State private var diagnosticsCopied = false
     @State private var otherAgentName = AgentHookRecipe.other.agentName
 
     private static let hermesApproveCommand = "hermes --accept-hooks"
@@ -723,8 +769,27 @@ struct AgentSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            LabeledContent("Events received", value: "\(hub.eventsReceived)" + (hub.lastEventAt.map { " · last \(Format.relative($0, to: model.now))" } ?? ""))
+            LabeledContent("Events received", value: "\(hub.eventsReceived)"
+                           + (hub.eventsUnmatched > 0 ? " · \(hub.eventsUnmatched) not placed" : "")
+                           + (hub.lastEventAt.map { " · last \(Format.relative($0, to: model.now))" } ?? ""))
             heardFrom
+            HStack(spacing: 8) {
+                Button("Send Test Event") { sendTestEvent() }
+                    .help("Run the hook command Mimamori installs with a test event, as an agent would, and see whether it arrives")
+                    .disabled(testing)
+                if testing {
+                    ProgressView().controlSize(.small)
+                } else if let testResult {
+                    testResultLabel(testResult)
+                }
+                Spacer()
+                Button(diagnosticsCopied ? "Copied" : "Copy Diagnostics") {
+                    model.copyDiagnostics()
+                    diagnosticsCopied = true
+                    Task { try? await Task.sleep(for: .seconds(2)); diagnosticsCopied = false }
+                }
+                .help("Copy a report for a bug report: versions, the socket, which hooks are installed, who reported and the recent events. Folders under your home show as ~; no prompts or code are included.")
+            }
         } header: {
             Text("Status")
         } footer: {
@@ -807,6 +872,49 @@ struct AgentSettingsView: View {
                      + " Hermes gets an installer of its own because it runs hooks without a shell, which needs the script, and skips any you have not approved; this section shows which are still waiting.")
             }
             .onAppear { refreshHermes() }
+        }
+        recentEvents
+    }
+
+    /// The latest requests to the socket and what became of each.
+    @ViewBuilder private var recentEvents: some View {
+        let log = model.agentHub.hookLog
+        Section {
+            if log.isEmpty {
+                Text("Nothing has reached the socket since Mimamori started.")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(log.prefix(50)) { entry in
+                HookLogRow(entry: entry)
+            }
+        } header: {
+            Text("Recent Events")
+        } footer: {
+            Text("The latest requests to Mimamori's socket, newest first. Not placed: no watched worktree holds the folder the agent works in, so add its repository; an event with a session waits until a later one says where the session works. Rejected: a hook sent the wrong address or shape, so compare its setup with Other Agents. Nothing at all: the agent's hooks are not running, so check they are installed and start a new session, since agents read their hooks when a session starts.")
+        }
+    }
+
+    @ViewBuilder private func testResultLabel(_ result: AgentHub.HookTestResult) -> some View {
+        switch result {
+        case .arrived(let milliseconds):
+            Label("Arrived in \(milliseconds) ms", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.callout)
+        case .noAnswer(let reason):
+            Label(reason, systemImage: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+                .font(.callout)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func sendTestEvent() {
+        testing = true
+        testResult = nil
+        Task {
+            testResult = await model.agentHub.sendTestEvent()
+            testing = false
         }
     }
 
@@ -931,6 +1039,7 @@ struct AgentSettingsView: View {
         do {
             if let backup = try HermesHookInstaller.install(socketPath: model.agentHub.socketPath) {
                 hermesMessage = "Installed. Backup: \(backup.lastPathComponent). Approve the hooks in Hermes next (see above)."
+                Log.hooks.notice("Installed Hermes's hooks; previous config saved to \(backup.path)")
             } else {
                 Workspace.copy(HermesHookInstaller.snippet)
                 hermesMessage = "Script written. Your config.yaml already has a hooks: key, so the YAML entries were copied to the clipboard; paste them under it."
@@ -938,6 +1047,7 @@ struct AgentSettingsView: View {
             refreshHermes()
         } catch {
             hermesMessage = "Install failed: \(error.localizedDescription)"
+            Log.hooks.error("Could not install Hermes's hooks: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -951,8 +1061,10 @@ struct AgentSettingsView: View {
             let backup = try HermesHookInstaller.uninstall()
             refreshHermes()
             hermesMessage = backup.map { "Removed. Backup: \($0.lastPathComponent)" } ?? "Script removed. No Mimamori block was found in config.yaml."
+            Log.hooks.notice("Removed Hermes's hooks")
         } catch {
             hermesMessage = "Uninstall failed: \(error.localizedDescription)"
+            Log.hooks.error("Could not remove Hermes's hooks: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -961,8 +1073,10 @@ struct AgentSettingsView: View {
             let backup = try HookInstaller.install(socketPath: model.agentHub.socketPath)
             hooksInstalled = HookInstaller.isInstalled()
             lastMessage = "Installed. Backup: \(backup.lastPathComponent)"
+            Log.hooks.notice("Installed Claude Code's hooks; previous settings saved to \(backup.path)")
         } catch {
             lastMessage = "Install failed: \(error.localizedDescription)"
+            Log.hooks.error("Could not install Claude Code's hooks: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -971,8 +1085,10 @@ struct AgentSettingsView: View {
             let backup = try HookInstaller.uninstall()
             hooksInstalled = HookInstaller.isInstalled()
             lastMessage = "Removed. Backup: \(backup.lastPathComponent)"
+            Log.hooks.notice("Removed Claude Code's hooks")
         } catch {
             lastMessage = "Uninstall failed: \(error.localizedDescription)"
+            Log.hooks.error("Could not remove Claude Code's hooks: \(error.localizedDescription, privacy: .public)")
         }
     }
 

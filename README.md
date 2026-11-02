@@ -180,6 +180,28 @@ For an agent of your own, use the plain names with the fields Claude Code uses: 
 
 What Mimamori can show depends on what an agent sends: start and end of a turn give working and ready; tool events add each step and which edit changed which file; permission and question events make it count as needing you, with notifications. Without a session id, a worktree holds one session at a time.
 
+### Troubleshooting hooks
+
+When an agent doesn't show up, or shows up without saying what it is doing, open **Settings › Agents › Hooks** (or **Help › Troubleshoot Agent Hooks…**):
+
+- **Socket** says whether Mimamori is listening, and why not when it isn't. The usual reason is a path longer than the 104 bytes a Unix socket allows, when `MIMAMORI_SUPPORT_DIR` points somewhere deep.
+- **Send Test Event** runs the hook command Mimamori installs, with a test event on its standard input as an agent would, and says whether it arrived and how long it took. If the test arrives but an agent's events don't, the agent isn't running its hooks.
+- **Recent Events** lists the latest 200 requests to the socket and what became of each:
+  - *→ a worktree*: placed there.
+  - *Not placed*: no watched worktree holds the folder the agent works in, so add its repository (⌘O). An event with a session waits until a later one says where the session works; that is how gateway agents such as Hermes get placed.
+  - *Rejected*: the hook posted to the wrong address (anything but `/event`) or sent something Mimamori could not read as an event. The row lists the JSON's top-level keys, never their values, so you can compare it with the setup in **Other Agents**.
+  - *Nothing from an agent at all*: its hooks are not running. Agents read their hooks when a session starts, so start a new session after installing them; Hermes also needs `hermes --accept-hooks` once.
+
+Mimamori also writes to the macOS log, under the subsystem `com.kevinross.Mimamori` in the categories `hooks`, `agents`, `migration`, `widgets` and `state`:
+
+```bash
+log stream --predicate 'subsystem == "com.kevinross.Mimamori"' --level info
+```
+
+`log show --last 1h --info --predicate 'subsystem == "com.kevinross.Mimamori"'` shows the past hour. The log hides folders as `<private>`; Recent Events shows them.
+
+To report a problem, click **Copy Diagnostics** (in the same pane, or **Help › Copy Diagnostics**) and paste it into the issue. It lists versions, the socket, which hooks are installed, which agents reported and the recent events with what became of each. It never includes prompts, commands or file contents, and folders under your home appear as `~`, but it does name your worktrees' folders, so look it over before you post it.
+
 ## Desktop widgets
 
 Add the **Agents** widget from the desktop's **Edit Widgets** menu (or Notification Center) to see your agents without opening Mimamori, the one that needs you first:
@@ -262,6 +284,7 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `status-pill` | Open the toolbar pill's popover and render it |
 | `sidebar` | Render the sidebar rows that have agents or changes |
 | `diff-line:<n>` | Scroll the selected file's diff to new-file line n |
+| `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
 | `settings:<pane>` | Open Settings on that pane; with `settings:agents`, `agents:hooks`, `agents:other`, `agents:widgets` or `agents:notifications` opens that part of it |
 
 Example: `open --env MIMAMORI_SCREENSHOT=/tmp/mimamori.png build/Mimamori.app`

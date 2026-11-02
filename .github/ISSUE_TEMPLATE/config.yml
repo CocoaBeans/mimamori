@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/CocoaBeans/mimamori/security/advisories/new
+    about: Anything that could let one process abuse another, or expose what agents do. Please don't open a public issue for it.

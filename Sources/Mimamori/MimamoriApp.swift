@@ -77,8 +77,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct MimamoriCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some Commands {
+        CommandGroup(after: .help) {
+            Button("Troubleshoot Agent Hooks…") {
+                model.settingsTab = .agents
+                openSettings()
+            }
+            Button("Copy Diagnostics") { model.copyDiagnostics() }
+        }
         CommandGroup(replacing: .newItem) {
             Button("Add Repository…") { model.promptForRepository() }
                 .keyboardShortcut("o")

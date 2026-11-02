@@ -238,10 +238,10 @@ enum Persistence {
         // settings and activity log across, before anything reads them.
         do {
             if try SupportFolderMigration.migrate(from: base.appendingPathComponent(FormerName.supportFolder, isDirectory: true), to: folder) {
-                NSLog("Mimamori: moved the settings folder over from \(FormerName.supportFolder)")
+                Log.migration.notice("Moved the settings folder over from \(FormerName.supportFolder, privacy: .public)")
             }
         } catch {
-            NSLog("Mimamori: could not move the settings folder over from \(FormerName.supportFolder): \(error)")
+            Log.migration.error("Could not move the settings folder over from \(FormerName.supportFolder, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
         return folder
     }()
@@ -269,7 +269,7 @@ enum Persistence {
             let data = try encoder.encode(state)
             try data.write(to: stateURL, options: .atomic)
         } catch {
-            NSLog("Mimamori: could not save state: \(error)")
+            Log.state.error("Could not save state: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

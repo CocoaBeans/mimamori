@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in Mimamori doesn't work as it should, including an agent that doesn't report.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. If an agent doesn't show up, **Settings › Agents › Hooks** often says why: try **Send Test Event** and look at **Recent Events** first.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add a repository with two worktrees
+        2. Start Codex in one of them
+        3. …
+  - type: input
+    id: agents
+    attributes:
+      label: Agents involved
+      placeholder: Claude Code 2.1, Codex 0.50, …
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        Click **Copy Diagnostics** in Settings › Agents › Hooks (or **Help › Copy Diagnostics**) and paste it here. It holds no prompts, commands or file contents, but it does name your worktrees' folders, so look it over first.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If it's something you can see, a screenshot helps.

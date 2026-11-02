@@ -21,6 +21,8 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=status-pill          open the toolbar's agent status popover
 ///     MIMAMORI_DEBUG_FLAGS=sidebar              render the sidebar rows with agents or changes, light and dark
 ///     MIMAMORI_DEBUG_FLAGS=diff-line:120        scroll the selected file's diff to new-file line 120
+///     MIMAMORI_DEBUG_FLAGS=hook-test            send a test event through the hook command once (result in the dump,
+///                                               Copy Diagnostics' report in <dump>.diagnostics.txt)
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -43,6 +45,7 @@ enum DebugHooks {
         let windowTitle = value("MIMAMORI_SCREENSHOT_WINDOW")
         var toggledReview = false
         var openedSummary = false
+        var ranHookTest = false
         var renderedWidgets = false
         var openedCommit = false
         var openedMenuBar = false
@@ -71,6 +74,11 @@ enum DebugHooks {
                 if model.debugFlags.contains("widgets"), !renderedWidgets, let dump {
                     renderedWidgets = true
                     writeWidgetPreviews(agents: model.widgetAgents(), to: dump)
+                }
+                // "hook-test": what Settings › Agents › Send Test Event does, once.
+                if model.debugFlags.contains("hook-test"), !ranHookTest, model.agentHub.isListening {
+                    ranHookTest = true
+                    Task { hookTestResult = "\(await model.agentHub.sendTestEvent())" }
                 }
                 // "summary": open the session summary for the selected worktree once.
                 if model.debugFlags.contains("summary"), !openedSummary, let session = model.selectedSession, session.state != nil {
@@ -221,6 +229,9 @@ enum DebugHooks {
         }
     }
 
+    /// The result of the "hook-test" flag's test, once it has run.
+    private static var hookTestResult: String?
+
     static func writeDump(model: AppModel, to path: String) {
         var lines: [String] = []
         lines.append("time: \(Format.dateTime.string(from: Date()))")
@@ -251,6 +262,12 @@ enum DebugHooks {
         }
         let hub = model.agentHub
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
+        if let hookTestResult { lines.append("hook test: \(hookTestResult)") }
+        if model.debugFlags.contains("hook-test") {
+            try? model.diagnostics().text().write(toFile: path + ".diagnostics.txt", atomically: true, encoding: .utf8)
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        for entry in hub.hookLog.prefix(12) { lines.append("  hook log: \(entry.title) | \(entry.detail(home: home))") }
         for contact in hub.contacts.values.sorted(by: { $0.agent.id < $1.agent.id }) {
             lines.append("  heard \(contact.agent.id) (\(contact.agent.displayName)): events=\(contact.events) last=\(contact.lastEvent) worktree=\(contact.lastWorktree.map { ($0 as NSString).lastPathComponent } ?? "-")")
         }

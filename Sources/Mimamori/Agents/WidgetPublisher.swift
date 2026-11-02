@@ -71,7 +71,7 @@ final class WidgetPublisher {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try snapshot.encoded().write(to: url, options: .atomic)
         } catch {
-            NSLog("Mimamori: could not write the widget snapshot: \(error)")
+            Log.widgets.error("Could not write the widget snapshot: \(error.localizedDescription, privacy: .public)")
             return
         }
         shown = agents

@@ -26,14 +26,48 @@ public struct HookCaller: Sendable, Hashable {
     }
 }
 
+/// A request the socket turned down, kept so you can see why a hook setup does not report.
+/// It records the shape of what arrived, never its content: prompts and code stay out of it.
+public struct HookRejection: Sendable, Hashable {
+    public var status: Int
+    /// Why, in a few words: "not a hook event", "no such address".
+    public var reason: String
+    /// The address the request was sent to, such as `/event?agent=codex`.
+    public var target: String
+    /// The top-level keys of the JSON body; nil when the body was not a JSON object.
+    public var keys: [String]?
+    public var at: Date
+
+    public init(status: Int, reason: String, target: String, keys: [String]? = nil, at: Date = Date()) {
+        self.status = status
+        self.reason = reason
+        self.target = target
+        self.keys = keys
+        self.at = at
+    }
+
+    /// The top-level keys of a JSON object, sorted; nil for anything else.
+    static func keys(of body: Data) -> [String]? {
+        (try? JSONSerialization.jsonObject(with: body) as? [String: Any]).map { $0.keys.sorted() }
+    }
+}
+
 /// A tiny HTTP/1.1 server on a Unix domain socket. Agent hooks post their JSON here
 /// with `curl --unix-socket`; nothing else ever connects.
 ///
 /// Requests: `POST /event` with any agent's hook JSON (see `AgentEventTranslator`), optionally
 /// `?agent=<name>` to say which agent it is and `?event=<name>` for a payload that names no
-/// event; `POST /event/hermes` for Hermes; `GET /health`.
+/// event; `POST /event/hermes` for Hermes; `GET /health`. A body with a `mimamori_test` key is a
+/// test from Settings: it is answered and reported, not handed on as an agent's event.
 public final class HookSocketServer: @unchecked Sendable {
     public typealias Handler = @Sendable (HookEvent) -> Void
+
+    /// What the server reports besides events.
+    public enum Note: Sendable {
+        case rejected(HookRejection)
+        /// A test arrived, carrying the token it was sent with.
+        case test(token: String)
+    }
 
     public let path: String
     private let handler: Handler
@@ -46,6 +80,7 @@ public final class HookSocketServer: @unchecked Sendable {
     private var listening = false
     private var eventCount = 0
     private var agentClassifier = AgentClassifier()
+    private var noteHandler: (@Sendable (Note) -> Void)?
 
     public init(path: String, handler: @escaping Handler) {
         self.path = path
@@ -62,6 +97,14 @@ public final class HookSocketServer: @unchecked Sendable {
         get { lock.lock(); defer { lock.unlock() }; return agentClassifier }
         set { lock.lock(); agentClassifier = newValue; lock.unlock() }
     }
+
+    /// Told of rejected requests and of tests, on the server's own queues.
+    public var onNote: (@Sendable (Note) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return noteHandler }
+        set { lock.lock(); noteHandler = newValue; lock.unlock() }
+    }
+
+    private func note(_ note: Note) { onNote?(note) }
 
     public func start() throws {
         lock.lock(); defer { lock.unlock() }
@@ -181,6 +224,7 @@ public final class HookSocketServer: @unchecked Sendable {
             request.buffer.append(contentsOf: chunk[0..<count])
             if request.buffer.count > 4_000_000 {
                 respond(fd, status: 413, reason: "Payload Too Large", body: "")
+                note(.rejected(HookRejection(status: 413, reason: "larger than 4 MB", target: request.target)))
                 return
             }
         }
@@ -194,16 +238,25 @@ public final class HookSocketServer: @unchecked Sendable {
         case ("GET", "/health"):
             return (200, "OK", "ok\n")
         case ("POST", "/event"), ("POST", "/event/hermes"):
+            // A test from Settings: the cheap byte search keeps agents' events from being parsed twice.
+            if body.range(of: Data("mimamori_test".utf8)) != nil,
+               let token = (try? JSONSerialization.jsonObject(with: body) as? [String: Any])?["mimamori_test"] as? String {
+                note(.test(token: token))
+                return (204, "No Content", "")
+            }
             let named = url?.path == "/event/hermes" ? .hermes : query["agent"].flatMap(AgentKind.named)
             // Look the caller up while it waits for this reply; once answered it may be gone.
             let caller = peer.map { HookCaller.identify(pid: $0, classifier: classifier) }
             guard let event = AgentEventTranslator.translate(body, agent: named, caller: caller, eventName: query["event"]) else {
+                note(.rejected(HookRejection(status: 400, reason: body.isEmpty ? "empty, and no ?event= to name it" : "not a hook event",
+                                             target: target, keys: HookRejection.keys(of: body))))
                 return (400, "Bad Request", "not a hook event\n")
             }
             lock.lock(); eventCount += 1; lock.unlock()
             deliveryQueue.sync { handler(event) }
             return (204, "No Content", "")
         default:
+            note(.rejected(HookRejection(status: 404, reason: "no such address; hooks post to /event", target: "\(method) \(target)")))
             return (404, "Not Found", "")
         }
     }
