@@ -137,4 +137,15 @@ public struct AttentionFlag: Hashable, Sendable, Codable, Identifiable {
     }
 
     public var id: String { "\(rule.rawValue):\(line ?? 0):\(message)" }
+
+    /// The most severe flag on each line of the new file, for marking those lines in a diff.
+    public static func byLine(_ flags: [AttentionFlag]) -> [Int: AttentionFlag] {
+        var result: [Int: AttentionFlag] = [:]
+        for flag in flags {
+            guard let line = flag.line else { continue }
+            if let kept = result[line], kept.severity >= flag.severity { continue }
+            result[line] = flag
+        }
+        return result
+    }
 }

@@ -17,6 +17,14 @@ public struct DiffOverview: Equatable, Sendable {
         public var length: Double
     }
 
+    /// A line a flag points at, drawn over the runs so it stands out.
+    public struct FlagMark: Equatable, Sendable {
+        public var severity: Severity
+        /// Where the row is, 0…1, and how much of the diff one row covers.
+        public var start: Double
+        public var length: Double
+    }
+
     /// One row as the diff draws it: a hunk's header, or a line (in two columns, a pair).
     public struct Row: Equatable, Sendable {
         public var hunk: Int
@@ -29,9 +37,17 @@ public struct DiffOverview: Equatable, Sendable {
     public private(set) var marks: [Mark] = []
     /// Where each hunk's header sits, 0…1.
     public private(set) var hunkStarts: [Double] = []
+    /// Lines with an attention flag, by the new file's line numbers in `flaggedLines`.
+    public private(set) var flags: [FlagMark] = []
 
     /// `sideBySide` lays the rows out as the two-column diff does (`SideBySide.rows`).
-    public init(hunks: [DiffHunk], sideBySide: Bool) {
+    /// `flaggedLines` gives each flagged line of the new file its severity.
+    public init(hunks: [DiffHunk], sideBySide: Bool, flaggedLines: [Int: Severity] = [:]) {
+        var flagged: [(index: Int, severity: Severity)] = []
+        func flag(_ line: DiffLine?) {
+            guard let line, line.kind != .deletion, let number = line.newNumber, let severity = flaggedLines[number] else { return }
+            flagged.append((rows.count - 1, severity))
+        }
         for hunk in hunks {
             rows.append(Row(hunk: hunk.id, id: nil, kind: nil))
             if sideBySide {
@@ -43,6 +59,7 @@ public struct DiffOverview: Equatable, Sendable {
                     default: nil
                     }
                     rows.append(Row(hunk: hunk.id, id: row.id, kind: kind))
+                    flag(row.right)
                 }
             } else {
                 for line in hunk.lines {
@@ -52,11 +69,13 @@ public struct DiffOverview: Equatable, Sendable {
                     case .context, .noNewline: nil
                     }
                     rows.append(Row(hunk: hunk.id, id: line.id, kind: kind))
+                    flag(line)
                 }
             }
         }
         guard !rows.isEmpty else { return }
         let count = Double(rows.count)
+        flags = flagged.map { FlagMark(severity: $0.severity, start: Double($0.index) / count, length: 1 / count) }
         // One mark per run of rows of the same kind.
         var index = 0
         while index < rows.count {

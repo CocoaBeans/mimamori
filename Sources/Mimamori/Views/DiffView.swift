@@ -100,7 +100,8 @@ struct DiffView: View {
             } else {
                 DiffContentView(diff: diff, decorations: decorations, wrap: model.settings.wrapDiffLines,
                                 sideBySide: model.settings.diffLayout == .sideBySide,
-                                fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID)
+                                fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID,
+                                flags: AttentionFlag.byLine(change.flags))
             }
         } else if let errorText {
             ContentUnavailableView("Could Not Load Diff", systemImage: "exclamationmark.triangle",
@@ -510,6 +511,8 @@ struct DiffContentView: View {
     let fontSize: Double
     @Binding var showAll: Bool
     @Binding var targetLineID: Int?
+    /// The most severe flag on each line of the new file, so those lines stand out.
+    var flags: [Int: AttentionFlag] = [:]
 
     private static let initialLimit = 2500
     /// Narrower than this, two columns are too cramped to read; show one instead.
@@ -615,7 +618,9 @@ struct DiffContentView: View {
                         }
                     }
                     if showsOverview {
-                        DiffOverviewStrip(overview: DiffOverview(hunks: visible.hunks, sideBySide: split), viewport: viewport) { row in
+                        DiffOverviewStrip(overview: DiffOverview(hunks: visible.hunks, sideBySide: split,
+                                                                 flaggedLines: flags.mapValues(\.severity)),
+                                          viewport: viewport) { row in
                             if let id = row.id { proxy.scrollTo(DiffRowKey(hunk: row.hunk, row: id), anchor: .center) }
                         }
                         .frame(width: Self.overviewWidth)
@@ -623,6 +628,12 @@ struct DiffContentView: View {
                 }
             }
         }
+    }
+
+    /// The flag on a line of the new file; removed lines have none, since flags point at new lines.
+    private func flag(for line: DiffLine?) -> AttentionFlag? {
+        guard let line, line.kind != .deletion, let number = line.newNumber else { return nil }
+        return flags[number]
     }
 
     /// The row showing a line: its own, or in two columns the pair it is in.
@@ -643,7 +654,7 @@ struct DiffContentView: View {
                 ForEach(hunk.lines) { line in
                     DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
                                 syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
-                                isTarget: line.id == targetLineID)
+                                isTarget: line.id == targetLineID, flag: flag(for: line))
                         .id(DiffRowKey(hunk: hunk.id, row: line.id))
                 }
             } header: {
@@ -659,7 +670,8 @@ struct DiffContentView: View {
             Section {
                 ForEach(SideBySide.rows(for: hunk)) { row in
                     SplitLineRow(row: row, decorations: decorations, fontSize: fontSize, numberWidth: numberWidth,
-                                 isTarget: targetLineID != nil && (row.left?.id == targetLineID || row.right?.id == targetLineID))
+                                 isTarget: targetLineID != nil && (row.left?.id == targetLineID || row.right?.id == targetLineID),
+                                 flag: flag(for: row.right))
                         .id(DiffRowKey(hunk: hunk.id, row: row.id))
                 }
             } header: {
@@ -742,6 +754,13 @@ struct DiffOverviewStrip: View {
                         context.fill(Path(halves.remainder), with: .color(.green.opacity(0.85)))
                     }
                 }
+                // Flagged lines over the runs, full width and at least 3 pt, so a lone one shows.
+                for flag in overview.flags {
+                    let height = max(3, flag.length * size.height)
+                    let rect = CGRect(x: 0, y: flag.start * size.height - (height - flag.length * size.height) / 2,
+                                      width: size.width, height: height)
+                    context.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(flag.severity.color))
+                }
             }
             .overlay(alignment: .topLeading) {
                 ViewportBox(viewport: viewport, height: geometry.size.height)
@@ -754,10 +773,12 @@ struct DiffOverviewStrip: View {
         .padding(.vertical, 4)
         .background(.quaternary.opacity(0.25))
         .overlay(alignment: .leading) { Divider() }
-        .help("Where this diff's changes are. Click or drag to go there.")
+        .help(overview.flags.isEmpty ? "Where this diff's changes are. Click or drag to go there."
+              : "Where this diff's changes are, and in orange or red the lines that need a look. Click or drag to go there.")
         .accessibilityElement()
         .accessibilityLabel("Change overview")
-        .accessibilityValue("\(overview.marks.count) runs of changed lines in \(overview.hunkStarts.count) hunks")
+        .accessibilityValue("\(overview.marks.count) runs of changed lines in \(overview.hunkStarts.count) hunks"
+                            + (overview.flags.isEmpty ? "" : ", \(overview.flags.count) flagged"))
     }
 }
 
@@ -787,6 +808,8 @@ struct DiffLineRow: View {
     let syntax: [SyntaxSpan]?
     let emphasis: [Range<Int>]?
     let isTarget: Bool
+    /// An attention flag on this line: it takes the flag's colour, with a stripe at its edge.
+    var flag: AttentionFlag? = nil
 
     private var marker: String {
         switch line.kind {
@@ -820,13 +843,15 @@ struct DiffLineRow: View {
         .font(.system(size: fontSize, design: .monospaced))
         .padding(.vertical, 1)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DiffLineStyle.background(line.kind))
+        .background(DiffLineStyle.background(line.kind, flag: flag))
+        .overlay(alignment: .leading) { DiffLineStyle.flagStripe(flag) }
         .overlay {
             if isTarget {
                 Rectangle()
                     .strokeBorder(Color.accentColor, lineWidth: 1.5)
             }
         }
+        .flagHelp(flag)
     }
 }
 
@@ -837,6 +862,23 @@ enum DiffLineStyle {
         case .addition: Color.green.opacity(0.13)
         case .deletion: Color.red.opacity(0.13)
         case .context, .noNewline: .clear
+        }
+    }
+
+    /// A flagged line takes its flag's colour in place of the green, so it stands out in a run of
+    /// added lines.
+    static func background(_ kind: DiffLineKind, flag: AttentionFlag?) -> Color {
+        flag.map { $0.severity.color.opacity(0.22) } ?? background(kind)
+    }
+
+    /// The flag's colour down a flagged line's leading edge.
+    @ViewBuilder
+    static func flagStripe(_ flag: AttentionFlag?) -> some View {
+        if let flag {
+            Rectangle()
+                .fill(flag.severity.color)
+                .frame(width: 3)
+                .accessibilityLabel(flag.message)
         }
     }
 
@@ -861,6 +903,8 @@ struct SplitLineRow: View {
     let fontSize: Double
     let numberWidth: CGFloat
     let isTarget: Bool
+    /// An attention flag on the new side's line.
+    var flag: AttentionFlag? = nil
 
     var body: some View {
         HStack(spacing: 0) {
@@ -874,7 +918,7 @@ struct SplitLineRow: View {
             SplitCell(line: row.right, number: row.right?.newNumber,
                       syntax: row.right.flatMap { decorations.syntax[$0.id] },
                       emphasis: row.right.flatMap { decorations.emphasis[$0.id] },
-                      numberWidth: numberWidth)
+                      numberWidth: numberWidth, flag: flag)
         }
         // Both cells take the taller one's height, so their backgrounds line up.
         .fixedSize(horizontal: false, vertical: true)
@@ -894,6 +938,7 @@ private struct SplitCell: View {
     let syntax: [SyntaxSpan]?
     let emphasis: [Range<Int>]?
     let numberWidth: CGFloat
+    var flag: AttentionFlag? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -914,6 +959,17 @@ private struct SplitCell: View {
         .padding(.vertical, 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // A missing side reads as a gap, not as unchanged text.
-        .background(line.map { DiffLineStyle.background($0.kind) } ?? Color.secondary.opacity(0.06))
+        .background(line.map { DiffLineStyle.background($0.kind, flag: flag) } ?? Color.secondary.opacity(0.06))
+        .overlay(alignment: .leading) { DiffLineStyle.flagStripe(flag) }
+        .flagHelp(flag)
+    }
+}
+
+extension View {
+    /// A flagged line's tooltip is its flag's message; other lines have none, so a long diff does
+    /// not carry a tooltip per row.
+    @ViewBuilder
+    func flagHelp(_ flag: AttentionFlag?) -> some View {
+        if let flag { help(flag.message) } else { self }
     }
 }

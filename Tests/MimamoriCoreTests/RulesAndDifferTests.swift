@@ -134,6 +134,35 @@ struct AttentionRulesTests {
         #expect(testFlags.first?.line == 3)
     }
 
+    @Test func hardCodedSecretsAreLiteralsNotValuesReadFromElsewhere() {
+        let secrets = [
+            "password = \"hunter2hunter2!\"",
+            "\"api_key\": \"a1b2c3d4e5f6g7h8\",",
+            "apiKey: 'a1b2c3d4e5f6g7h8'",
+            "password := \"hunter2hunter2\"",
+            "'password' => 'hunter2hunter2',",
+            "const DB_PASSWORD = \"Sup3rS3cretValue\";",
+            "DB_PASSWORD=Sup3rS3cretValue9",
+            "export STRIPE_SECRET_KEY=abc123def456ghi789",
+            "client_secret: 9f8e7d6c5b4a3f2e  # rotate monthly",
+        ]
+        let notSecrets = [
+            "final password = _passwordCtrl.text;",
+            "let accessToken = try await auth.refreshToken()",
+            "password = request.form[\"password\"]",
+            "apiKey = config.apiKey",
+            "password = settings.db_password1",
+            "password: requiredFieldName",
+            "passwordHint = \"At least twelve characters\"",
+        ]
+        // One line a diff: flags of one kind on several lines become one flag.
+        func flagged(_ line: String) -> Bool {
+            AttentionRules.contentFlags(in: diff(adding: [line]), config: config).contains { $0.rule == .secretContent }
+        }
+        for line in secrets { #expect(flagged(line), "\(line)") }
+        for line in notSecrets { #expect(!flagged(line), "\(line)") }
+    }
+
     @Test func placeholdersAreNotSecrets() {
         let flags = AttentionRules.contentFlags(in: diff(adding: [
             "api_key = \"your-api-key-here\"",

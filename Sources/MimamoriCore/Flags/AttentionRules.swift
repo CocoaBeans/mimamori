@@ -332,8 +332,22 @@ public enum AttentionRules {
         Pattern("Stripe key", #"\b[sr]k_live_[0-9a-zA-Z]{10,}\b"#),
         Pattern("JSON web token", #"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}"#),
         Pattern("Credentials in URL", #"https?://[^/\s:@]+:[^@\s]{6,}@"#, options: [.caseInsensitive]),
-        Pattern("Hard-coded secret", #"\b(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret|private[_-]?key)\b["']?\s*[:=]\s*["']?[A-Za-z0-9/+_\-\.]{12,}["']?"#, options: [.caseInsensitive]),
     ]
+
+    /// Names a secret goes by, with any prefix or suffix: `password`, `DB_PASSWORD`, `stripeSecretKey`.
+    private static let secretName = #"[A-Za-z0-9_-]*(?:api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret|private[_-]?key)[A-Za-z0-9_-]*"#
+    /// A string literal of twelve or more characters given to a secret's name, in code or config:
+    /// `password = "…"`, `"api_key": "…"`, `password := "…"`, `'password' => '…'`. A value read
+    /// from somewhere (`password = passwordField.text`) is no literal, so it is not flagged.
+    private static let quotedSecret = Pattern("Hard-coded secret",
+        #"\b"# + secretName + #"["']?\s*(?::=|=>|[:=])\s*["'][^"'\s]{12,}["']"#, options: [.caseInsensitive])
+    /// A config line that is only a secret's name and an unquoted value: `DB_PASSWORD=…` in an env
+    /// file, `client_secret: …` in YAML. The value is captured.
+    private static let unquotedSecret = try! NSRegularExpression(
+        pattern: #"^\s*(?:export\s+)?["']?"# + secretName + #"["']?\s*[:=]\s*([A-Za-z0-9/+_.=-]{12,})\s*(?:#.*)?$"#,
+        options: [.caseInsensitive])
+    /// `settings.db_password`, `config.apiKey`: a value read from elsewhere, not a secret.
+    private static let dottedPath = try! NSRegularExpression(pattern: #"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$"#)
 
     private static let secretPlaceholders = [
         "xxx", "your", "example", "changeme", "change_me", "placeholder", "<", "${", "{{", "process.env",
@@ -341,12 +355,20 @@ public enum AttentionRules {
     ]
 
     private static func secretLabel(in text: String) -> String? {
-        for pattern in secretPatterns where pattern.matches(text) {
-            if pattern.label == "Hard-coded secret" {
-                let lower = text.lowercased()
-                if secretPlaceholders.contains(where: { lower.contains($0) }) { continue }
+        if let pattern = secretPatterns.first(where: { $0.matches(text) }) { return pattern.label }
+        // A name and a value: only a literal, and not one that stands in for the real thing.
+        let lower = text.lowercased()
+        guard !secretPlaceholders.contains(where: { lower.contains($0) }) else { return nil }
+        if quotedSecret.matches(text) { return quotedSecret.label }
+        let whole = NSRange(text.startIndex..., in: text)
+        if let match = unquotedSecret.firstMatch(in: text, range: whole),
+           let range = Range(match.range(at: 1), in: text) {
+            let value = String(text[range])
+            // A real one has a digit somewhere; a word or a dotted path is a name, not a secret.
+            if value.contains(where: \.isNumber),
+               dottedPath.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) == nil {
+                return quotedSecret.label
             }
-            return pattern.label
         }
         return nil
     }

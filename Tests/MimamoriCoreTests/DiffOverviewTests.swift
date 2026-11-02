@@ -28,6 +28,40 @@ struct DiffOverviewTests {
         #expect(overview.marks.map(\.kind) == [.change, .deletion])
     }
 
+    @Test func marksFlaggedLinesByTheirNewLineNumber() {
+        // New-file lines 10…12: ctx, +, + ; a removed line has no new number and is never flagged.
+        let lines = [
+            DiffLine(id: 0, kind: .context, text: "a", oldNumber: 10, newNumber: 10),
+            DiffLine(id: 1, kind: .deletion, text: "b", oldNumber: 11, newNumber: nil),
+            DiffLine(id: 2, kind: .addition, text: "c", oldNumber: nil, newNumber: 11),
+            DiffLine(id: 3, kind: .addition, text: "d", oldNumber: nil, newNumber: 12),
+        ]
+        let hunk = DiffHunk(id: 0, header: "@@", oldStart: 10, oldCount: 2, newStart: 10, newCount: 3, lines: lines)
+        let flagged: [Int: Severity] = [11: .warning, 12: .critical, 99: .critical]
+        let unified = DiffOverview(hunks: [hunk], sideBySide: false, flaggedLines: flagged)
+        // Rows: header, 10, (removed), 11, 12: five in all.
+        #expect(unified.flags.map(\.severity) == [.warning, .critical])
+        #expect(unified.flags.map(\.start) == [0.6, 0.8])
+        #expect(unified.flags.allSatisfy { $0.length == 0.2 })
+        // Side by side: header, 10, (removed | 11), ( | 12): the new side carries the flags.
+        let split = DiffOverview(hunks: [hunk], sideBySide: true, flaggedLines: flagged)
+        #expect(split.flags.map(\.start) == [0.5, 0.75])
+        #expect(DiffOverview(hunks: [hunk], sideBySide: false).flags.isEmpty)
+    }
+
+    @Test func keepsTheMostSevereFlagOnALine() {
+        let flags = [
+            AttentionFlag(rule: .debugLeftover, severity: .info, message: "print", line: 4),
+            AttentionFlag(rule: .secretContent, severity: .critical, message: "secret", line: 4),
+            AttentionFlag(rule: .lintSuppressed, severity: .warning, message: "lint", line: 7),
+            AttentionFlag(rule: .lockfile, message: "lockfile"),
+        ]
+        let byLine = AttentionFlag.byLine(flags)
+        #expect(byLine.count == 2)
+        #expect(byLine[4]?.message == "secret")
+        #expect(byLine[7]?.severity == .warning)
+    }
+
     @Test func findsTheRowAtAPointDownTheStrip() {
         let overview = DiffOverview(hunks: [hunk(0, [.context, .addition], from: 0), hunk(1, [.deletion], from: 2)], sideBySide: false)
         // Rows: header(0), 0, 1, header(1), 2
