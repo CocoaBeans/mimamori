@@ -1,11 +1,15 @@
 name: CI
 
 on:
-  # Each pull request is built and tested before it merges, and merging rebases it onto main,
-  # so main is not built again: a macOS minute counts ten times against a private repository's
-  # quota. Run the workflow by hand (Actions › CI › Run workflow) to build main.
+  # Each pull request is built and tested before it merges, and main again once it lands, so the
+  # README's badge shows main's state. Hosted runners cost nothing for a public repository.
   pull_request:
     # Documentation alone needs no build.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  push:
+    branches: [main]
     paths-ignore:
       - '**.md'
       - 'docs/**'

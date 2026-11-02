@@ -35,6 +35,7 @@ enum BuildInfo {
 
     /// The standard About window, with what Mimamori is under the version, then the commit it
     /// was built from, linked to it on GitHub.
+    @MainActor
     static func showAboutPanel() {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
