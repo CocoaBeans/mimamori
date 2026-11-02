@@ -57,18 +57,19 @@ final class Updates {
         self.controller = controller
         let updater = controller.updater
         // Sparkle changes these itself too: when a check starts or ends, and when you answer
-        // its question about checking by itself.
+        // its question about checking by itself. Each value comes with the change, since the
+        // updater's own properties belong to the main actor and these closures don't.
         observations = [
-            updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
-                let value = updater.canCheckForUpdates
+            updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] _, change in
+                guard let value = change.newValue else { return }
                 Task { @MainActor in self?.canCheck = value }
             },
-            updater.observe(\.automaticallyChecksForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
-                let value = updater.automaticallyChecksForUpdates
+            updater.observe(\.automaticallyChecksForUpdates, options: [.initial, .new]) { [weak self] _, change in
+                guard let value = change.newValue else { return }
                 Task { @MainActor in if self?.checksAutomatically != value { self?.checksAutomatically = value } }
             },
-            updater.observe(\.automaticallyDownloadsUpdates, options: [.initial, .new]) { [weak self] updater, _ in
-                let value = updater.automaticallyDownloadsUpdates
+            updater.observe(\.automaticallyDownloadsUpdates, options: [.initial, .new]) { [weak self] _, change in
+                guard let value = change.newValue else { return }
                 Task { @MainActor in if self?.installsAutomatically != value { self?.installsAutomatically = value } }
             },
         ]
