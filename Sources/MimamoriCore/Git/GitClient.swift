@@ -151,7 +151,8 @@ public struct GitClient: Sendable {
 
     public func status(in worktree: URL) async throws -> PorcelainStatus {
         let result = try await run(
-            ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal", "--no-renames"],
+            // Untracked files one by one, not their folders: the shadow index takes this list too.
+            ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all", "--no-renames"],
             in: worktree, options: Options(timeout: .seconds(120)))
         return PorcelainStatusParser.parse(result.stdout)
     }
@@ -279,6 +280,36 @@ public struct GitClient: Sendable {
             ["diff", "--cached", "--raw", "-z", "-M", "--no-abbrev", "--no-ext-diff", base],
             in: worktree, options: Options(indexFile: indexFile, timeout: .seconds(120)))
         return RawDiffParser.parse(result.stdout)
+    }
+
+    /// The raw diff and the line counts against `base` from one run of git, which prints the
+    /// `--raw` entries and then the `--numstat` ones.
+    public func rawDiffAndNumstat(base: String, indexFile: URL, in worktree: URL) async throws -> ([RawDiffEntry], [NumstatEntry]) {
+        let result = try await run(
+            ["diff", "--cached", "--raw", "--numstat", "-z", "-M", "--no-abbrev", "--no-ext-diff", base],
+            in: worktree, options: Options(indexFile: indexFile, timeout: .seconds(120)))
+        let (raw, numstat) = Self.splitRawAndNumstat(result.stdout)
+        return (RawDiffParser.parse(raw), NumstatParser.parse(numstat))
+    }
+
+    /// Where the `--raw` part of a combined `-z` diff ends: each raw entry is a header starting
+    /// with ":" and one path, or two for a rename or copy; the numstat lines follow.
+    static func splitRawAndNumstat(_ data: Data) -> (raw: Data, numstat: Data) {
+        let bytes = [UInt8](data)
+        var index = 0
+        func token() -> ArraySlice<UInt8>? {
+            guard index < bytes.count, let end = bytes[index...].firstIndex(of: 0) else { return nil }
+            defer { index = end + 1 }
+            return bytes[index..<end]
+        }
+        while index < bytes.count, bytes[index] == UInt8(ascii: ":") {
+            let start = index
+            guard let header = token() else { index = start; break }
+            let status = header.split(separator: UInt8(ascii: " ")).last?.first
+            let paths = status == UInt8(ascii: "R") || status == UInt8(ascii: "C") ? 2 : 1
+            for _ in 0..<paths where token() == nil { break }
+        }
+        return (Data(bytes[..<index]), Data(bytes[index...]))
     }
 
     public func numstat(base: String, indexFile: URL, in worktree: URL) async throws -> [NumstatEntry] {

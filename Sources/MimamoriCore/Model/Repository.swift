@@ -152,6 +152,13 @@ public struct WorktreeState: Sendable, Hashable {
     /// A merge, rebase, cherry-pick or revert the worktree is in the middle of.
     public var operation: WorktreeOperation?
 
+    /// Whether `other` shows the same as this, whenever each was taken.
+    public func sameContent(as other: WorktreeState) -> Bool {
+        var copy = self
+        copy.timestamp = other.timestamp
+        return copy == other
+    }
+
     public init(timestamp: Date, branch: BranchInfo, baseline: ResolvedBaseline, defaultBranch: String?,
                 changes: [FileChange], headChanges: [FileChange], excludedLargeFiles: [String], shadowTreeOID: String?,
                 operation: WorktreeOperation? = nil) {

@@ -35,6 +35,8 @@ public actor WorktreeInspector {
     /// A commit's files with their flags; commits never change, so only new rules clear it.
     private var commitChangesCache: [String: [FileChange]] = [:]
     private var lastSnapshotTree: String?
+    /// HEAD's commit subject, kept while HEAD stays put.
+    private var headSubject: (oid: String, subject: String?)?
     private var loadedSnapshotsOnce = false
 
     public static func worktreeID(for path: URL) -> String {
@@ -70,11 +72,14 @@ public actor WorktreeInspector {
     // MARK: Refresh
 
     public func refresh(baseline: Baseline) async throws -> WorktreeState {
-        let excluded = try await syncShadowIndex()
+        // Status first: its list of untracked files saves the shadow index a walk of its own.
         let status = try await git.status(in: worktree)
+        let excluded = try await syncShadowIndex(untracked: status.untracked)
         var branch = status.branchInfo
-        if branch.headOID != nil {
-            branch.headSubject = await git.headSubject(in: worktree)
+        if let head = branch.headOID {
+            // The subject only changes with HEAD.
+            if headSubject?.oid != head { headSubject = (head, await git.headSubject(in: worktree)) }
+            branch.headSubject = headSubject?.subject
         }
         let headTreeish: String
         if let head = branch.headOID {
@@ -406,9 +411,13 @@ public actor WorktreeInspector {
 
     // MARK: Internals
 
-    private func syncShadowIndex() async throws -> [String] {
+    /// Brings the shadow index up to the working tree, leaving out untracked files over the size
+    /// limit. `untracked` is the list from a status just run, if there is one.
+    private func syncShadowIndex(untracked known: [String]? = nil) async throws -> [String] {
         var excluded: [String] = []
-        let untracked = (try? await git.untrackedFiles(in: worktree)) ?? []
+        let listed: [String]?
+        if let known { listed = known } else { listed = try? await git.untrackedFiles(in: worktree) }
+        let untracked = listed ?? []
         if !untracked.isEmpty {
             let limit = configuration.largeFileLimit
             for path in untracked {
@@ -485,9 +494,8 @@ public actor WorktreeInspector {
     }
 
     private func changes(against base: String, status: PorcelainStatus) async throws -> [FileChange] {
-        async let rawTask = git.rawDiff(base: base, indexFile: shadowIndexURL, in: worktree)
-        async let numstatTask = git.numstat(base: base, indexFile: shadowIndexURL, in: worktree)
-        let (raw, numstats) = try await (rawTask, numstatTask)
+        let (raw, numstats) = try await git.rawDiffAndNumstat(base: base, indexFile: shadowIndexURL, in: worktree)
+        let isUntracked = status.untrackedLookup()
 
         var numstatByPath: [String: NumstatEntry] = [:]
         for entry in numstats { numstatByPath[entry.path] = entry }
@@ -509,7 +517,7 @@ public actor WorktreeInspector {
                 additions: numstat?.additions,
                 deletions: numstat?.deletions,
                 isBinary: numstat?.isBinary ?? false,
-                isUntracked: status.isUntracked(entry.path),
+                isUntracked: isUntracked(entry.path),
                 isStaged: statusEntry?.isStaged ?? false,
                 hasConflict: statusEntry?.isUnmerged ?? false)
         }

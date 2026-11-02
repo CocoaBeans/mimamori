@@ -50,6 +50,25 @@ extension AppModel {
     }
 }
 
+/// An agent's row, reading the agents' clock itself: when it ticks, only the rows redraw, not the
+/// window around them, which would build and sort every row again.
+private struct ClockedDashboardRow: View {
+    @Environment(AppModel.self) private var model
+    let row: AgentRow
+    let detailed: Bool
+    let canGoToAgent: Bool
+    let onGoToAgent: () -> Void
+    let onSummary: () -> Void
+    let onOpenFile: (String) -> Void
+    let onDismissCollision: () -> Void
+
+    var body: some View {
+        AgentDashboardRow(row: row, now: model.agentNow, detailed: detailed, canGoToAgent: canGoToAgent,
+                          onGoToAgent: onGoToAgent, onSummary: onSummary, onOpenFile: onOpenFile,
+                          onDismissCollision: onDismissCollision)
+    }
+}
+
 /// A small window listing what every agent is doing; click a row to open its worktree.
 struct AgentsWindowView: View {
     @Environment(AppModel.self) private var model
@@ -125,8 +144,8 @@ struct AgentsWindowView: View {
 
     private func card(_ row: AgentRow, detailed: Bool) -> some View {
         AgentCard(presence: row.presence) {
-            AgentDashboardRow(
-                row: row, now: model.agentNow, detailed: detailed,
+            ClockedDashboardRow(
+                row: row, detailed: detailed,
                 canGoToAgent: AgentApps.canGo(to: row.presence),
                 onGoToAgent: { goToAgent(row) },
                 onSummary: { summary(row) },

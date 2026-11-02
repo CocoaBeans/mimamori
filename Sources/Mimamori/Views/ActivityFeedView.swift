@@ -5,14 +5,25 @@ struct ActivityFeedView: View {
     @Environment(AppModel.self) private var model
     /// Agent runs opened to show their steps, by the run's id.
     @State private var openRuns: Set<UUID> = []
+    /// How many entries the feed lists. Every entry listed is grouped and compared again each
+    /// time the feed changes, twice a second while agents work, and a week of activity runs to
+    /// thousands; the rest wait for Show Earlier Activity.
+    @State private var limit = Self.page
+    private static let page = 400
 
-    private var entries: [ActivityEntry] {
+    /// The newest entries that pass the filters, up to `limit`, and whether there are more.
+    private var entries: (shown: [ActivityEntry], more: Bool) {
         let filter = model.activityAgentFilter
         let selected = model.activityScopeAll ? nil : model.selectedWorktreeID
-        guard selected != nil || filter != .all else { return model.activity }
-        return model.activity.filter { entry in
-            (selected == nil || entry.worktreePath == selected) && filter.includes(entry)
+        guard selected != nil || filter != .all else {
+            return (Array(model.activity.prefix(limit)), model.activity.count > limit)
         }
+        var shown: [ActivityEntry] = []
+        for entry in model.activity where (selected == nil || entry.worktreePath == selected) && filter.includes(entry) {
+            if shown.count == limit { return (shown, true) }
+            shown.append(entry)
+        }
+        return (shown, false)
     }
 
     private var emptyTitle: String {
@@ -33,33 +44,43 @@ struct ActivityFeedView: View {
 
     var body: some View {
         @Bindable var model = model
-        let entries = entries
+        let (entries, more) = entries
         Group {
             if entries.isEmpty {
                 ContentUnavailableView(emptyTitle, systemImage: model.activityAgentFilter == .agentsOnly ? "sparkles" : "eye",
                                        description: Text(emptyDescription))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(ActivityFeedGrouping.items(entries)) { item in
-                    Group {
-                        switch item {
-                        case .day(let day):
-                            DayHeader(day: day, now: model.now)
-                                .listRowSeparator(.hidden)
-                        case .entry(let entry):
-                            ActivityRow(entry: entry, showWorktree: model.activityScopeAll, now: model.now,
-                                        worktreeName: model.sessions[entry.worktreePath]?.displayName)
-                                .equatable()
-                        case .run(let run):
-                            AgentRunRow(run: run, showWorktree: model.activityScopeAll, now: model.now,
-                                        worktreeName: model.sessions[run.worktreePath]?.displayName,
-                                        isOpen: Binding(get: { openRuns.contains(run.id) || model.debugFlags.contains("open-runs") },
-                                                        set: { if $0 { openRuns.insert(run.id) } else { openRuns.remove(run.id) } }))
+                List {
+                    ForEach(ActivityFeedGrouping.items(entries)) { item in
+                        Group {
+                            switch item {
+                            case .day(let day):
+                                DayHeader(day: day, now: model.now)
+                                    .listRowSeparator(.hidden)
+                            case .entry(let entry):
+                                ActivityRow(entry: entry, showWorktree: model.activityScopeAll, now: model.now,
+                                            worktreeName: model.sessions[entry.worktreePath]?.displayName)
+                                    .equatable()
+                            case .run(let run):
+                                AgentRunRow(run: run, showWorktree: model.activityScopeAll, now: model.now,
+                                            worktreeName: model.sessions[run.worktreePath]?.displayName,
+                                            isOpen: Binding(get: { openRuns.contains(run.id) || model.debugFlags.contains("open-runs") },
+                                                            set: { if $0 { openRuns.insert(run.id) } else { openRuns.remove(run.id) } }))
+                            }
                         }
+                        // A faint line between entries, starting under the text rather than the icon.
+                        .listRowSeparatorTint(Color.primary.opacity(0.08))
+                        .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 6))
                     }
-                    // A faint line between entries, starting under the text rather than the icon.
-                    .listRowSeparatorTint(Color.primary.opacity(0.08))
-                    .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 6))
+                    if more {
+                        Button("Show Earlier Activity") { limit += Self.page }
+                            .buttonStyle(.link)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .listRowSeparator(.hidden)
+                            .help("List \(Self.page) more of the earlier entries")
+                    }
                 }
                 .listStyle(.plain)
             }

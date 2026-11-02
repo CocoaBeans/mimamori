@@ -39,6 +39,13 @@ public struct PorcelainStatus: Sendable, Hashable {
         BranchInfo(headOID: headOID, branch: branch, upstream: upstream, ahead: ahead, behind: behind)
     }
 
+    /// `isUntracked`, for checking many paths: a set lookup instead of a walk of the list each time.
+    public func untrackedLookup() -> @Sendable (String) -> Bool {
+        let files = Set(untracked.filter { !$0.hasSuffix("/") })
+        let folders = untracked.filter { $0.hasSuffix("/") }
+        return { path in files.contains(path) || folders.contains { path.hasPrefix($0) } }
+    }
+
     public func isUntracked(_ path: String) -> Bool {
         for item in untracked {
             if item.hasSuffix("/") {

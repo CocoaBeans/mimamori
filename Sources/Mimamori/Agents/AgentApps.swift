@@ -21,8 +21,20 @@ enum AgentApps {
         app.activate()
     }
 
-    static func canGo(to presence: AgentPresence) -> Bool {
-        !presence.processIDs.isEmpty || appNamed(like: presence.kind) != nil
+    @MainActor static func canGo(to presence: AgentPresence) -> Bool {
+        !presence.processIDs.isEmpty || recentlyFound(like: presence.kind)
+    }
+
+    /// Whether an app for `kind` was running when last looked for. Lists of agents ask on every
+    /// redraw, and going through every running app each time costs more than the answer's worth;
+    /// a few seconds old is fresh enough for whether to show a button.
+    @MainActor private static var found: [String: (at: Date, running: Bool)] = [:]
+
+    @MainActor private static func recentlyFound(like kind: AgentKind) -> Bool {
+        if let known = found[kind.id], Date().timeIntervalSince(known.at) < 5 { return known.running }
+        let running = appNamed(like: kind) != nil
+        found[kind.id] = (Date(), running)
+        return running
     }
 
     /// Walks up from a process to the first ancestor that is a regular app.

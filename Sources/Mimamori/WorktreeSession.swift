@@ -37,7 +37,8 @@ final class WorktreeSession: Identifiable {
     private(set) var phase: Phase = .starting
     private(set) var lastError: String?
     private(set) var snapshots: [SnapshotRecord] = []
-    private(set) var lastRefreshDuration: TimeInterval?
+    /// For the debug dump only; no view shows it, so it does not redraw any.
+    @ObservationIgnored private(set) var lastRefreshDuration: TimeInterval?
     private(set) var lastActivityDate: Date?
     private(set) var watcherActive = false
     private(set) var attributions: [String: ChangeAttribution] = [:]
@@ -399,8 +400,8 @@ final class WorktreeSession: Identifiable {
             }
             let events = StateDiffer.events(previous: previous, current: fresh, worktreePath: id, commits: commits)
             apply(fresh, events: events)
-            phase = .idle
-            lastError = nil
+            if phase != .idle { phase = .idle }
+            if lastError != nil { lastError = nil }
             if history != nil, history?.head != fresh.branch.headOID { await reloadHistory() }
             await snapshotIfNeeded(fresh)
         } catch {
@@ -416,11 +417,15 @@ final class WorktreeSession: Identifiable {
     }
 
     private func apply(_ fresh: WorktreeState, events incoming: [ActivityEntry]) {
-        state = fresh
-        changes = fresh.changes
+        // Setting an observed property redraws every view showing it, even to the value it had,
+        // and most refreshes (a backstop poll, an agent touching a file back) find nothing new.
+        if state.map({ !$0.sameContent(as: fresh) }) ?? true { state = fresh }
         var byPath: [String: FileChange] = [:]
         for change in fresh.changes { byPath[change.path] = change }
-        changesByPath = byPath
+        if changes != fresh.changes {
+            changes = fresh.changes
+            changesByPath = byPath
+        }
 
         let now = Date()
         var events = incoming
@@ -442,7 +447,8 @@ final class WorktreeSession: Identifiable {
             default: break
             }
         }
-        attributions = attributions.filter { byPath[$0.key] != nil }
+        let kept = attributions.filter { byPath[$0.key] != nil }
+        if kept.count != attributions.count { attributions = kept }
         // An unavailable baseline lists nothing, which says nothing about what is still changed.
         if fresh.baseline.isAvailable, !reviews.isEmpty,
            reviews.prune(keepingPaths: Set(byPath.keys), olderThan: now.addingTimeInterval(-Self.reviewRetention)) {
