@@ -470,6 +470,8 @@ struct WorktreeHeaderView: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    // Enough for "feat…odes": the counts beside it give way before the name goes.
+                    .frame(minWidth: 72, alignment: .leading)
                 if let branch = session.state?.branch {
                     if let ahead = branch.ahead, ahead > 0 {
                         Text("↑\(ahead)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -480,8 +482,8 @@ struct WorktreeHeaderView: View {
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 8) {
-                    // Once the branch name is cut to nothing, the counts drop the file count, then
-                    // the totals, then the words of To review: a header wider than the column
+                    // Once the branch name is cut to its shortest, the counts drop the file count,
+                    // then the totals, then the words of To review: a header wider than the column
                     // would widen the window instead.
                     ViewThatFits(in: .horizontal) {
                         counts(files: true, totals: true)
