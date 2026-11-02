@@ -1,6 +1,6 @@
 # Mimamori
 
-*Mimamori* (見守り, mee-mah-MOH-ree) is Japanese for watching over someone with care: the way you watch children at play, ready to step in. It was called Vigil until November 2026.
+*Mimamori* (見守り, mee-mah-MOH-ree) is Japanese for watching over someone with care: the way you watch children at play, ready to step in.
 
 [![CI](https://github.com/CocoaBeans/mimamori/actions/workflows/ci.yml/badge.svg)](https://github.com/CocoaBeans/mimamori/actions/workflows/ci.yml)
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-blue)
