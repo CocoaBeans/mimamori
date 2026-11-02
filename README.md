@@ -250,11 +250,12 @@ The widget is an app extension running sandboxed in its own process. Mimamori wr
 
 ## Privacy and footprint
 
-Mimamori talks to nothing but your local `git`. It has no network code beyond a Unix-domain socket that only your own processes can reach (the socket file is readable and writable by you alone), and no telemetry. On disk it writes:
+Mimamori talks to nothing but your local `git`, and a Unix-domain socket that only your own processes can reach (the socket file is readable and writable by you alone). It has no telemetry. The one exception is updates, in release builds only: [Sparkle](https://sparkle-project.org) fetches the list of releases (`appcast.xml`) from GitHub when you choose Mimamori › Check for Updates, or once a day if you said yes when it asked, the second time you opened Mimamori. Nothing about you or your Mac goes with it. A new version is checked against Mimamori's signing key before it is installed. Builds you make yourself never check. On disk it writes:
 
 - `~/Library/Application Support/Mimamori/`: settings, the list of watched repositories, review marks, the shadow index files, and `activity.jsonl`, the activity feed (one JSON entry per line, kept for the number of days you choose).
 - `refs/monitor/…` inside watched repositories, for snapshots (see above).
 - `~/.claude/settings.json`, only when you click Install Hooks or a newer Mimamori adds events to hooks you installed, with a backup beside it.
+- In release builds, Sparkle's settings (when it last checked, and whether to check by itself) in Mimamori's preferences, and a downloaded update in `~/Library/Caches/com.kevinross.Mimamori/` until it is installed.
 
 ## Development
 
@@ -330,11 +331,13 @@ Example: `open --env MIMAMORI_SCREENSHOT=/tmp/mimamori.png build/Mimamori.app`
 
 ### Releasing
 
-`Scripts/release.sh` archives Mimamori, exports it signed with Developer ID (the app and its widget extension, each with its entitlements and the hardened runtime), notarizes and staples it, then packs it into `build/Mimamori-<version>.dmg`, notarized and stapled in turn, and prints the DMG's SHA-256 for a Homebrew cask.
+`Scripts/release.sh` archives Mimamori, exports it signed with Developer ID (the app and its widget extension, each with its entitlements and the hardened runtime), notarizes and staples it, then packs it into `build/Mimamori-<version>.dmg`, notarized and stapled in turn. It signs the DMG for Sparkle, writes `build/appcast.xml` offering it, and prints the DMG's SHA-256 for a Homebrew cask and the `gh release create` command that publishes both.
 
-- It needs a Developer ID Application certificate for the team, in the login keychain or cloud-managed (xcodebuild can sign with one when the API key has the Admin role), and an App Store Connect API key passed as `ASC_KEY_ID` and `ASC_ISSUER_ID` (the key file is read from `~/.appstoreconnect/private_keys/`).
-- It refuses uncommitted changes, so About names the commit released. Raise `CFBundleVersion` in `Resources/Info.plist` for every release.
-- `RELEASE_DRY_RUN=1 Scripts/release.sh` checks the archive, the entitlements and the DMG with the everyday development signing, without notarizing.
+- **Version.** The version and build number live in the project's build settings (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`), which both Info.plists read. `Scripts/set-version.sh 1.0.1` sets the next version and raises the build number by one; Sparkle compares build numbers, so every release needs a higher one. Run it with no version to see the current one.
+- **Signing.** It needs a Developer ID Application certificate for the team, in the login keychain or cloud-managed (xcodebuild can sign with one when the API key has the Admin role), and an App Store Connect API key passed as `ASC_KEY_ID` and `ASC_ISSUER_ID` (the key file is read from `~/.appstoreconnect/private_keys/`).
+- **Updates.** Release builds carry `MimamoriReleaseBuild`, which turns Sparkle on. The DMG is signed with Sparkle's EdDSA key, kept in the login keychain under the account `mimamori` (made once with Sparkle's `generate_keys --account mimamori`; its public half is `SUPublicEDKey` in `Resources/Info.plist`). Back that key up with `generate_keys --account mimamori -x <file>`: without it, no installed copy will accept another update. The tools come with the Sparkle package, in `build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/`.
+- **Publishing.** The app reads its feed from `https://github.com/<owner>/mimamori/releases/latest/download/appcast.xml` (`MIMAMORI_FEED_URL`), so each GitHub release carries the DMG and `appcast.xml`, tagged `v<version>`; the newest release's appcast is the one every copy sees.
+- It refuses uncommitted changes, so About names the commit released. `RELEASE_DRY_RUN=1 Scripts/release.sh` checks the archive, the entitlements, the DMG and the appcast with the everyday development signing, without notarizing. Add `RELEASE_FEED_URL=http://127.0.0.1:8765/appcast.xml` to build a copy that looks for updates there instead, with the DMG offered beside the feed: build one version, then a higher one, serve the second's DMG and appcast with `python3 -m http.server 8765`, and the first finds and installs it.
 
 ## Ideas not built yet
 

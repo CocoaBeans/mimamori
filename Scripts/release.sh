@@ -1,12 +1,19 @@
 #!/bin/zsh
 # Builds a release: archives Mimamori, exports it signed with Developer ID (the app and its widget
 # extension, each with its own entitlements and the hardened runtime), notarizes and staples it,
-# then packs it in a DMG that is notarized and stapled in turn. Leaves build/Mimamori-<version>.dmg
-# and prints its SHA-256 for the Homebrew cask.
+# then packs it in a DMG that is notarized and stapled in turn. Signs the DMG for Sparkle and
+# writes the appcast that offers it. Leaves build/Mimamori-<version>.dmg and build/appcast.xml,
+# and prints the DMG's SHA-256 for the Homebrew cask and the command that publishes both.
+#
+# The version is the project's MARKETING_VERSION and the build number its CURRENT_PROJECT_VERSION
+# (Scripts/set-version.sh changes them); Sparkle compares build numbers, so each release needs a
+# higher one.
 #
 # Requirements:
 #   - A "Developer ID Application" certificate for the project's team: in the login keychain, or
 #     cloud-managed, which xcodebuild can sign with when the API key below has the Admin role.
+#   - Sparkle's signing key, made once with Sparkle's generate_keys --account mimamori, in the
+#     login keychain (its public half is SUPublicEDKey in Resources/Info.plist).
 #   - An App Store Connect API key, for xcodebuild's signing and for notarytool:
 #       ASC_KEY_ID      the key id (the file is read from
 #                       ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8,
@@ -23,9 +30,23 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DRY_RUN="${RELEASE_DRY_RUN:-0}"
-VERSION="$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)"
-BUILD="$(plutil -extract CFBundleVersion raw Resources/Info.plist)"
-TEAM="$(grep -m1 -o 'DEVELOPMENT_TEAM = [A-Z0-9]*' Mimamori.xcodeproj/project.pbxproj | awk '{print $3}')"
+setting() { grep -m1 -o "$1 = [^;]*" Mimamori.xcodeproj/project.pbxproj | sed "s/^$1 = //" }
+VERSION="$(setting MARKETING_VERSION)"
+BUILD="$(setting CURRENT_PROJECT_VERSION)"
+TEAM="$(setting DEVELOPMENT_TEAM)"
+MINIMUM_SYSTEM="$(setting MACOSX_DEPLOYMENT_TARGET)"
+# Releases are published on GitHub, where the app looks for its feed. RELEASE_FEED_URL builds
+# one that looks elsewhere instead, with the DMG beside the feed: to try an update locally.
+FEED="${RELEASE_FEED_URL:-$(setting MIMAMORI_FEED_URL | tr -d '"')}"
+if [[ $FEED == */releases/latest/download/appcast.xml ]]; then
+  REPOSITORY="${FEED%/releases/latest/download/appcast.xml}"
+  DOWNLOAD="$REPOSITORY/releases/download/v$VERSION/Mimamori-$VERSION.dmg"
+  NOTES="$REPOSITORY/releases/tag/v$VERSION"
+else
+  REPOSITORY="${FEED%/*}"
+  DOWNLOAD="$REPOSITORY/Mimamori-$VERSION.dmg"
+  NOTES=""
+fi
 OUT=build/release
 ARCHIVE=$OUT/Mimamori.xcarchive
 EXPORT=$OUT/export
@@ -33,6 +54,7 @@ APP=$EXPORT/Mimamori.app
 WIDGETS=$APP/Contents/PlugIns/MimamoriWidgets.appex
 STAGE=$OUT/dmg
 DMG=build/Mimamori-$VERSION.dmg
+APPCAST=build/appcast.xml
 
 COMMIT="$(git rev-parse --short=8 HEAD)"
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
@@ -75,7 +97,8 @@ rm -rf $OUT
 mkdir -p $OUT
 echo "Archiving Mimamori $VERSION ($BUILD) from $COMMIT…"
 xcodebuild -project Mimamori.xcodeproj -scheme Mimamori -configuration Release -archivePath $ARCHIVE \
-  -derivedDataPath build/DerivedData MIMAMORI_COMMIT="$COMMIT" "${AUTH[@]}" -quiet archive
+  -derivedDataPath build/DerivedData MIMAMORI_COMMIT="$COMMIT" MIMAMORI_RELEASE_BUILD=YES \
+  MIMAMORI_FEED_URL="$FEED" "${AUTH[@]}" -quiet archive
 
 # Xcode signs every part of the app, inside out, for the chosen way of distributing it.
 cat > $OUT/ExportOptions.plist <<PLIST
@@ -133,6 +156,31 @@ if [[ $DRY_RUN != 1 ]]; then
   spctl --assess --type execute --verbose=1 $APP
 fi
 
+# Sparkle checks an update against the app's public key before it installs anything, so the
+# DMG, as stapled, is signed with the private key in the keychain. The appcast offers it.
+SPARKLE=build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin
+ENCLOSURE="$($SPARKLE/sign_update --account mimamori $DMG)"
+[[ $ENCLOSURE == *edSignature=* ]] || { echo "Sparkle could not sign the DMG: $ENCLOSURE" >&2; exit 1; }
+cat > $APPCAST <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Mimamori</title>
+    <link>$REPOSITORY</link>
+    <item>
+      <title>Mimamori $VERSION</title>
+      <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
+      <sparkle:version>$BUILD</sparkle:version>
+      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>$MINIMUM_SYSTEM</sparkle:minimumSystemVersion>
+$([[ -n $NOTES ]] && echo "      <sparkle:releaseNotesLink>$NOTES</sparkle:releaseNotesLink>")
+      <enclosure url="$DOWNLOAD" type="application/octet-stream" $ENCLOSURE/>
+    </item>
+  </channel>
+</rss>
+XML
+xmllint --noout $APPCAST
+
 # The archive and export are app copies Launch Services would otherwise offer to run, widget
 # included; keep build/Mimamori.app as the one it knows, as make-app.sh does.
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
@@ -142,4 +190,6 @@ done
 [[ -d build/Mimamori.app ]] && { "$LSREGISTER" -f "$PWD/build/Mimamori.app" >/dev/null 2>&1 || true; }
 
 echo "Ready: $PWD/$DMG$([[ $DRY_RUN == 1 ]] && echo ' (dry run: development signing, not notarized)')"
+echo "Appcast: $PWD/$APPCAST (Mimamori $VERSION, build $BUILD)"
 echo "SHA-256: $(shasum -a 256 $DMG | cut -d' ' -f1)"
+[[ $DRY_RUN == 1 || -z $NOTES ]] || echo "Publish: gh release create v$VERSION $DMG $APPCAST --repo ${REPOSITORY#https://github.com/} --title 'Mimamori $VERSION'"

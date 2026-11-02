@@ -6,6 +6,8 @@ import MimamoriCore
 struct MimamoriApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
+    /// Started with the app, so Sparkle can check on its schedule.
+    @State private var updates = Updates()
 
     init() {
         if Bundle.main.bundleURL.pathExtension != "app" {
@@ -25,7 +27,7 @@ struct MimamoriApp: App {
         .windowToolbarStyle(.unified)
         // mimamori:// links (from the desktop widgets) open here, whichever window is in front.
         .handlesExternalEvents(matching: ["*"])
-        .commands { MimamoriCommands(model: model) }
+        .commands { MimamoriCommands(model: model, updates: updates) }
 
         // One per worktree, so a summary can sit beside your work. A summary reopened after a
         // relaunch could name a worktree no longer watched, so they are not restored.
@@ -62,6 +64,7 @@ struct MimamoriApp: App {
         Settings {
             SettingsView()
                 .environment(model)
+                .environment(updates)
         }
 
         MenuBarExtra(isInserted: Binding(
@@ -87,12 +90,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MimamoriCommands: Commands {
     let model: AppModel
+    let updates: Updates
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Mimamori") { BuildInfo.showAboutPanel() }
+            if updates.isEnabled {
+                Button("Check for Updates…") { updates.checkForUpdates() }
+                    .disabled(!updates.canCheck)
+            }
         }
         CommandGroup(after: .help) {
             Button("Troubleshoot Agent Hooks…") {

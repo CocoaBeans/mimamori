@@ -30,6 +30,7 @@ struct SettingsBinding {
 
 struct GeneralSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(Updates.self) private var updates
     @State private var gitPath = ""
 
     var body: some View {
@@ -93,8 +94,33 @@ struct GeneralSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            updatesSection
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder private var updatesSection: some View {
+        @Bindable var updates = updates
+        Section {
+            if updates.isEnabled {
+                Toggle("Check for updates automatically", isOn: $updates.checksAutomatically)
+                    .help("Look for a new version of Mimamori once a day")
+                Toggle("Download and install updates automatically", isOn: $updates.installsAutomatically)
+                    .help("Install a new version found by itself when Mimamori quits, without asking first")
+                    .disabled(!updates.checksAutomatically)
+                LabeledContent("Version", value: BuildInfo.summary)
+                Button("Check Now") { updates.checkForUpdates() }
+                    .disabled(!updates.canCheck)
+            } else {
+                LabeledContent("Version", value: BuildInfo.summary)
+            }
+        } header: {
+            Text("Updates")
+        } footer: {
+            Text(updates.isEnabled
+                 ? "Checking fetches a short list of releases from GitHub, and nothing about you or your Mac goes with it."
+                 : "This build doesn't update itself; releases made with Scripts/release.sh do.")
+        }
     }
 
     private func commitGitPath() {

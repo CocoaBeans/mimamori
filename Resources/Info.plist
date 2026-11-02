@@ -19,7 +19,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -48,8 +48,10 @@
 	</array>
 	<key>MimamoriCommit</key>
 	<string>$(MIMAMORI_COMMIT)</string>
+	<key>MimamoriReleaseBuild</key>
+	<string>$(MIMAMORI_RELEASE_BUILD)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
@@ -74,5 +76,9 @@
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>SUFeedURL</key>
+	<string>$(MIMAMORI_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>tkoovX2qb2KHhyoECFTwd9lw6fhADnKa0AHFfG1hQV8=</string>
 </dict>
 </plist>
