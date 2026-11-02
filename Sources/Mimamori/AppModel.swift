@@ -77,6 +77,10 @@ final class AppModel {
     private var repositoryWatchers: [UUID: FSEventsWatcher] = [:]
     private var rediscoverTasks: [UUID: Task<Void, Never>] = [:]
     let notifier = Notifier()
+    /// Whether the Agents window is open; saved, so it opens again at launch. Windows that close
+    /// because Mimamori quits leave it as it was.
+    @ObservationIgnored var agentsWindowOpen = false
+    @ObservationIgnored var isQuitting = false
     /// Repositories agents work in that Mimamori could watch, waiting for your answer.
     var repositoryOffers: [RepositoryOffer] = []
     /// What git said about folders agents worked in, so each is asked about once.
@@ -99,6 +103,7 @@ final class AppModel {
         self.sortOrder = persisted.ui.sortOrder
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
+        self.agentsWindowOpen = persisted.ui.agentsWindowOpen
         self.collapsedRepositories = persisted.collapsedRepositories
         self.hiddenWorktrees = persisted.hiddenWorktrees
         self.activityLog = ActivityLog(url: Persistence.activityURL,
@@ -119,6 +124,7 @@ final class AppModel {
         // Review marks and other edits are saved after a short delay; do not lose them on quit.
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.isQuitting = true
                 self?.persistNow()
                 self?.activityLog.flush()
             }
@@ -775,11 +781,20 @@ final class AppModel {
 
     // MARK: Persistence
 
+    /// The Agents window opened or closed. Closing because Mimamori quits does not count, so a
+    /// window open at quit opens again at launch.
+    func agentsWindowChanged(open: Bool) {
+        guard !isQuitting, agentsWindowOpen != open else { return }
+        agentsWindowOpen = open
+        persistUISoon()
+    }
+
     func persistUISoon() {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
-                                        activityAgentFilter: activityAgentFilter, showCommits: showCommits)
+                                        activityAgentFilter: activityAgentFilter, showCommits: showCommits,
+                                        agentsWindowOpen: agentsWindowOpen)
         persistSoon()
     }
 
@@ -797,7 +812,8 @@ final class AppModel {
         persisted.ui = PersistedUIState(showActivity: showActivity, flaggedOnly: flaggedOnly, sortOrder: sortOrder,
                                         selectedWorktree: selectedWorktreeID, activityScopeAll: activityScopeAll,
                                         hideReviewed: hideReviewed, sidebarAgentsOnly: sidebarAgentsOnly,
-                                        activityAgentFilter: activityAgentFilter, showCommits: showCommits)
+                                        activityAgentFilter: activityAgentFilter, showCommits: showCommits,
+                                        agentsWindowOpen: agentsWindowOpen)
         saveTask?.cancel()
         Persistence.save(persisted)
     }

@@ -41,7 +41,8 @@ struct ContentView: View {
         .onChange(of: model.selectedWorktreeID) { model.persistUISoon() }
         .frame(minHeight: 480)
         .onAppear {
-            if model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
+            // The Agents window opens again if it was open when Mimamori last quit.
+            if model.agentsWindowOpen || model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
             // "settings:<pane>": open Settings on that pane, as the attention popover's button does.
             if let tab = SettingsTab.allCases.first(where: { model.debugFlags.contains("settings:" + $0.rawValue) }) {
                 model.settingsTab = tab
