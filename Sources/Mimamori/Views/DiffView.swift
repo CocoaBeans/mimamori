@@ -246,6 +246,18 @@ struct DiffHeaderView: View {
             })
     }
 
+    private func reviewedToggle(_ onToggle: @escaping () -> Void) -> some View {
+        Toggle(isOn: Binding(get: { review.isReviewed }, set: { _ in onToggle() })) {
+            Label("Reviewed", systemImage: review.isReviewed ? "checkmark.circle.fill" : "circle")
+        }
+        .toggleStyle(.button)
+        .controlSize(.small)
+        .fixedSize()
+        .help(review.isReviewed
+              ? "You reviewed this version. Click to mark it as not reviewed (⌘↩)."
+              : "Mark as reviewed and go to the next file to review (⌘↩)")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             // Title row: only the path has to give way, everything else keeps its size.
@@ -259,16 +271,15 @@ struct DiffHeaderView: View {
                     .layoutPriority(0)
                 Spacer(minLength: 8)
                 if let onToggleReviewed {
-                    Toggle(isOn: Binding(get: { review.isReviewed }, set: { _ in onToggleReviewed() })) {
-                        Label("Reviewed", systemImage: review.isReviewed ? "checkmark.circle.fill" : "circle")
+                    // Once the path is cut to nothing, the toggle drops its title: a header wider
+                    // than the column would widen the window instead.
+                    ViewThatFits(in: .horizontal) {
+                        reviewedToggle(onToggleReviewed)
+                            .labelStyle(.titleAndIcon)
+                        reviewedToggle(onToggleReviewed)
+                            .labelStyle(.iconOnly)
                     }
-                    .toggleStyle(.button)
-                    .labelStyle(.titleAndIcon)
-                    .controlSize(.small)
-                    .fixedSize()
-                    .help(review.isReviewed
-                          ? "You reviewed this version. Click to mark it as not reviewed (⌘↩)."
-                          : "Mark as reviewed and go to the next file to review (⌘↩)")
+                    .layoutPriority(1)
                 }
                 HStack(spacing: 6) {
                     Toggle(isOn: sideBySideBinding) {
@@ -396,17 +407,33 @@ struct DiffHeaderView: View {
         }
 
         var body: some View {
+            // Drop words before truncating, so the time survives a narrow pane. Narrower than the
+            // shortest words beside the picker, the picker takes a row of its own: a row wider
+            // than the column would widen the window instead.
+            ViewThatFits(in: .horizontal) {
+                line(Text("Changed since your review at \(when)"), withPicker: true)
+                line(Text("Changed since your \(when) review"), withPicker: true)
+                line(Text("Changed since review"), withPicker: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    line(ViewThatFits(in: .horizontal) {
+                        Text("Changed since your review at \(when)")
+                        Text("Changed since your \(when) review")
+                        Text("Changed since review")
+                    }, withPicker: false)
+                    picker
+                }
+            }
+            .font(.caption)
+            .padding(.top, 1)
+        }
+
+        private func line(_ title: some View, withPicker: Bool) -> some View {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .foregroundStyle(Color.accentColor)
-                // Drop words before truncating, so the time survives a narrow pane.
-                ViewThatFits(in: .horizontal) {
-                    Text("Changed since your review at \(when)")
-                    Text("Changed since your \(when) review")
-                    Text("Changed since review")
-                }
-                .lineLimit(1)
-                .help("You marked this file reviewed at \(when); it has changed since")
+                title
+                    .lineLimit(1)
+                    .help("You marked this file reviewed at \(when); it has changed since")
                 if let shown = info.shown {
                     DeltaText(additions: shown.additions, deletions: shown.deletions)
                         .fixedSize()
@@ -418,20 +445,25 @@ struct DiffHeaderView: View {
                         .truncationMode(.tail)
                 }
                 Spacer(minLength: 8)
-                if let selection = info.showingSinceReview {
-                    Picker("Diff to show", selection: selection) {
-                        Text("Since Review").tag(true)
-                        Text("Full Diff").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .fixedSize()
-                    .help("Since Review shows only what changed after you marked the file reviewed")
+                if withPicker {
+                    picker
                 }
             }
-            .font(.caption)
-            .padding(.top, 1)
+        }
+
+        @ViewBuilder
+        private var picker: some View {
+            if let selection = info.showingSinceReview {
+                Picker("Diff to show", selection: selection) {
+                    Text("Since Review").tag(true)
+                    Text("Full Diff").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                .help("Since Review shows only what changed after you marked the file reviewed")
+            }
         }
     }
 

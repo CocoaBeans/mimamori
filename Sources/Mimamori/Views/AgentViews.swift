@@ -352,10 +352,15 @@ struct AgentStatusBanner: View {
                             headlineText(shortHeadline).lineLimit(1)
                             headlineText(shortHeadline).lineLimit(2)
                         }
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            timing
-                            Spacer(minLength: 8)
-                            buttons
+                        // Narrower still, the step count goes, then the buttons move below the
+                        // clock: what the banner cannot fit, the window would widen to hold.
+                        ViewThatFits(in: .horizontal) {
+                            clockRow(steps: true)
+                            clockRow(steps: false)
+                            VStack(alignment: .leading, spacing: 4) {
+                                timing(steps: false)
+                                buttons
+                            }
                         }
                     }
                 }
@@ -383,19 +388,28 @@ struct AgentStatusBanner: View {
             headlineText(text).lineLimit(1)
             Spacer(minLength: 8)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                timing
+                timing()
                 buttons
             }
         }
     }
 
+    /// The clock, then the buttons on the right.
+    private func clockRow(steps: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            timing(steps: steps)
+            Spacer(minLength: 8)
+            buttons
+        }
+    }
+
     /// The clock and the step count, on one line.
-    private var timing: some View {
+    private func timing(steps: Bool = true) -> some View {
         HStack(spacing: 0) {
             Text(presence.timing(now: now))
                 .foregroundStyle(.secondary)
                 .help(presence.timingHelp)
-            if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
+            if steps, presence.source == .hooks, presence.toolCallsThisTurn > 0 {
                 Text(" · " + (presence.toolCallsThisTurn == 1 ? "1 step" : "\(presence.toolCallsThisTurn) steps"))
                     .foregroundStyle(.tertiary)
             }

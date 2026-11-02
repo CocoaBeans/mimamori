@@ -157,18 +157,24 @@ struct ChangeListView: View {
 struct ToReviewToggle: View {
     @Environment(AppModel.self) private var model
     let session: WorktreeSession
+    /// Just the count, or just the checkmark, for a narrow column.
+    var compact = false
 
     var body: some View {
         @Bindable var model = model
         let left = session.unreviewedCount
         Toggle(isOn: $model.hideReviewed) {
-            if left == 0 {
+            if left == 0, compact {
+                Label("All reviewed", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.iconOnly)
+            } else if left == 0 {
                 Label("All reviewed", systemImage: "checkmark.circle.fill")
             } else {
-                Label("\(left) to review", systemImage: model.hideReviewed
+                Label(compact ? "\(left)" : "\(left) to review", systemImage: model.hideReviewed
                       ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
             }
         }
+        .accessibilityLabel(left == 0 ? "All reviewed" : "\(left) to review")
         .toggleStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.small)
@@ -412,15 +418,19 @@ struct ChangeRow: View {
                             .help("Reviewed")
                     }
                     FlagIcons(flags: change.flags.filter { $0.severity == .info })
+                    // Fixed, like DeltaText: at the change list's narrowest they would wrap a
+                    // character a line. The path gives way instead.
                     if change.isUntracked {
                         Text("new")
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(.secondary)
+                            .fixedSize()
                     }
                     if change.isBinary {
                         Text("binary")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .fixedSize()
                     } else {
                         DeltaText(additions: change.additions, deletions: change.deletions)
                     }
@@ -470,17 +480,20 @@ struct WorktreeHeaderView: View {
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 8) {
-                    Text("\(session.changes.count) files")
-                        .foregroundStyle(.secondary)
-                    if !model.showCommits && !session.changes.isEmpty {
-                        ToReviewToggle(session: session)
+                    // Once the branch name is cut to nothing, the counts drop the file count, then
+                    // the totals, then the words of To review: a header wider than the column
+                    // would widen the window instead.
+                    ViewThatFits(in: .horizontal) {
+                        counts(files: true, totals: true)
+                        counts(files: false, totals: true)
+                        counts(files: false, totals: false)
+                        counts(files: false, totals: false, compact: true)
                     }
-                    // No bar: the branch name needs the room more than one total does.
-                    DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions, bar: false)
                     AttentionBadgeButton(sessions: [session], arrowEdge: .top, debugID: "header")
+                        .fixedSize()
                 }
                 .font(.caption.monospacedDigit())
-                .fixedSize()
+                .layoutPriority(1)
                 if session.isBusy {
                     ProgressView().controlSize(.small)
                 } else if session.watcherActive {
@@ -545,6 +558,23 @@ struct WorktreeHeaderView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+    }
+
+    private func counts(files: Bool, totals: Bool, compact: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            if files {
+                Text("\(session.changes.count) files")
+                    .foregroundStyle(.secondary)
+            }
+            if !model.showCommits && !session.changes.isEmpty {
+                ToReviewToggle(session: session, compact: compact)
+            }
+            if totals {
+                // No bar: the branch name needs the room more than one total does.
+                DeltaText(additions: session.changes.totalAdditions, deletions: session.changes.totalDeletions, bar: false)
+            }
+        }
+        .fixedSize()
     }
 }
 
