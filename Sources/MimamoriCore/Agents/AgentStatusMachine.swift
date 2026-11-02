@@ -420,6 +420,24 @@ public struct AgentStatusMachine: Sendable {
         return true
     }
 
+    /// You said no in the agent's own prompt: the call did not run, and the agent stopped to
+    /// wait for what to do instead, sending no hook to say so (Claude Code ends the permission
+    /// hook, and that is all). Returns false when nothing was waiting.
+    public mutating func noteDeclined(at date: Date = Date()) -> Bool {
+        guard var current = status, case .needsPermission = current.activity else { return false }
+        if let id = current.pendingPermission?.callID,
+           let index = current.recentToolCalls.firstIndex(where: { $0.id == id && $0.finishedAt == nil }) {
+            current.recentToolCalls[index].finishedAt = date
+            current.recentToolCalls[index].failed = true
+        }
+        current.activity = .ready
+        current.pendingPermission = nil
+        current.since = date
+        current.turnStartedAt = nil
+        status = current
+        return true
+    }
+
     /// "Claude needs your permission to use Bash" → "Bash".
     static func permissionTool(in message: String?) -> String? {
         guard let message, let range = message.range(of: "permission to use ") else { return nil }

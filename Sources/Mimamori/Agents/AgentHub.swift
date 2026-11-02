@@ -382,6 +382,8 @@ final class AgentHub {
             arrivedTests[token] = Date()
             record(HookLogEntry(at: Date(), agent: nil, event: "MimamoriTest", outcome: .test))
             Log.hooks.notice("A test event arrived through the hook command")
+        case .hungUp(let id):
+            permissionAnsweredElsewhere(id)
         }
     }
 
@@ -520,8 +522,9 @@ final class AgentHub {
         approvalWatch = Task { [weak self] in
             while !Task.isCancelled {
                 guard let waitingSince = self?.commandsAwaitingPermission.map(\.since).min() else { break }
-                // Quick at first, when an approval is likely; a dialog left open is checked less often.
-                try? await Task.sleep(for: .milliseconds(Date().timeIntervalSince(waitingSince) < 120 ? 1500 : 5000))
+                // Quick at first, when an approval is likely, so it shows as you give it (a look
+                // through every process takes about 10 ms); a dialog left open is checked less often.
+                try? await Task.sleep(for: .milliseconds(Date().timeIntervalSince(waitingSince) < 120 ? 500 : 2000))
                 guard let self, !Task.isCancelled else { return }
                 let waiting = self.commandsAwaitingPermission
                 guard !waiting.isEmpty else { break }
@@ -532,6 +535,31 @@ final class AgentHub {
                 }
             }
             self?.approvalWatch = nil
+        }
+    }
+
+    /// The agent ended the hook waiting on request `id`: it was answered in the agent's own
+    /// prompt. Its Allow and Deny here go, as does the notification. Said yes, the command
+    /// shows up running (or finishes) in a moment; said no, nothing more comes, and the agent
+    /// waits for you to say what to do instead.
+    private func permissionAnsweredElsewhere(_ id: String) {
+        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
+        Log.agents.notice("\(pending.agent.displayName, privacy: .public) stopped waiting on its \(pending.tool, privacy: .public) request: it was answered in its own prompt")
+        settlePermission(for: pending.session)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            // Still waiting by its hooks' account, and on this request rather than a newer one.
+            guard let self, let status = self.machines[pending.worktree]?[pending.session]?.status,
+                  case .needsPermission = status.activity, status.since <= pending.since.addingTimeInterval(1) else { return }
+            if let awaiting = status.commandAwaitingPermission {
+                let running = await Task.detached(priority: .utility) {
+                    ClaudeCommandProbe.running([awaiting.command: awaiting.since])
+                }.value
+                if running.contains(awaiting.command) { return self.noteApproved(in: pending.worktree, session: pending.session) }
+            }
+            guard var machine = self.machines[pending.worktree]?[pending.session], machine.noteDeclined() else { return }
+            self.machines[pending.worktree]?[pending.session] = machine
+            self.schedulePublish(urgent: true)
         }
     }
 

@@ -655,6 +655,21 @@ struct PermissionRequestTests {
         #expect(!again)
     }
 
+    @Test func decliningInTheAgentsPromptEndsTheTurn() throws {
+        var machine = waitingMachine()
+        let declined = machine.noteDeclined(at: Date(timeIntervalSince1970: 1012))
+        #expect(declined)
+        let status = try #require(machine.status)
+        #expect(status.activity == .ready)
+        #expect(status.pendingPermission == nil)
+        #expect(status.turnStartedAt == nil)
+        // The call that asked never ran.
+        let call = try #require(status.recentToolCalls.first { $0.id == "t1" })
+        #expect(call.failed && call.finishedAt == Date(timeIntervalSince1970: 1012))
+        let again = machine.noteDeclined()
+        #expect(!again)
+    }
+
     @Test func aFailedCommandSettlesThePermission() throws {
         var machine = waitingMachine()
         _ = machine.apply(event(.postToolUseFailure, tool: "Bash", id: "t1", message: "Exit code 65", at: 40))

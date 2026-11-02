@@ -39,9 +39,58 @@ struct PermissionTests {
         async let printed = request(socket: path)
         for _ in 0..<100 where events.last?.permissionRequestID == nil { try await Task.sleep(for: .milliseconds(20)) }
         let id = try #require(events.last?.permissionRequestID)
-        server.permissions.answer(id, answer)
-        server.permissions.answer(id, .allow)  // a second answer does not count
+        #expect(server.permissions.answer(id, answer))
+        #expect(!server.permissions.answer(id, .allow))  // a second answer does not count
         return (try await printed, events.last)
+    }
+
+    private final class Notes: @unchecked Sendable {
+        private let lock = NSLock()
+        private var hungUp: [String] = []
+        func append(_ note: HookSocketServer.Note) {
+            if case .hungUp(let id) = note { lock.withLock { hungUp.append(id) } }
+        }
+        var hangUps: [String] { lock.withLock { hungUp } }
+    }
+
+    @Test func aHookThatHangsUpLetsItsRequestGo() async throws {
+        let (server, events, path) = try await start()
+        defer { server.stop() }
+        server.answersPermissions = true
+        let notes = Notes()
+        server.onNote = { notes.append($0) }
+        // The hook's curl, waiting for an answer, until its agent ends it: Claude Code does when
+        // you say no in its own prompt.
+        let curl = Process()
+        curl.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        curl.arguments = ["-s", "-m", "30", "-H", "Expect:", "--unix-socket", path, "--data-binary",
+                          #"{"hook_event_name":"PermissionRequest","session_id":"s1","cwd":"/repo","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}"#,
+                          "http://mimamori/permission"]
+        curl.standardOutput = FileHandle.nullDevice
+        try curl.run()
+        for _ in 0..<100 where events.last?.permissionRequestID == nil { try await Task.sleep(for: .milliseconds(20)) }
+        let id = try #require(events.last?.permissionRequestID)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(notes.hangUps.isEmpty)  // waiting is not hanging up
+        curl.terminate()
+        for _ in 0..<100 where notes.hangUps.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(notes.hangUps == [id])
+        #expect(server.permissions.openCount == 0)
+        #expect(!server.permissions.answer(id, .allow))  // too late: nobody is listening
+    }
+
+    @Test func anAnsweredRequestIsNotAHangUp() async throws {
+        let (server, events, path) = try await start()
+        defer { server.stop() }
+        server.answersPermissions = true
+        let notes = Notes()
+        server.onNote = { notes.append($0) }
+        async let printed = request(socket: path)
+        for _ in 0..<100 where events.last?.permissionRequestID == nil { try await Task.sleep(for: .milliseconds(20)) }
+        server.permissions.answer(try #require(events.last?.permissionRequestID), .allow)
+        #expect(try await printed == PermissionAnswer.allow.hookResponse)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(notes.hangUps.isEmpty)
     }
 
     @Test func allowingPrintsClaudeCodesAllowDecision() async throws {

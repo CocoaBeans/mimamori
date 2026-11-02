@@ -42,14 +42,16 @@ public final class PermissionBroker: @unchecked Sendable {
     }
 
     /// Answers `id`; nil lets it go with no decision, leaving it to the agent's own prompt. Only
-    /// the first answer counts.
-    public func answer(_ id: String, _ answer: PermissionAnswer?) {
+    /// the first answer counts: false when `id` was answered already, or never asked.
+    @discardableResult
+    public func answer(_ id: String, _ answer: PermissionAnswer?) -> Bool {
         lock.withLock {
-            guard var entry = waiting[id], !entry.settled else { return }
+            guard var entry = waiting[id], !entry.settled else { return false }
             entry.answer = answer
             entry.settled = true
             waiting[id] = entry
             entry.semaphore.signal()
+            return true
         }
     }
 

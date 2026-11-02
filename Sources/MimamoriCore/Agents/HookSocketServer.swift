@@ -67,6 +67,9 @@ public final class HookSocketServer: @unchecked Sendable {
         case rejected(HookRejection)
         /// A test arrived, carrying the token it was sent with.
         case test(token: String)
+        /// The hook waiting on permission request `id` went away before an answer: the agent no
+        /// longer waits on it. Claude Code ends the hook when you say no in its own prompt.
+        case hungUp(permission: String)
     }
 
     public let path: String
@@ -75,6 +78,8 @@ public final class HookSocketServer: @unchecked Sendable {
     private let connectionQueue = DispatchQueue(label: "com.kevinross.Mimamori.hooks.connections", qos: .userInitiated, attributes: .concurrent)
     /// Hands events over one at a time, in the order their requests completed.
     private let deliveryQueue = DispatchQueue(label: "com.kevinross.Mimamori.hooks.delivery", qos: .userInitiated)
+    /// Watches the connections of hooks waiting on a permission answer for hanging up.
+    private let hangUpQueue = DispatchQueue(label: "com.kevinross.Mimamori.hooks.hang-ups", qos: .userInitiated)
     private let lock = NSLock()
     private var source: DispatchSourceRead?
     private var listening = false
@@ -228,7 +233,7 @@ public final class HookSocketServer: @unchecked Sendable {
         var chunk = [UInt8](repeating: 0, count: 65536)
         while true {
             if let body = request.completeBody() {
-                let (status, reason, text) = handle(method: request.method, target: request.target, body: body, peer: peer)
+                let (status, reason, text) = handle(method: request.method, target: request.target, body: body, peer: peer, fd: fd)
                 respond(fd, status: status, reason: reason, body: text)
                 return
             }
@@ -243,7 +248,7 @@ public final class HookSocketServer: @unchecked Sendable {
         }
     }
 
-    private func handle(method: String, target: String, body: Data, peer: pid_t?) -> (Int, String, String) {
+    private func handle(method: String, target: String, body: Data, peer: pid_t?, fd: Int32) -> (Int, String, String) {
         let url = URLComponents(string: target)
         let query = Dictionary((url?.queryItems ?? []).compactMap { item in item.value.map { (item.name, $0) } },
                                uniquingKeysWith: { first, _ in first })
@@ -264,7 +269,7 @@ public final class HookSocketServer: @unchecked Sendable {
             event.permissionRequestID = id
             if let id { permissions.open(id) }
             deliveryQueue.sync { handler(event) }
-            guard let id, let answer = permissions.wait(id, timeout: permissionTimeout) else { return (204, "No Content", "") }
+            guard let id, let answer = waitForAnswer(id, hook: fd) else { return (204, "No Content", "") }
             return (200, "OK", answer.hookResponse + "\n")
         case ("POST", "/event"), ("POST", "/event/hermes"):
             // A test from Settings: the cheap byte search keeps agents' events from being parsed twice.
@@ -288,6 +293,30 @@ public final class HookSocketServer: @unchecked Sendable {
             note(.rejected(HookRejection(status: 404, reason: "no such address; hooks post to /event", target: "\(method) \(target)")))
             return (404, "Not Found", "")
         }
+    }
+
+    /// Waits for an answer to `id` while watching the hook's connection. A hook that hangs up
+    /// first was ended by its agent, which no longer waits on the answer: the request is let go
+    /// then, and reported, rather than held until the timeout.
+    private func waitForAnswer(_ id: String, hook fd: Int32) -> PermissionAnswer? {
+        let watch = DispatchSource.makeReadSource(fileDescriptor: fd, queue: hangUpQueue)
+        let stopped = DispatchSemaphore(value: 0)
+        watch.setEventHandler { [weak self] in
+            var bytes = [UInt8](repeating: 0, count: 1024)
+            let count = recv(fd, &bytes, bytes.count, MSG_DONTWAIT)
+            // Bytes after the request are none of ours, and are dropped; only the end matters.
+            guard count == 0 || (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) else { return }
+            watch.cancel()
+            guard let self, self.permissions.answer(id, nil) else { return }
+            self.note(.hungUp(permission: id))
+        }
+        watch.setCancelHandler { stopped.signal() }
+        watch.resume()
+        let answer = permissions.wait(id, timeout: permissionTimeout)
+        // The socket closes once the reply is written: stop watching it first.
+        watch.cancel()
+        stopped.wait()
+        return answer
     }
 
     private func respond(_ fd: Int32, status: Int, reason: String, body: String) {
