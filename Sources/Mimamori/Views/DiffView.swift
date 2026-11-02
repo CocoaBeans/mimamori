@@ -302,13 +302,7 @@ struct DiffHeaderView: View {
                           ? "Long lines wrap. Click to scroll them horizontally instead (⌥⌘W)."
                           : "Long lines scroll horizontally. Click to wrap them (⌥⌘W).")
                     .accessibilityLabel("Wrap long lines")
-                    Button {
-                        if let diff { Workspace.copy(diff.unifiedText) }
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .help("Copy the diff as a patch")
-                    .accessibilityLabel("Copy the diff")
+                    CopyButton(help: "Copy the diff as a patch") { if let diff { Workspace.copy(diff.unifiedText) } }
                     .disabled(diff == nil || diff?.hunks.isEmpty == true)
                     Button {
                         Workspace.reveal(path: change.path, in: worktreePath)

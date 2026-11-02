@@ -700,7 +700,6 @@ struct AgentSettingsView: View {
     @State private var recipe: AgentHookRecipe = .codex
     @State private var testing = false
     @State private var testResult: AgentHub.HookTestResult?
-    @State private var diagnosticsCopied = false
     @State private var otherAgentName = AgentHookRecipe.other.agentName
 
     private static let hermesApproveCommand = "hermes --accept-hooks"
@@ -797,12 +796,9 @@ struct AgentSettingsView: View {
                     testResultLabel(testResult)
                 }
                 Spacer()
-                Button(diagnosticsCopied ? "Copied" : "Copy Diagnostics") {
+                CopyButton("Copy Diagnostics", help: "Copy a report for a bug report: versions, the socket, which hooks are installed, who reported and the recent events. Folders under your home show as ~; no prompts or code are included.") {
                     model.copyDiagnostics()
-                    diagnosticsCopied = true
-                    Task { try? await Task.sleep(for: .seconds(2)); diagnosticsCopied = false }
                 }
-                .help("Copy a report for a bug report: versions, the socket, which hooks are installed, who reported and the recent events. Folders under your home show as ~; no prompts or code are included.")
             }
         } header: {
             Text("Status")
@@ -853,8 +849,9 @@ struct AgentSettingsView: View {
                                 .font(.callout.monospaced())
                                 .textSelection(.enabled)
                             Spacer()
-                            Button("Copy") { Workspace.copy(Self.hermesApproveCommand) }
-                                .help("Copy the command that approves Mimamori's hooks in Hermes")
+                            CopyButton("Copy", help: "Copy the command that approves Mimamori's hooks in Hermes") {
+                                Workspace.copy(Self.hermesApproveCommand)
+                            }
                             Button("Check Again") { refreshHermes() }
                                 .help("Read Hermes's hook approvals again")
                         }
@@ -872,8 +869,9 @@ struct AgentSettingsView: View {
                         .help("Remove Mimamori's hook script and its block from ~/.hermes/config.yaml. A backup is saved first.")
                         .disabled(hermesState != .installed)
                     Spacer()
-                    Button("Copy YAML") { Workspace.copy(HermesHookInstaller.snippet) }
-                        .help("The entries to put under hooks: in ~/.hermes/config.yaml")
+                    CopyButton("Copy YAML", help: "The entries to put under hooks: in ~/.hermes/config.yaml") {
+                        Workspace.copy(HermesHookInstaller.snippet)
+                    }
                 }
                 if let hermesMessage {
                     Text(hermesMessage).font(.callout).foregroundStyle(.secondary)
@@ -929,8 +927,9 @@ struct AgentSettingsView: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("Copy") { Workspace.copy(Self.newRepositoryInstruction) }
-                        .help("Copy the instruction for your agents")
+                    CopyButton("Copy", help: "Copy the instruction for your agents") {
+                        Workspace.copy(Self.newRepositoryInstruction)
+                    }
                 }
             }
         } header: {
@@ -1084,8 +1083,10 @@ struct AgentSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button(recipe == .other ? "Copy Command" : "Copy Setup") { Workspace.copy(setup) }
-                    .help(recipe.file.map { "Copy the hooks to add to \($0)" } ?? "Copy the command for the agent's hooks to run")
+                CopyButton(recipe == .other ? "Copy Command" : "Copy Setup",
+                           help: recipe.file.map { "Copy the hooks to add to \($0)" } ?? "Copy the command for the agent's hooks to run") {
+                    Workspace.copy(setup)
+                }
                 Spacer()
                 if let file = recipe.file {
                     let url = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)

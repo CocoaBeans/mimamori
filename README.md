@@ -250,6 +250,8 @@ swift test                      # parsers, rules, differ, plus integration tests
 swift build                     # the same app as a Swift package, for `swift run` and the debug hooks
 ```
 
+`make-app.sh` stamps the commit it builds from into the app (`MimamoriCommit` in Info.plist, passed to `xcodebuild` as `MIMAMORI_COMMIT`), with `-dirty` when tracked files have uncommitted changes. **About Mimamori** shows it under the version, linked to the commit, and Copy Diagnostics includes it. A build made straight from Xcode has none.
+
 ### App icon
 
 The icon, a paper lantern (chōchin) lighting the code behind it, where a diff's hunk shows a line taken out and two put in, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes keep fewer, bolder lines. After changing the drawing, regenerate it and rebuild:
@@ -302,6 +304,7 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `status-pill` | Open the toolbar pill's popover and render it |
 | `sidebar` | Render the sidebar rows that have agents or changes |
 | `diff-line:<n>` | Scroll the selected file's diff to new-file line n |
+| `about` | Open the About window |
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
 | `settings:<pane>` | Open Settings on that pane; with `settings:agents`, `agents:hooks`, `agents:other`, `agents:widgets` or `agents:notifications` opens that part of it |
 

@@ -203,14 +203,8 @@ struct CommitOverviewView: View {
                         Text(commit.oid)
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
-                        Button {
-                            Workspace.copy(commit.oid)
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Copy the commit id")
-                        .accessibilityLabel("Copy the commit id")
+                        CopyButton(help: "Copy the commit id") { Workspace.copy(commit.oid) }
+                            .buttonStyle(.borderless)
                     }
                     .foregroundStyle(.secondary)
                     Text("\(commit.author) · \(Format.dateTime.string(from: commit.date))")

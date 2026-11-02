@@ -80,6 +80,9 @@ struct MimamoriCommands: Commands {
     @Environment(\.openSettings) private var openSettings
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Mimamori") { BuildInfo.showAboutPanel() }
+        }
         CommandGroup(after: .help) {
             Button("Troubleshoot Agent Hooks…") {
                 model.settingsTab = .agents

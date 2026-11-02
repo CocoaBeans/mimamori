@@ -6,8 +6,7 @@ extension AppModel {
     func diagnostics() -> HookDiagnostics {
         let hub = agentHub
         var report = HookDiagnostics()
-        let info = Bundle.main.infoDictionary
-        report.app = "Mimamori \(info?["CFBundleShortVersionString"] as? String ?? "(no version)") (\(info?["CFBundleVersion"] as? String ?? "-"))"
+        report.app = "Mimamori \(BuildInfo.summary)"
         #if arch(arm64)
         let chip = "Apple silicon"
         #else

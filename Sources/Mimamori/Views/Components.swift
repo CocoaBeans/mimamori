@@ -241,3 +241,60 @@ enum Workspace {
         NSPasteboard.general.setString(string, forType: .string)
     }
 }
+
+/// A button that copies something and shows that it did, since copying changes nothing on screen:
+/// for a moment its icon turns into a green checkmark, or its title reads Copied (keeping its
+/// width, so nothing beside it moves). VoiceOver hears "Copied".
+struct CopyButton: View {
+    private let title: String?
+    private let helpText: String
+    private let copy: () -> Void
+    @State private var copied = false
+    @State private var reset: Task<Void, Never>?
+
+    /// An icon button, `doc.on.doc`; `help` is also its accessibility label.
+    init(help: String, copy: @escaping () -> Void) {
+        self.title = nil
+        self.helpText = help
+        self.copy = copy
+    }
+
+    /// A button with a title, such as "Copy YAML".
+    init(_ title: String, help: String, copy: @escaping () -> Void) {
+        self.title = title
+        self.helpText = help
+        self.copy = copy
+    }
+
+    var body: some View {
+        Button {
+            copy()
+            AccessibilityNotification.Announcement("Copied").post()
+            withAnimation(.easeOut(duration: 0.15)) { copied = true }
+            reset?.cancel()
+            reset = Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeIn(duration: 0.2)) { copied = false }
+            }
+        } label: {
+            if let title {
+                ZStack {
+                    Text(title).opacity(copied ? 0 : 1)
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark").foregroundStyle(.green)
+                        Text("Copied")
+                    }
+                    .opacity(copied ? 1 : 0)
+                }
+            } else {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .contentTransition(.symbolEffect(.replace))
+                    .foregroundStyle(copied ? AnyShapeStyle(Color.green) : AnyShapeStyle(.foreground))
+            }
+        }
+        .help(copied ? "Copied" : helpText)
+        .accessibilityLabel(copied ? "Copied" : (title ?? helpText))
+        .onDisappear { reset?.cancel() }
+    }
+}

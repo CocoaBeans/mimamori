@@ -21,6 +21,7 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=status-pill          open the toolbar's agent status popover
 ///     MIMAMORI_DEBUG_FLAGS=sidebar              render the sidebar rows with agents or changes, light and dark
 ///     MIMAMORI_DEBUG_FLAGS=diff-line:120        scroll the selected file's diff to new-file line 120
+///     MIMAMORI_DEBUG_FLAGS=about                open the About window
 ///     MIMAMORI_DEBUG_FLAGS=hook-test            send a test event through the hook command once (result in the dump,
 ///                                               Copy Diagnostics' report in <dump>.diagnostics.txt)
 ///
@@ -46,6 +47,7 @@ enum DebugHooks {
         var toggledReview = false
         var openedSummary = false
         var ranHookTest = false
+        var openedAbout = false
         var renderedWidgets = false
         var openedCommit = false
         var openedMenuBar = false
@@ -74,6 +76,10 @@ enum DebugHooks {
                 if model.debugFlags.contains("widgets"), !renderedWidgets, let dump {
                     renderedWidgets = true
                     writeWidgetPreviews(agents: model.widgetAgents(), to: dump)
+                }
+                if model.debugFlags.contains("about"), !openedAbout {
+                    openedAbout = true
+                    BuildInfo.showAboutPanel()
                 }
                 // "hook-test": what Settings › Agents › Send Test Event does, once.
                 if model.debugFlags.contains("hook-test"), !ranHookTest, model.agentHub.isListening {

@@ -18,8 +18,15 @@ if [[ "${MIMAMORI_SIGN:-team}" == adhoc ]]; then
   SIGNING=(CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=)
 fi
 
+# The commit the app is built from, for its About window and Copy Diagnostics, with "-dirty"
+# when tracked files have changes not yet committed. Info.plist takes it as MimamoriCommit.
+COMMIT="$(git rev-parse --short=8 HEAD 2>/dev/null || true)"
+if [[ -n "$COMMIT" && -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+  COMMIT="$COMMIT-dirty"
+fi
+
 xcodebuild -project Mimamori.xcodeproj -scheme Mimamori -configuration "$CONFIG" \
-  -derivedDataPath build/DerivedData "${SIGNING[@]}" -quiet build
+  -derivedDataPath build/DerivedData "${SIGNING[@]}" MIMAMORI_COMMIT="$COMMIT" -quiet build
 
 BUILT="build/DerivedData/Build/Products/$CONFIG/Mimamori.app"
 APP="build/Mimamori.app"
