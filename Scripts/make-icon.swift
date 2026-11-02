@@ -1,8 +1,9 @@
 #!/usr/bin/env swift
 // Draws Mimamori's app icon at every size and packs it into Resources/AppIcon.icns: a paper
-// lantern (chōchin) on a night sky, lighting the code behind it, where a diff's hunk shows a line
-// taken out and two put in. Drawn from shapes, so every size is sharp; small sizes keep fewer,
-// bolder lines of code and leave out the lantern's ribs and the diff's + and −.
+// lantern (chōchin) on a night sky, with 見 painted on it, lighting the code behind it, where a
+// diff's hunk shows a line taken out and two put in. Drawn from shapes, so every size is sharp;
+// small sizes keep fewer, bolder lines of code and leave out the lantern's ribs and character and
+// the diff's + and −.
 //
 // Usage: swift Scripts/make-icon.swift [Resources/AppIcon.icns]
 
@@ -188,6 +189,11 @@ func render(canvas: CGFloat) -> NSBitmapImageRep {
             line.line(to: CGPoint(x: x + width / 2, y: y))
             line.stroke()
         }
+        // 見, "to watch", the first character of 見守り (mimamori), painted on the paper over the ribs.
+        guard let mincho = NSFont(name: "HiraMinProN-W6", size: height * 0.5) else { fatalError("Hiragino Mincho not found") }
+        let mi = NSAttributedString(string: "見", attributes: [.font: mincho, .foregroundColor: color(0.62, 0.10, 0.06, 0.88)])
+        let box = mi.size()
+        mi.draw(at: CGPoint(x: x - box.width / 2, y: center.y - box.height / 2))
     }
     cg.restoreGState()
     wood.withAlphaComponent(0.9).setStroke()
