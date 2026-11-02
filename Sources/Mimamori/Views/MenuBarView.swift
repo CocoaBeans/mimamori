@@ -183,9 +183,9 @@ struct MenuBarPanel: View {
                         .padding(.top, 6)
                 }
                 HStack(spacing: 5) {
-                    RepositoryBadge(look: model.look(for: repo), size: 14)
+                    RepositoryBadge(look: model.look(for: repo), size: 15)
                     Text(repo.displayName)
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 6)
