@@ -11,7 +11,7 @@ A small, native macOS app that keeps watch over git worktrees while coding agent
 
 Mimamori is strictly read-only. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
 
-![Mimamori as three agents start work: Claude Code's edits appear in the change list and the diff, the activity feed fills, the sidebar shows each worktree's agent, and the toolbar pill turns to Codex needs you](docs/mimamori-demo.gif)
+![Mimamori as three agents start work in a web shop's worktrees: Claude Code's edits appear in the change list and the diff, the activity feed fills, the sidebar shows each repository under its own icon with each worktree's agent, and the toolbar pill turns to Codex needs you](docs/mimamori-demo.gif)
 
 ## Why
 
@@ -19,7 +19,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 ## What it does
 
-![Mimamori watching a worktree while agents work: the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars, a diff, and the activity feed](docs/mimamori-main.png)
+![Mimamori watching a worktree while agents work: the sidebar with two repositories under their app icons and an agent in each of three worktrees, the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars, a diff, and the activity feed](docs/mimamori-main.png)
 
 - **Watches live.** FSEvents on the worktree and the git directory drive refreshes a few hundred milliseconds after files settle. Recently touched files glow and say "12s ago", so you can see where the agent is working. Each file shows an icon for its kind and a five-block diff bar: the more lines changed, the more blocks light (green for added, red for removed), so the big edits stand out in any list. Bursts that only touch ignored paths (build output, `node_modules`) are discarded without a refresh.
 - **Compares against the right baseline.** Agents commit as they go, so a plain working-tree diff goes blank after each commit. Switch between:
@@ -65,7 +65,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - **Go to agent** brings the app the agent runs in (Terminal, iTerm, VS Code, the Claude or Hermes app) to the front. It appears, with Summary, in place of the step count when you point at a card; an agent waiting on you keeps a tinted Go to agent button, since that is where you answer it.
   - Click a card to jump to that worktree, switch off Details for one line per agent, widen the window past about 900 points for two columns, or pin the window above everything else.
 
-<p align="center"><img src="docs/mimamori-agents.png" width="460" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through ten steps, and Gemini CLI ready for its next prompt, each with its task, turn timeline, latest steps and files"></p>
+<p align="center"><img src="docs/mimamori-agents.png" width="460" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through ten steps, and Gemini CLI ready for its next prompt, each card led by its project's icon, with its task, turn timeline, latest steps and files"></p>
 
 - **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you. Click it for a popover drawn like the desktop widget: each agent at work with a live timer, its task and latest steps, then every repository and worktree with what changed. Click an agent or a worktree to open it in Mimamori. Fold the Agents or Worktrees section away by its header, and pin the popover (the pin at its foot) to keep it open as a small window that floats above the others; it opens again at launch until you unpin it.
 
@@ -348,6 +348,10 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `about` | Open the About window |
 | `permission:allow` | Answer a waiting permission request once it has waited 5 s, as Allow does (`permission:deny` for Deny) |
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
+| `sidebar:show` | Unfold the main window's sidebar at its usual width; the window remembers it folded across launches |
+| `welcome` | Open the welcome window |
+| `uninstall` | Open the Uninstall Mimamori window |
+| `uninstall:run` | Run Uninstall with its default choices, keeping the app out of the Trash; its report goes in `<dump>.uninstall.txt`. Point it at a scratch setup (`MIMAMORI_SUPPORT_DIR`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`) |
 | `settings:<pane>` | Open Settings on that pane; with `settings:agents`, `agents:hooks`, `agents:other`, `agents:widgets` or `agents:notifications` opens that part of it |
 
 Example: `open --env MIMAMORI_SCREENSHOT=/tmp/mimamori.png build/Mimamori.app`

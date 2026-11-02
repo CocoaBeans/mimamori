@@ -27,6 +27,10 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=permission:allow     answer a permission request once it has waited 5 s (or permission:deny)
 ///     MIMAMORI_DEBUG_FLAGS=hook-test            send a test event through the hook command once (result in the dump,
 ///                                               Copy Diagnostics' report in <dump>.diagnostics.txt)
+///     MIMAMORI_DEBUG_FLAGS=sidebar:show         unfold the main window's sidebar at its usual width
+///     MIMAMORI_DEBUG_FLAGS=welcome              open the welcome window (uninstall: the Uninstall window)
+///     MIMAMORI_DEBUG_FLAGS=uninstall:run        run Uninstall's default choices, app kept out of the Trash
+///                                               (report in <dump>.uninstall.txt; use a scratch setup)
 ///
 /// Useful for driving the app headlessly from scripts without screen-recording
 /// or accessibility permissions.
@@ -55,6 +59,7 @@ enum DebugHooks {
         var openedCommit = false
         var openedMenuBar = false
         var ranUninstall = false
+        var shownSidebar = false
         var renderedPillPopover = false
         Task { @MainActor [weak model] in
             try? await Task.sleep(for: .seconds(1.5))
@@ -173,6 +178,11 @@ enum DebugHooks {
                     let report = await Uninstaller.run(plan, leftovers: leftovers, model: model)
                     try? report.joined(separator: "\n").write(toFile: dump + ".uninstall.txt", atomically: true, encoding: .utf8)
                 }
+                // "sidebar:show": unfold the main window's sidebar; the window remembers it folded
+                // across launches, and README captures want it.
+                if model.debugFlags.contains("sidebar:show"), !shownSidebar {
+                    shownSidebar = showSidebar()
+                }
                 if model.debugFlags.contains("cycle") {
                     let ids = model.orderedSessions.map(\.id)
                     if !ids.isEmpty {
@@ -209,6 +219,26 @@ enum DebugHooks {
         window.setContentSize(NSSize(width: parts[0], height: parts[1]))
         window.center()
         return true
+    }
+
+    /// Unfolds the main window's sidebar if it is folded. False until the window is there.
+    private static func showSidebar() -> Bool {
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true && $0.isVisible }),
+              let content = window.contentView else { return false }
+        func splitViews(in view: NSView) -> [NSSplitView] {
+            var found = view.subviews.flatMap(splitViews)
+            if let split = view as? NSSplitView { found.insert(split, at: 0) }
+            return found
+        }
+        for split in splitViews(in: content) {
+            guard let controller = split.delegate as? NSSplitViewController,
+                  let sidebar = controller.splitViewItems.first(where: { $0.behavior == .sidebar }) else { continue }
+            if sidebar.isCollapsed { sidebar.isCollapsed = false }
+            // Unfolded, it may come back at its narrowest; give it its usual width.
+            split.setPosition(250, ofDividerAt: 0)
+            return true
+        }
+        return false
     }
 
     /// The widget sizes on a Mac's desktop, in points.
