@@ -49,7 +49,7 @@ struct HelpTopic: Identifiable {
             ## Find your way around
             - **The sidebar** lists each repository under its icon, or its initials on a muted colour, with its worktrees beneath. Hide a worktree from its context menu; the filter button at the bottom shows only worktrees with an agent at work.
             - **The file list** shows what changed in the selected worktree. Choose a file to read its diff beside it.
-            - **The activity feed**, which the toolbar's Activity button shows and hides, records each change, commit and agent step as it happens.
+            - **The activity feed**, which the toolbar's Activity button (⌃⌘I) shows and hides, records each change, commit and agent step as it happens.
             - **The menu bar** keeps a summary in view when the window is closed. See [Menu bar and widgets](help:menu-bar).
 
             ## Connect your agents
@@ -139,7 +139,7 @@ struct HelpTopic: Identifiable {
             - Agents read their hooks when a session starts, so start a new session afterwards.
 
             ## Keep an eye on them
-            - The pill in the middle of the toolbar names the agent waiting on you longest, or how many are working. Click it for each agent's task, steps and files.
+            - The pill in the toolbar names the agent waiting on you longest, or how many are working. Click it for each agent's task, steps and files.
             - **Window › Agents** (⇧⌘A) shows every agent as a card: what it's doing and for how long, its task, its latest steps, and the files it touched this turn. **Go to agent** brings its terminal or app to the front, and **Keep on Top** keeps the window above the others.
             - Settings › Agents › Notifications can tell you when an agent needs permission, asks a question or finishes a turn.
 
@@ -228,6 +228,7 @@ struct HelpTopic: Identifiable {
 
             ## Windows
             - **⇧⌘A** Agents
+            - **⌃⌘I** the activity feed (View › Show Inspector)
             - **⇧⌘E** Session Summary…, and **⇧⌘C** to copy it as Markdown
             - **⌘,** Settings
             - **⌘?** Mimamori Help

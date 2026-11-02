@@ -16,7 +16,7 @@ cask. These items gate it.
 
 - [x] Sign with a Developer ID certificate and notarize each build (`notarytool`), stapling the ticket.
 - [x] Package a DMG (`Scripts/release.sh`).
-- [ ] Publish 1.0.0 on GitHub Releases, from the public repository.
+- [x] Publish 1.0.0 on GitHub Releases, from the public repository.
 - [ ] Publish a Homebrew cask (`brew install --cask mimamori`).
 - [x] Add automatic updates with Sparkle (signed appcast), published with each GitHub release.
 - [ ] Release workflow in CI: build, sign, notarize, attach the DMG, update the appcast and cask.

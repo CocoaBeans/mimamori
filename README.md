@@ -58,7 +58,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - Mimamori scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in.
   - With hooks connected (one reversible click for Claude Code and Hermes, a setup to paste for Codex, Gemini CLI, Cursor or any agent that can run a command), it knows exactly what each agent is doing: when a turn starts and ends, each tool call, and when it needs your permission or asks you a question. A finished turn reads as ready for your next prompt and does not count as needing you.
   - File changes are attributed to the tool call that made them, worktrees that need you are counted in the sidebar and the menu bar, and you can be notified when an agent needs permission or has a question.
-- **Shows who needs you in the toolbar.** A pill in the middle of the toolbar names the agent waiting on you longest, in any worktree ("Codex needs you · plan · 42s"), or how many are working. Click it for that agent's banner, with its task, steps and files, and every other agent; click one to show its worktree.
+- **Shows who needs you in the toolbar.** A pill in the toolbar names the agent waiting on you longest, in any worktree ("Codex needs you · plan · 42s"), or how many are working. Click it for that agent's banner, with its task, steps and files, and every other agent; click one to show its worktree.
 - **Has an Agents window.** ⇧⌘A (or the toolbar's Agents button, or the menu bar) lists every worktree with an agent in it: what it is doing and for how long, the task it was given, its last few steps, the files it has touched this turn (click one to open its diff), and how much is changed and left to review.
   - Each agent is a card tinted by its state, grouped under Needs you, Working, Ready and Ended; those waiting on you come first, longest wait first. Click a section's heading to fold it away: folded, it still shows each agent's badge, and Mimamori remembers which sections you folded.
   - Under each agent, a thin strip lays its turn's tool calls along time, coloured by kind (blue edits, green commands, grey reads and searches, red failures, orange waiting on you), so you can see the turn's rhythm and when an agent has gone quiet. After three minutes without a tool call, the strip ends with "quiet 4m".
@@ -72,13 +72,19 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 ## Requirements
 
-- macOS 15 or later (developed on macOS 26).
+- macOS 15 or later, on Apple silicon or Intel (developed on macOS 26).
 - A `git` binary. Homebrew or MacPorts git is preferred; the Xcode shim at `/usr/bin/git` works when the Command Line Tools are installed. A custom path can be set in Settings.
 - Xcode 16 or later (Swift 6) to build from source.
 
 ## Install
 
-Until signed releases exist, build it yourself. It takes about a minute:
+Download the `.dmg` from the [latest release](https://github.com/CocoaBeans/mimamori/releases/latest), open it, and drag Mimamori to Applications. It is signed with a Developer ID and notarized by Apple, and it keeps itself up to date: Mimamori › Check for Updates…, or once a day if you let it.
+
+The first time it opens, a welcome window says what Mimamori reads and writes, what hooks are, and exactly which file connecting Claude Code or Hermes changes, before anything is installed; Help › Welcome to Mimamori brings it back. **Help › Mimamori Help** (⌘?) is a short guide to the rest: reviewing changes, agents and hooks, the menu bar, snapshots, keyboard shortcuts and troubleshooting.
+
+### Build from source
+
+It takes about a minute:
 
 ```bash
 git clone https://github.com/CocoaBeans/mimamori.git
@@ -87,9 +93,7 @@ MIMAMORI_SIGN=adhoc Scripts/make-app.sh release
 open build/Mimamori.app
 ```
 
-The first time it opens, a welcome window says what Mimamori reads and writes, what hooks are, and exactly which file connecting Claude Code or Hermes changes, before anything is installed; Help › Welcome to Mimamori brings it back. **Help › Mimamori Help** (⌘?) is a short guide to the rest: reviewing changes, agents and hooks, the menu bar, snapshots, keyboard shortcuts and troubleshooting.
-
-Or `Scripts/run.sh` for a debug build that opens immediately. You can also run `swift run Mimamori`, or open `Package.swift` in Xcode and run the `Mimamori` scheme. Notifications only work from the app bundle.
+A build of your own never checks for updates. Or `Scripts/run.sh` for a debug build that opens immediately. You can also run `swift run Mimamori`, or open `Package.swift` in Xcode and run the `Mimamori` scheme. Notifications only work from the app bundle.
 
 `MIMAMORI_SIGN=adhoc` signs the app ad hoc, since the Xcode project is set up for the maintainer's team; the first launch may ask you to confirm in System Settings › Privacy & Security, or you can right-click the app and choose Open. An ad-hoc build's desktop widget cannot read Mimamori's data, which needs a team-signed App Group; [CONTRIBUTING](CONTRIBUTING.md#signing-with-your-own-team) explains how to build with your own team.
 
