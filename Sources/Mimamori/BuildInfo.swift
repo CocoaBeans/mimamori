@@ -28,18 +28,17 @@ enum BuildInfo {
     }
 
     /// What Mimamori is, as the README opens.
-    static let introduction = """
-        Mimamori (見守り, mee-mah-MOH-ree) is Japanese for watching over someone with care: the way you watch children at play, ready to step in.
-
-        A small, native macOS app that keeps watch over git worktrees while coding agents work in them. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: what is it doing right now, and should I be worried.
-        """
+    static let introduction = [
+        "Mimamori (見守り, mee-mah-MOH-ree) is Japanese for watching over someone with care: the way you watch children at play, ready to step in.",
+        "A small, native macOS app that keeps watch over git worktrees while coding agents work in them. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: what is it doing right now, and should I be worried.",
+    ].joined(separator: "\n")
 
     /// The standard About window, with what Mimamori is under the version, then the commit it
     /// was built from, linked to it on GitHub.
     static func showAboutPanel() {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
-        paragraph.paragraphSpacing = 6
+        paragraph.paragraphSpacing = 8
         let style: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
             .foregroundColor: NSColor.labelColor,
@@ -49,7 +48,7 @@ enum BuildInfo {
         if let commit {
             var quiet = style
             quiet[.foregroundColor] = NSColor.secondaryLabelColor
-            credits.append(NSAttributedString(string: "\n\nBuilt from commit ", attributes: quiet))
+            credits.append(NSAttributedString(string: "\nBuilt from commit ", attributes: quiet))
             var link = quiet
             link[.link] = repository.appendingPathComponent("commit").appendingPathComponent(commit)
             link[.font] = NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
