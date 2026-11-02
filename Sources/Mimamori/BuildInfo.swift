@@ -27,28 +27,38 @@ enum BuildInfo {
         return value
     }
 
-    /// The standard About window, with the commit under the version, linked to it on GitHub.
+    /// What Mimamori is, as the README opens.
+    static let introduction = """
+        Mimamori (見守り, mee-mah-MOH-ree) is Japanese for watching over someone with care: the way you watch children at play, ready to step in.
+
+        A small, native macOS app that keeps watch over git worktrees while coding agents work in them. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: what is it doing right now, and should I be worried.
+        """
+
+    /// The standard About window, with what Mimamori is under the version, then the commit it
+    /// was built from, linked to it on GitHub.
     static func showAboutPanel() {
-        var options: [NSApplication.AboutPanelOptionKey: Any] = [:]
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.paragraphSpacing = 6
+        let style: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraph,
+        ]
+        let credits = NSMutableAttributedString(string: introduction, attributes: style)
         if let commit {
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.alignment = .center
-            let style: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-                .foregroundColor: NSColor.secondaryLabelColor,
-                .paragraphStyle: paragraph,
-            ]
-            let credits = NSMutableAttributedString(string: "Built from commit ", attributes: style)
-            var link = style
+            var quiet = style
+            quiet[.foregroundColor] = NSColor.secondaryLabelColor
+            credits.append(NSAttributedString(string: "\n\nBuilt from commit ", attributes: quiet))
+            var link = quiet
             link[.link] = repository.appendingPathComponent("commit").appendingPathComponent(commit)
             link[.font] = NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
             credits.append(NSAttributedString(string: commit, attributes: link))
             if hasUncommittedChanges {
-                credits.append(NSAttributedString(string: "\nwith uncommitted changes", attributes: style))
+                credits.append(NSAttributedString(string: "\nwith uncommitted changes", attributes: quiet))
             }
-            options[.credits] = credits
         }
-        NSApplication.shared.orderFrontStandardAboutPanel(options: options)
+        NSApplication.shared.orderFrontStandardAboutPanel(options: [.credits: credits])
         NSApplication.shared.activate()
     }
 }
