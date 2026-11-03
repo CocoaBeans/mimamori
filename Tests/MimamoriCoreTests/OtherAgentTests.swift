@@ -20,6 +20,57 @@ struct AgentEventTranslatorTests {
         #expect(interrupt.rawName == "Interrupt")
     }
 
+    /// What Codex 0.166 sends for a command that runs past its first wait: one PreToolUse from
+    /// exec_command, nothing while write_stdin polls it, then one PostToolUse with exec_command's id
+    /// once a poll sees it exit (Codex's own test: post_tool_use_blocks_when_exec_session_completes_via_write_stdin).
+    @Test func codexLongCommandStaysRunningUntilItsOnePostToolUse() throws {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        func codex(_ json: String, at seconds: TimeInterval) throws -> HookEvent {
+            try #require(AgentEventTranslator.translate(Data(json.utf8), agent: .codex, receivedAt: start.addingTimeInterval(seconds)))
+        }
+        let session = #""session_id":"thr_1","turn_id":"t1","cwd":"/repo""#
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try codex(#"{"hook_event_name":"UserPromptSubmit",\#(session),"prompt":"Build it"}"#, at: 0))
+        _ = machine.apply(try codex(#"{"hook_event_name":"PreToolUse",\#(session),"tool_name":"Bash","tool_use_id":"exec-1","tool_input":{"command":"swift build"}}"#, at: 1))
+
+        // Ten minutes of polls send nothing: still working on the build, its step open, not quiet.
+        var status = try #require(machine.status)
+        #expect(status.activity == .working(tool: "Bash", detail: "swift build"))
+        #expect(status.turnToolCalls.map(\.finishedAt) == [nil])
+        let underway = TurnTimeline(calls: status.turnToolCalls, turnStartedAt: status.turnStartedAt, end: start.addingTimeInterval(601))
+        #expect(underway.quietFor == nil)
+
+        _ = machine.apply(try codex(#"{"hook_event_name":"PostToolUse",\#(session),"tool_name":"Bash","tool_use_id":"exec-1","tool_input":{"command":"swift build"},"tool_response":"Build complete!"}"#, at: 601))
+        status = try #require(machine.status)
+        #expect(status.turnToolCalls.count == 1)
+        #expect(status.turnToolCalls.first?.finishedAt == start.addingTimeInterval(601))
+        #expect(status.turnToolCalls.first?.failed == false)
+        #expect(status.activity == .working(tool: nil, detail: nil))
+    }
+
+    /// A command still running when Codex's turn ends finishes in a later turn, when a poll there
+    /// sees it exit: the turn's end closes the step, and the late PostToolUse changes nothing.
+    @Test func codexCommandOutlivingItsTurnFinishesQuietly() throws {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        func codex(_ json: String, at seconds: TimeInterval) throws -> HookEvent {
+            try #require(AgentEventTranslator.translate(Data(json.utf8), agent: .codex, receivedAt: start.addingTimeInterval(seconds)))
+        }
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try codex(#"{"hook_event_name":"UserPromptSubmit","session_id":"thr_1","turn_id":"t1","cwd":"/repo","prompt":"Start the server"}"#, at: 0))
+        _ = machine.apply(try codex(#"{"hook_event_name":"PreToolUse","session_id":"thr_1","turn_id":"t1","cwd":"/repo","tool_name":"Bash","tool_use_id":"exec-1","tool_input":{"command":"npm run dev"}}"#, at: 1))
+        _ = machine.apply(try codex(#"{"hook_event_name":"Stop","session_id":"thr_1","turn_id":"t1","cwd":"/repo"}"#, at: 20))
+        #expect(machine.status?.activity == .ready)
+        #expect(machine.status?.recentToolCalls.first?.finishedAt == start.addingTimeInterval(20))
+
+        _ = machine.apply(try codex(#"{"hook_event_name":"UserPromptSubmit","session_id":"thr_1","turn_id":"t2","cwd":"/repo","prompt":"Stop the server"}"#, at: 300))
+        _ = machine.apply(try codex(#"{"hook_event_name":"PostToolUse","session_id":"thr_1","turn_id":"t2","cwd":"/repo","tool_name":"Bash","tool_use_id":"exec-1","tool_input":{"command":"npm run dev"},"tool_response":"stopped"}"#, at: 310))
+        let status = try #require(machine.status)
+        #expect(status.activity == .working(tool: nil, detail: nil))
+        #expect(status.recentToolCalls.count == 1)
+        #expect(status.recentToolCalls.first?.finishedAt == start.addingTimeInterval(20))
+        #expect(status.turnToolCalls.isEmpty)
+    }
+
     @Test func geminiEventsMapOntoTheSameMoments() throws {
         let prompt = try #require(translate(#"{"hook_event_name":"BeforeAgent","session_id":"g1","cwd":"/repo","prompt":"add a login page\nwith tests"}"#))
         #expect(prompt.agent == .gemini)
