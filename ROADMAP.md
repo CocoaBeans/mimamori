@@ -87,5 +87,8 @@ state, never on a loop.
 
 - [x] Desktop widgets showing the running agents, who needs you, and optionally each task
       ([docs/plans/desktop-widgets.md](docs/plans/desktop-widgets.md)).
+- [ ] An iPhone companion: the agents at work, who needs you, and Allow or Deny from the phone, on
+      the same network first, then over cellular
+      ([docs/plans/iphone-companion.md](docs/plans/iphone-companion.md)).
 
 - Paid "supporter" build or team features, if there is demand after release.
