@@ -19,6 +19,10 @@ on:
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
+# CI only reads the repository, so its token can do no more than that, whatever the repo's default.
+permissions:
+  contents: read
+
 # A new push to a pull request cancels the run still going for the one before it.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
