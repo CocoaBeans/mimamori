@@ -1,0 +1,44 @@
+name: Website
+
+on:
+  # The site is site/ plus the README's Agents window screenshot, so it deploys when either changes.
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/mimamori-agents.png'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits rather than cancelling one in flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Assemble
+        run: |
+          mkdir -p _site
+          cp -R site/. _site/
+          cp docs/mimamori-agents.png _site/media/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

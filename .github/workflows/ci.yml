@@ -4,15 +4,19 @@ on:
   # Each pull request is built and tested before it merges, and main again once it lands, so the
   # README's badge shows main's state. Hosted runners cost nothing for a public repository.
   pull_request:
-    # Documentation alone needs no build.
+    # Documentation and the website alone need no build.
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - 'site/**'
+      - '.github/workflows/pages.yml'
   push:
     branches: [main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - 'site/**'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 # A new push to a pull request cancels the run still going for the one before it.

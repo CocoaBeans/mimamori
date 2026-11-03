@@ -78,6 +78,8 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 ## Install
 
+The website, [cocoabeans.github.io/mimamori](https://cocoabeans.github.io/mimamori/), has the download and a short tour.
+
 With [Homebrew](https://brew.sh):
 
 ```bash

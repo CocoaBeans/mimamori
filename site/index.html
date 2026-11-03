@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mimamori · keeps watch over your worktrees</title>
+<meta name="description" content="A lightweight native mac app that keeps watch over git worktrees while coding agents work. Free, open source and read-only.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0e1124" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6efe1" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="media/favicon-64.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Mimamori">
+<meta property="og:description" content="A lightweight native mac app that keeps watch over git worktrees while coding agents work.">
+<meta property="og:url" content="https://cocoabeans.github.io/mimamori/">
+<meta property="og:image" content="https://cocoabeans.github.io/mimamori/media/demo-poster.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  /* The icon's palette: a night sky, a paper lantern's glow, 見 in vermilion, and the code it lights. */
+  :root {
+    --sky-top: #262b57;
+    --sky: #0e1124;
+    --sky-deep: #0a0d1c;
+    --surface: rgba(255, 255, 255, 0.045);
+    --surface-line: rgba(255, 255, 255, 0.09);
+    --text: #e6e9f5;
+    --muted: #a3aac4;
+    --faint: #6f7796;
+    --glow: #ffc761;
+    --glow-core: #fff7d9;
+    --ember: #eb6b24;
+    --vermilion: #e0523a;
+    --accent: #ffc761;
+    --accent-text: #1c1207;
+    --link: #ffd58c;
+    --code-bg: rgba(0, 0, 0, 0.35);
+    --keyword: #fa78a8;
+    --function: #73b5ff;
+    --string: #ffb86b;
+    --ident: #dbe3f5;
+    --number: #c29eff;
+    --type: #80dba8;
+    --added: #4de080;
+    --removed: #ff6161;
+    --bars-opacity: 0.22;
+    --shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --body-bg: linear-gradient(180deg, var(--sky-top) 0%, var(--sky) 38rem, var(--sky-deep) 100%);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      /* Dawn on washi paper: ink text, the lantern's ember for accents. */
+      --sky-top: #fbf3df;
+      --sky: #f6efe1;
+      --sky-deep: #efe6d2;
+      --surface: rgba(255, 255, 255, 0.6);
+      --surface-line: rgba(60, 40, 20, 0.12);
+      --text: #1e2140;
+      --muted: #545a78;
+      --faint: #7d8099;
+      --glow: #f2a23c;
+      --glow-core: #fff4cf;
+      --vermilion: #b3301c;
+      --accent: #1e2140;
+      --accent-text: #fff7e6;
+      --link: #a8401f;
+      --code-bg: rgba(30, 33, 64, 0.06);
+      --keyword: #c2386f;
+      --function: #2f6fc4;
+      --string: #b3621a;
+      --ident: #8a8fa8;
+      --number: #7a4fd0;
+      --type: #2a8a57;
+      --added: #1f9e4b;
+      --removed: #c93636;
+      --bars-opacity: 0.28;
+      --shadow: 0 30px 70px -25px rgba(60, 40, 20, 0.45), 0 0 0 1px rgba(60, 40, 20, 0.1);
+    }
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--sky-deep);
+    background-image: var(--body-bg);
+    background-repeat: no-repeat;
+    color: var(--text);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: var(--link); text-underline-offset: 3px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; border-radius: 6px; }
+  .wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
+  .jp { font-family: "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", "Noto Serif JP", serif; }
+  code, kbd, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Header */
+  header.top { padding: 18px 0; }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 650; letter-spacing: 0.01em; }
+  .brand img { width: 30px; height: 30px; }
+  nav.links { display: flex; gap: 22px; font-size: 15px; }
+  nav.links a { color: var(--muted); text-decoration: none; }
+  nav.links a:hover { color: var(--text); }
+
+  /* Hero */
+  .hero { position: relative; text-align: center; padding: 48px 0 56px; isolation: isolate; }
+  .bars { position: absolute; inset: 0 0 auto 0; height: 100%; z-index: -1; opacity: var(--bars-opacity);
+          display: flex; flex-direction: column; gap: 18px; padding-top: 40px; overflow: hidden;
+          -webkit-mask-image: radial-gradient(ellipse 70% 75% at 50% 35%, #000 25%, transparent 80%);
+                  mask-image: radial-gradient(ellipse 70% 75% at 50% 35%, #000 25%, transparent 80%); }
+  .bars div { display: flex; gap: 12px; justify-content: center; }
+  .bars span { height: 12px; border-radius: 6px; flex: none; }
+  .k { background: var(--keyword); } .f { background: var(--function); } .s { background: var(--string); }
+  .i { background: var(--ident); } .n { background: var(--number); } .t { background: var(--type); }
+  .lantern { position: relative; width: 168px; height: 168px; margin: 0 auto 26px; }
+  .lantern::before { content: ""; position: absolute; inset: -90px; z-index: -1; border-radius: 50%;
+                     background: radial-gradient(circle, color-mix(in srgb, var(--glow) 45%, transparent) 0%,
+                                 color-mix(in srgb, var(--ember) 12%, transparent) 45%, transparent 70%);
+                     animation: flicker 5s ease-in-out infinite; }
+  .lantern img { width: 100%; height: 100%; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.35)); }
+  @keyframes flicker { 0%, 100% { opacity: 0.85; transform: scale(1); } 45% { opacity: 1; transform: scale(1.04); } 70% { opacity: 0.92; } }
+  h1 { font-size: clamp(44px, 8vw, 72px); line-height: 1.05; margin: 0; letter-spacing: -0.02em; font-weight: 750; }
+  .reading { margin: 10px 0 0; color: var(--muted); font-size: 16px; }
+  .reading .jp { color: var(--vermilion); font-size: 22px; margin-right: 8px; vertical-align: -2px; }
+  .tagline { font-size: clamp(20px, 3vw, 26px); line-height: 1.4; max-width: 30ch; margin: 22px auto 10px; font-weight: 500; }
+  .questions { color: var(--muted); margin: 0 auto 30px; max-width: 46ch; }
+  .questions strong { color: var(--text); font-weight: 600; }
+  .cta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 14px; }
+  .button { display: inline-flex; align-items: center; gap: 10px; padding: 13px 22px; border-radius: 12px; font-weight: 650;
+            background: var(--accent); color: var(--accent-text); text-decoration: none; font-size: 16px;
+            box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--glow) 70%, transparent); }
+  .button:hover { filter: brightness(1.06); text-decoration: none; }
+  .button svg { width: 18px; height: 18px; }
+  .brew { display: inline-flex; align-items: center; gap: 4px; padding: 6px 6px 6px 16px; border-radius: 12px; max-width: 100%;
+          background: var(--code-bg); border: 1px solid var(--surface-line); font-size: 14.5px; }
+  .brew code { min-width: 0; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .brew code .p { color: var(--faint); user-select: none; }
+  .copy { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 7px 10px; border-radius: 8px; font: inherit; font-size: 13px; flex: none; }
+  .copy:hover { background: var(--surface); color: var(--text); }
+  .fine { margin-top: 18px; color: var(--faint); font-size: 14px; }
+
+  /* Demo */
+  .demo { margin: 8px auto 0; }
+  .window { position: relative; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); background: #1c1e22; aspect-ratio: 1360 / 780; }
+  .window video, .window img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .caption { text-align: center; color: var(--faint); font-size: 14px; margin-top: 14px; }
+
+  /* Sections */
+  section { padding: 88px 0 0; }
+  h2 { font-size: clamp(28px, 4vw, 38px); line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 14px; font-weight: 720; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 36px; font-size: 18px; }
+  .name { display: grid; grid-template-columns: auto 1fr; gap: 36px; align-items: center; padding: 36px; border-radius: 20px;
+          background: var(--surface); border: 1px solid var(--surface-line); }
+  .name .kanji { font-size: clamp(64px, 11vw, 112px); line-height: 1; color: var(--vermilion); writing-mode: vertical-rl; letter-spacing: 0.08em; }
+  .name p { margin: 0 0 12px; max-width: 58ch; }
+  .name p:last-child { margin-bottom: 0; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .card { padding: 24px; border-radius: 16px; background: var(--surface); border: 1px solid var(--surface-line); }
+  .card h3 { margin: 0 0 8px; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+  .card h3 .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .card p { margin: 0; color: var(--muted); font-size: 15.5px; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+  .split img { width: 100%; max-width: 460px; height: auto; display: block; justify-self: center; }
+  .agents { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; padding: 0; list-style: none; }
+  .agents li { padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--surface-line); font-size: 14.5px; }
+  .checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  .checks li { padding-left: 30px; position: relative; color: var(--muted); }
+  .checks li strong { color: var(--text); font-weight: 600; }
+  .checks li::before { content: ""; position: absolute; left: 4px; top: 0.55em; width: 12px; height: 12px; border-radius: 50%;
+                       background: radial-gradient(circle, var(--glow-core) 0 25%, var(--glow) 55%, var(--ember) 100%); }
+  .install { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .install .card p + p { margin-top: 10px; }
+  .install pre { margin: 12px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--code-bg); overflow-x: auto; font-size: 14px; }
+  footer { margin-top: 110px; padding: 32px 0 48px; border-top: 1px solid var(--surface-line); color: var(--faint); font-size: 14.5px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
+  footer a { color: var(--muted); }
+  footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
+
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .split, .install { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  }
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    nav.links { gap: 16px; font-size: 14px; }
+    nav.links .wide { display: none; }
+    .hero { padding-top: 28px; }
+    .lantern { width: 128px; height: 128px; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .name { grid-template-columns: minmax(0, 1fr); padding: 26px; gap: 14px; }
+    .name .kanji { writing-mode: horizontal-tb; }
+    section { padding-top: 64px; }
+    .brew { font-size: 13px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lantern::before { animation: none; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="media/icon-512.png" alt="" width="30" height="30">Mimamori</a>
+    <nav class="links" aria-label="Site">
+      <a class="wide" href="#features">Features</a>
+      <a class="wide" href="#privacy">Privacy</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/CocoaBeans/mimamori">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="bars" aria-hidden="true">
+      <div><span class="k" style="width:70px"></span><span class="f" style="width:150px"></span><span class="i" style="width:40px"></span><span class="s" style="width:120px"></span></div>
+      <div><span class="k" style="width:56px"></span><span class="i" style="width:96px"></span><span class="i" style="width:34px"></span><span class="s" style="width:180px"></span><span class="n" style="width:40px"></span></div>
+      <div><span class="k" style="width:50px"></span><span class="i" style="width:110px"></span><span class="f" style="width:170px"></span><span class="i" style="width:44px"></span></div>
+      <div><span class="i" style="width:130px"></span><span class="s" style="width:200px"></span><span class="t" style="width:90px"></span></div>
+      <div><span class="k" style="width:84px"></span><span class="n" style="width:64px"></span><span class="i" style="width:150px"></span><span class="f" style="width:110px"></span></div>
+      <div><span class="t" style="width:120px"></span><span class="f" style="width:110px"></span><span class="i" style="width:80px"></span></div>
+      <div><span class="k" style="width:70px"></span><span class="i" style="width:120px"></span><span class="n" style="width:52px"></span><span class="s" style="width:170px"></span></div>
+      <div><span class="i" style="width:150px"></span><span class="i" style="width:50px"></span><span class="s" style="width:190px"></span></div>
+      <div><span class="k" style="width:76px"></span><span class="f" style="width:160px"></span><span class="i" style="width:60px"></span></div>
+    </div>
+
+    <div class="wrap">
+      <div class="lantern"><img src="media/icon-512.png" alt="Mimamori's icon: a paper lantern marked 見, lighting the code behind it" width="168" height="168"></div>
+      <h1>Mimamori</h1>
+      <p class="reading"><span class="jp" lang="ja">見守り</span>mee-mah-MOH-ree</p>
+      <p class="tagline">A lightweight native mac app that keeps watch over git worktrees while coding agents work.</p>
+      <p class="questions">It sits beside Claude Code, Codex, Cursor or whatever you run, and answers two questions at a glance: <strong>what is it doing right now</strong>, and <strong>should I be worried</strong>?</p>
+      <div class="cta">
+        <a class="button" href="https://github.com/CocoaBeans/mimamori/releases/latest">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>
+          Download for Mac
+        </a>
+        <div class="brew">
+          <code><span class="p">$ </span><span id="brew-cmd">brew install --cask cocoabeans/tap/mimamori</span></code>
+          <button class="copy" type="button" data-copy="brew-cmd" aria-label="Copy the Homebrew command">Copy</button>
+        </div>
+      </div>
+      <p class="fine">Free and open source · macOS 15 or later · Apple silicon and Intel · Signed and notarized</p>
+    </div>
+  </div>
+
+  <div class="wrap demo">
+    <div class="window">
+      <video autoplay muted loop playsinline preload="auto" poster="media/demo-poster.jpg" width="1360" height="780"
+             aria-label="Mimamori as three agents start work: Claude Code's edits appear in the change list and the diff, the activity feed fills, and the toolbar pill turns to Codex needs you">
+        <source src="media/demo.mp4" type="video/mp4">
+      </video>
+    </div>
+    <p class="caption">Three agents start work in a web shop's worktrees. Each edit shows up within moments, and the toolbar says who needs you.</p>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <div class="name">
+        <div class="kanji jp" lang="ja" aria-hidden="true">見守り</div>
+        <div>
+          <h2>Watching over, with care</h2>
+          <p><em>Mimamori</em> is Japanese for watching over someone with care: the way you watch children at play, ready to step in.</p>
+          <p>That is the job when an agent edits on your behalf. You don't need a git client built for committing. You need something that refreshes by itself, shows what changed in the last minute, keeps the whole session in view after the agent commits, and points out the few changes that deserve a human look.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>What it does</h2>
+      <p class="lede">Add a repository and Mimamori finds its worktrees, including the ones agent tools create, and watches them all.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><span class="dot" style="background:var(--function)"></span>Watches live</h3>
+          <p>Changes appear a few hundred milliseconds after files settle. Recently touched files glow and say “12s ago”, so you can see where the agent is working.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--glow)"></span>Knows where the agents are</h3>
+          <p>It shows which worktree each agent is in and, with hooks connected, each tool call, when a turn ends, and when one needs your permission.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--removed)"></span>Flags what deserves a look</h3>
+          <p>Secrets and <code>.env</code> files, lockfiles, CI and agent instruction files, skipped or deleted tests, mass deletions, conflict markers, and edits outside your scope.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--number)"></span>Compares against the right baseline</h3>
+          <p>Agents commit as they go. See what's uncommitted, everything since the branch point, since you pressed Mark Start, or since any earlier snapshot.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--added)"></span>Remembers what you've reviewed</h3>
+          <p>Mark files reviewed as you read them. When an agent edits one again, it comes back as changed since your review, with just the new edits.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--keyword)"></span>Writes up a session</h3>
+          <p>A Markdown summary of what changed, what needs attention, the commits and what the agent did, ready for a pull request or a handoff note.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap split">
+      <div>
+        <h2>Every agent, at a glance</h2>
+        <p class="lede">The Agents window lists each worktree with an agent in it, grouped by who needs you, who's working and who's ready. Each card shows the agent's task, its latest steps, the files it touched, and a strip of its tool calls over time. The menu bar and a desktop widget keep the same picture in view.</p>
+        <ul class="agents" aria-label="Agents Mimamori recognises">
+          <li>Claude Code</li><li>Codex</li><li>Gemini CLI</li><li>Cursor</li><li>Aider</li><li>Hermes</li><li>Goose</li><li>OpenCode</li><li>Amp</li>
+        </ul>
+        <p class="fine" style="text-align:left">Or any agent that can run a command from a hook.</p>
+      </div>
+      <img src="media/mimamori-agents.png" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through ten steps, and Gemini CLI ready for its next prompt" loading="lazy" width="1333" height="1953">
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap">
+      <h2>Read-only, and private</h2>
+      <p class="lede">Mimamori can watch any repository while another tool is busy in it, because it never gets in the way.</p>
+      <ul class="checks">
+        <li><strong>Never touches your work.</strong> It never stages, commits, checks out or takes the repository's <code>index.lock</code>. Your code, branches and index stay as they are.</li>
+        <li><strong>Talks to nothing but your local git.</strong> No account and no telemetry. Agents reach it through a socket only your own processes can use.</li>
+        <li><strong>One exception: updates.</strong> Release builds ask GitHub for the list of releases when you check for updates, or once a day if you agree. Nothing about you or your Mac goes with it.</li>
+        <li><strong>Open source.</strong> MIT licensed, so you can read every line or build it yourself.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p class="lede">Mimamori needs macOS 15 or later and a <code>git</code> binary. It runs natively on Apple silicon and Intel and keeps itself up to date.</p>
+      <div class="install">
+        <div class="card">
+          <h3>Homebrew</h3>
+          <pre><code>brew install --cask cocoabeans/tap/mimamori</code></pre>
+        </div>
+        <div class="card">
+          <h3>Download</h3>
+          <p>Get the <a href="https://github.com/CocoaBeans/mimamori/releases/latest">latest release</a>, open the disk image, and drag Mimamori to Applications. It's signed with a Developer ID and notarized by Apple.</p>
+          <p>The first time it opens, a welcome window explains what it reads and writes before anything is installed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Mimamori is free and open source, under the MIT license.</span>
+    <nav aria-label="Project">
+      <a href="https://github.com/CocoaBeans/mimamori">Source</a>
+      <a href="https://github.com/CocoaBeans/mimamori/releases">Releases</a>
+      <a href="https://github.com/CocoaBeans/mimamori/issues">Issues</a>
+      <a href="https://github.com/CocoaBeans/mimamori/security">Security</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  // Copy buttons: copy the named element's text, and say so for a moment.
+  document.querySelectorAll("[data-copy]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var text = document.getElementById(button.dataset.copy).textContent;
+      var done = function () { button.textContent = "Copied"; setTimeout(function () { button.textContent = "Copy"; }, 1600); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+    });
+  });
+  // With reduced motion, the recording waits for a click instead of playing by itself.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    var video = document.querySelector(".window video");
+    video.removeAttribute("autoplay");
+    video.pause();
+    video.controls = true;
+  }
+</script>
+</body>
+</html>
