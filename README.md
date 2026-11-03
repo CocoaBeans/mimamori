@@ -7,7 +7,7 @@
 ![Swift 6](https://img.shields.io/badge/Swift-6-orange)
 [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A lightweight native mac app that keeps watch over git worktrees while coding agents work in them. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: **what is it doing right now**, and **should I be worried**.
+A lightweight native mac app that keeps watch over git worktrees while coding agents work. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: **what is it doing right now**, and **should I be worried**.
 
 Mimamori is strictly read-only. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
 
