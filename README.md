@@ -78,7 +78,13 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 ## Install
 
-Download the `.dmg` from the [latest release](https://github.com/CocoaBeans/mimamori/releases/latest), open it, and drag Mimamori to Applications. It is signed with a Developer ID and notarized by Apple, and it keeps itself up to date: Mimamori › Check for Updates…, or once a day if you let it.
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask cocoabeans/tap/mimamori
+```
+
+Or download the `.dmg` from the [latest release](https://github.com/CocoaBeans/mimamori/releases/latest), open it, and drag Mimamori to Applications. It is signed with a Developer ID and notarized by Apple, and it keeps itself up to date: Mimamori › Check for Updates…, or once a day if you let it.
 
 The first time it opens, a welcome window says what Mimamori reads and writes, what hooks are, and exactly which file connecting Claude Code or Hermes changes, before anything is installed; Help › Welcome to Mimamori brings it back. **Help › Mimamori Help** (⌘?) is a short guide to the rest: reviewing changes, agents and hooks, the menu bar, snapshots, keyboard shortcuts and troubleshooting.
 
@@ -364,7 +370,7 @@ Example: `open --env MIMAMORI_SCREENSHOT=/tmp/mimamori.png build/Mimamori.app`
 
 ### Releasing
 
-`Scripts/release.sh` archives Mimamori, exports it signed with Developer ID (the app and its widget extension, each with its entitlements and the hardened runtime), notarizes and staples it, then packs it into `build/Mimamori-<version>.dmg`, notarized and stapled in turn. It signs the DMG for Sparkle, writes `build/appcast.xml` offering it, and prints the DMG's SHA-256 for a Homebrew cask and the `gh release create` command that publishes both.
+`Scripts/release.sh` archives Mimamori, exports it signed with Developer ID (the app and its widget extension, each with its entitlements and the hardened runtime), notarizes and staples it, then packs it into `build/Mimamori-<version>.dmg`, notarized and stapled in turn. It signs the DMG for Sparkle, writes `build/appcast.xml` offering it, and prints the DMG's SHA-256 for the Homebrew cask (`Casks/mimamori.rb` in [CocoaBeans/homebrew-tap](https://github.com/CocoaBeans/homebrew-tap): set its `version` and `sha256`) and the `gh release create` command that publishes both.
 
 - **Version.** The version and build number live in the project's build settings (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`), which both Info.plists read. `Scripts/set-version.sh 1.0.1` sets the next version and raises the build number by one; Sparkle compares build numbers, so every release needs a higher one. Run it with no version to see the current one.
 - **Signing.** It needs a Developer ID Application certificate for the team, in the login keychain or cloud-managed (xcodebuild can sign with one when the API key has the Admin role), and an App Store Connect API key passed as `ASC_KEY_ID` and `ASC_ISSUER_ID` (the key file is read from `~/.appstoreconnect/private_keys/`).
