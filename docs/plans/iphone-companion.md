@@ -1,8 +1,9 @@
 # Plan: an iPhone companion
 
-> **Proposed.** Nothing is built yet. Two questions shape the order of the work (see
-> "To decide first"): App Store or TestFlight, and whether the live view or "needs you"
-> notifications matter more.
+> **Proposed.** Nothing is built yet. A build of your own that keeps itself running with silent
+> audio needs only the same-network design plus Tailscale; CloudKit and a relay are for an App
+> Store build. Which builds to make, and whether the live view or "needs you" notifications
+> matter more, shape the order of the work (see "To decide first").
 
 ## Goal
 
@@ -43,8 +44,9 @@ iOS suspends an app soon after it leaves the screen, and a suspended app keeps n
 So there are two separate jobs:
 
 1. **The live view while the app is open.** A direct connection to the Mac. Easy.
-2. **A tap on the shoulder when it isn't.** Only a push notification reaches a phone in your
-   pocket. Which kind of push is the real choice in this plan.
+2. **A tap on the shoulder when it isn't.** In an App Store build, only a push notification
+   reaches a phone in your pocket, and which kind of push is the real choice. A build of your own
+   can instead keep itself running (see "Staying connected in the background").
 
 ## On the same network
 
@@ -74,6 +76,47 @@ Serving a web page instead of an iPhone app (Add to Home Screen) is possible and
 Store. But HTTPS on a local network needs a certificate the phone trusts, and without it there is
 no web push and pairing is weaker. Not recommended.
 
+## Staying connected in the background (builds of your own)
+
+An app that is playing audio isn't suspended. So a build that plays silence while it's in the
+background keeps its connection to the Mac open, and everything else follows from the app itself
+rather than from a push service:
+
+- **Notifications** are local ones the app posts (`UNUserNotificationCenter`) when an agent starts
+  needing you, with Allow and Deny as actions. Allow is marked `.authenticationRequired`, so the
+  phone must be unlocked to use it. The answer goes back over the open connection.
+- **A Live Activity**, "Claude Code · working · 4m · Edit" on the Lock Screen and in the Dynamic
+  Island, is started and updated by the app as snapshots arrive, with no APNs.
+- **Over cellular** it rides on Tailscale, below, reconnecting when the phone moves between Wi-Fi
+  and cellular.
+
+**How it works.** An existing prototype to port does this:
+- it sets the audio session to `.playback` with `.mixWithOthers`, so your own music keeps playing;
+- when the app goes to the background, it loops a one-sample silent WAV, built from bytes in code,
+  at almost no volume;
+- it stops when the app comes back to the front, since the open connection needs no help then.
+
+Porting it needs:
+- **The background mode.** `UIBackgroundModes` with `audio` in the iOS app's Info.plist; the
+  prototype's app no longer declares it.
+- **Interruptions handled at their end.** A phone call or Siri stops the audio. The prototype
+  restarts playback when an interruption *begins*. It should restart when it *ends*, and after
+  `mediaServicesWereResetNotification`. If iOS suspends the app before then, opening it again
+  starts over, and the app says it was disconnected.
+- **A switch.** "Stay connected in the background" in the phone's settings, off by default, with
+  a line about battery.
+
+**Limits.**
+- **Not for the App Store.** App Review allows background audio only for audio you can hear
+  (guideline 2.5.4). So the audio mode and the keep-alive are built only in a configuration of
+  their own, for running from Xcode or for TestFlight's internal testers, who need no beta
+  review. An App Store build leaves both out and uses the pushes below.
+- **Battery.** Silence still keeps the audio hardware awake, and the connection keeps the radio
+  busy. Measure it during the spike. If it hurts, stop the audio when no agent is working and
+  nothing has needed you for a while.
+- **iOS can still end it**, under memory pressure or after a restart. The app then says it's
+  disconnected the next time you look, rather than showing old states as current.
+
 ## Over cellular
 
 Cheapest first:
@@ -82,7 +125,11 @@ Cheapest first:
    works unchanged, since the listener accepts connections on every interface. Bonjour doesn't
    cross Tailscale, so the phone also offers "Connect to a host" (a MagicDNS name or address),
    kept beside paired Macs it found itself. No server, no account of Mimamori's. This is the
-   cellular route for the first version.
+   cellular route for the first version. With the keep-alive above, it also carries notifications
+   and the Live Activity, so a build of your own needs nothing else.
+
+The next two are for an App Store build, which can't keep itself running:
+
 2. **CloudKit as the relay, for notifications.**
    - The Mac keeps one record per paired phone in your private iCloud database, updated when who
      needs you changes, not on every step.
@@ -131,8 +178,9 @@ reach. The companion changes that, so:
 - **On the Mac.** A `CompanionPublisher` beside `WidgetPublisher`, fed from
   `AppModel.publishWidgets()`, owning the listener, the pairings and the connections.
 - **On the phone.** An iOS app target in `Mimamori.xcodeproj`: a paired-Macs screen, the agents
-  list, an agent's detail with its timeline and files, and Allow and Deny. Later, an iOS widget
-  from the same views.
+  list, an agent's detail with its timeline and files, and Allow and Deny. The keep-alive and
+  its `audio` background mode only in the configuration for builds of your own. Later, an iOS
+  widget from the same views.
 
 ## Steps
 
@@ -148,17 +196,22 @@ reach. The companion changes that, so:
    - The Settings tab, Help and README text, and Uninstall.
 3. **Cellular through Tailscale.** "Connect to a host", reconnecting when the network changes, and
    a clear "can't reach your Mac" state.
-4. **Notifications through CloudKit.** The container and provisioning profile, the records and
-   subscription, and notification actions for Allow and Deny.
-5. **Later, if wanted.** The relay, Live Activities and the Dynamic Island, a Watch app.
+4. **Staying connected, in builds of your own.** Port the silent-audio keep-alive into its own
+   build configuration, then local notifications with Allow and Deny, then the Live Activity.
+   Measure the battery cost over an afternoon of agents.
+5. **For an App Store build: notifications through CloudKit.** The container and provisioning
+   profile, the records and subscription, and notification actions for Allow and Deny.
+6. **Later, if wanted.** The relay for an App Store build's Live Activity, and a Watch app.
 
 ## To decide first
 
-- **App Store or TestFlight.** TestFlight for yourself is quick. The App Store accepts companion
-  apps that need a Mac app, but wants a privacy policy page (the website can host it) and review
-  of each update.
+- **Which builds.** A build of your own (from Xcode, or TestFlight's internal testers) can keep
+  itself running and needs steps 1–4 only. An App Store build can't, and needs step 5 for
+  notifications. The App Store accepts companion apps that need a Mac app, but wants a privacy
+  policy page (the website can host it) and review of each update. The same code serves both,
+  with the keep-alive in its own build configuration.
 - **Live view or notifications first.** The live view is steps 1–3. If "needs you" notifications
-  matter more, CloudKit (step 4) can come straight after pairing.
+  matter more, the keep-alive and local notifications (step 4) can come straight after pairing.
 - **Minimum macOS for the companion.** macOS 15 with `NWListener`, or 26 for the newer API.
 
 ## References
