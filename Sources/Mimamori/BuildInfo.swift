@@ -30,7 +30,7 @@ enum BuildInfo {
     /// What Mimamori is, as the README opens.
     static let introduction = [
         "Mimamori (見守り, mee-mah-MOH-ree) is Japanese for watching over someone with care: the way you watch children at play, ready to step in.",
-        "A lightweight native mac app that keeps watch over git worktrees while coding agents work. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: what is it doing right now, and should I be worried.",
+        "A lightweight mac app that keeps watch over git worktrees while coding agents work. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: what is it doing right now, and should I be worried.",
     ].joined(separator: "\n")
 
     /// The standard About window, with what Mimamori is under the version, then the commit it
