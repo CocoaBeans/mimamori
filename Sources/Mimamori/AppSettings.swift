@@ -45,7 +45,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var agentsWindowDetailed: Bool = true
     /// Sections of the Agents window folded to their headers (`AgentSection.key`).
     var agentsWindowCollapsed: [String] = []
-    /// Sections of the menu-bar panel folded to their headers: "agents", "worktrees".
+    /// Sections of the menu-bar panel folded to their headers: "agents", "worktrees", and the
+    /// agents' groups as "agents." plus their `AgentSection.key`.
     var menuBarCollapsed: [String] = []
     /// The agent banner above the diff shows the task, steps and files; off for one line.
     var agentBannerExpanded: Bool = true

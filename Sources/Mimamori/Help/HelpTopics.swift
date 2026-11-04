@@ -159,7 +159,8 @@ struct HelpTopic: Identifiable {
             markdown: """
             ## The menu bar
             The eye in the menu bar shows how many files changed, how many need a look, and how many agents are waiting for you. Click it for each agent at work, with a live timer, its task and its latest steps, then every repository and worktree. Click an agent or a worktree to open it.
-            - Fold the Agents or Worktrees section away by its heading.
+            - Agents are grouped under Needs you, Working, Ready and Ended, as in the Agents window.
+            - Fold the Agents or Worktrees section, or one of the agents' groups, away by its heading.
             - The pin at the bottom keeps it open as a small window above the others. It opens again at launch until you unpin it.
             - **Settings › General › Show in menu bar** hides it.
 

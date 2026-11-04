@@ -700,19 +700,21 @@ final class AppModel {
     /// the desktop widgets include them only when the settings allow.
     func widgetAgents(details: Bool? = nil) -> [AgentWidgetSnapshot.Agent] {
         let details = details ?? settings.showTasksInWidgets
-        return agentRows.map { row in
-            let presence = row.presence
-            let state = presence.widgetState
-            let steps = details ? presence.turnSteps.suffix(3).reversed().map { step in
-                AgentWidgetSnapshot.Step(tool: step.toolName, target: step.summary.map { AgentText.shortenPaths($0, in: row.session.id) },
-                                         running: step.finishedAt == nil)
-            } : []
-            return AgentWidgetSnapshot.Agent(
-                worktreePath: row.session.id, repository: row.repositoryName, repositoryColor: row.look?.color, worktree: row.session.displayName,
-                agent: presence.kind.displayName, symbol: presence.kind.symbolName, state: state, status: AgentText.shortenPaths(presence.statusText, in: row.session.id),
-                since: presence.since, task: details ? presence.task : nil, steps: steps, others: presence.others.count,
-                collision: presence.collision?.title)
-        }
+        return agentRows.map { widgetAgent(for: $0, details: details) }
+    }
+
+    /// One of the Agents window's rows as the widgets draw it.
+    func widgetAgent(for row: AgentRow, details: Bool) -> AgentWidgetSnapshot.Agent {
+        let presence = row.presence
+        let steps = details ? presence.turnSteps.suffix(3).reversed().map { step in
+            AgentWidgetSnapshot.Step(tool: step.toolName, target: step.summary.map { AgentText.shortenPaths($0, in: row.session.id) },
+                                     running: step.finishedAt == nil)
+        } : []
+        return AgentWidgetSnapshot.Agent(
+            worktreePath: row.session.id, repository: row.repositoryName, repositoryColor: row.look?.color, worktree: row.session.displayName,
+            agent: presence.kind.displayName, symbol: presence.kind.symbolName, state: presence.widgetState, status: AgentText.shortenPaths(presence.statusText, in: row.session.id),
+            since: presence.since, task: details ? presence.task : nil, steps: steps, others: presence.others.count,
+            collision: presence.collision?.title)
     }
 
     // MARK: Session summary

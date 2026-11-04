@@ -21,7 +21,7 @@ struct MenuBarLabel: View {
 }
 
 /// The menu-bar popover: the agents at work, drawn with the desktop widget's rows and live
-/// timers, then the worktrees Mimamori watches and its commands.
+/// timers under the Agents window's headings, then the worktrees Mimamori watches and its commands.
 struct MenuBarPanel: View {
     /// The window the panel is pinned in, floating above the others until you unpin it.
     static let pinnedWindowID = "overview"
@@ -121,7 +121,11 @@ struct MenuBarPanel: View {
     }
 
     private var agents: some View {
-        let snapshot = AgentWidgetSnapshot(agents: model.widgetAgents(details: true))
+        // Under the Agents window's headings, in its order: the most pressing agent comes first.
+        let groups = AgentSection.group(model.agentRows).map { group in
+            (section: group.section, rows: group.rows, agents: group.rows.map { model.widgetAgent(for: $0, details: true) })
+        }
+        let snapshot = AgentWidgetSnapshot(agents: groups.flatMap(\.agents))
         // The most pressing state washes the top, as on the widget.
         let mood = snapshot.agents.first.map { $0.collision != nil ? Color.orange : $0.state.tint } ?? .secondary
         let folded = isFolded("agents")
@@ -138,10 +142,21 @@ struct MenuBarPanel: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
-            }
-            ForEach(snapshot.agents) { agent in
-                AgentLink(agent: agent) {
-                    AgentRowView(agent: agent, detailed: true)
+            } else {
+                ForEach(groups, id: \.section) { group in
+                    // Folded apart from the Agents window's sections.
+                    let key = "agents." + group.section.key
+                    let groupFolded = isFolded(key)
+                    AgentSectionHeader(section: group.section, rows: group.rows, collapsed: groupFolded) {
+                        toggleFold(key)
+                    }
+                    if !groupFolded {
+                        ForEach(group.agents) { agent in
+                            AgentLink(agent: agent) {
+                                AgentRowView(agent: agent, detailed: true)
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -486,8 +486,8 @@ enum AgentSection: Int, Hashable, CaseIterable {
 /// "Needs you 2" on a rounded tab of the section's colour, translucent like the cards below it.
 /// Not pinned: a pinned heading needs something opaque behind it to hide the cards scrolling
 /// under it, and that showed as a dark band around the tab. Click it to fold the section to its
-/// header, which then shows who is in it.
-private struct AgentSectionHeader: View {
+/// header, which then shows who is in it. The menu-bar panel heads its groups with it too.
+struct AgentSectionHeader: View {
     let section: AgentSection
     let rows: [AgentRow]
     let collapsed: Bool
