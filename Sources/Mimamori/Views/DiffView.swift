@@ -8,7 +8,8 @@ struct DiffView: View {
     /// Shows the change as one commit made it, against its parent, rather than in the working tree.
     var commit: CommitRecord? = nil
 
-    @State private var diff: FileDiff?
+    /// The diff on screen, set in one go when a load finishes.
+    @State private var loaded: LoadedDiff?
     @State private var errorText: String?
     @State private var showAll = false
     @State private var targetLineID: Int?
@@ -16,18 +17,17 @@ struct DiffView: View {
     @State private var fullDiffKey: String?
     /// A reviewed blob found missing from the object store.
     @State private var missingReviewBlob: String?
-    /// Whether `diff` holds the since-review diff.
-    @State private var loadedSinceReview = false
     /// A line to jump to once the full diff has loaded.
     @State private var pendingJump: Int?
-    /// Syntax colors and word emphasis for `diff`, worked out off the main thread.
-    @State private var decorations = DiffDecorations.empty
-    /// The note being written, if any.
+    /// Where the note being written goes, if one is.
     @State private var noteDraft: NoteDraft?
-    /// The version of the file `diff` was made from, when it is the working tree's diff against the baseline.
-    @State private var loadedChange: FileChange?
+    /// Its words, which only the composer reads as it draws.
+    @State private var noteText = NoteDraftText()
     /// Debug builds: the `discard:` flags open their confirmation once per launch.
     @MainActor private static var openedDebugDiscard = false
+
+    private var diff: FileDiff? { loaded?.diff }
+    private var loadedSinceReview: Bool { loaded?.source == .sinceReview }
 
     private var review: ReviewStatus { commit == nil ? session.reviewStatus(of: change) : .unreviewed }
 
@@ -60,7 +60,7 @@ struct DiffView: View {
             .task(id: "\(commit?.oid ?? "")|\(change.contentKey)|\(reviewedBlob ?? "")|\(wantsSinceReview)|\(model.settings.syntaxHighlighting)") {
                 showAll = false
                 targetLineID = nil
-                if noteDraft?.editing == nil, noteDraft?.text.isEmpty ?? true { noteDraft = nil }
+                if noteDraft?.editing == nil, noteText.text.isEmpty { noteDraft = nil }
                 await load()
                 // MIMAMORI_DEBUG_FLAGS=diff-line:<n>: jump to new-file line n, as a flag's link does.
                 if let flag = model.debugFlags.first(where: { $0.hasPrefix("diff-line:") }),
@@ -72,6 +72,7 @@ struct DiffView: View {
                     let bounds = flag.dropFirst("note-line:".count).split(separator: "-").compactMap { Int($0) }
                     if let first = bounds.first, let last = bounds.last, first <= last,
                        let hunk = diff.hunks.first(where: { $0.lines.contains { $0.newNumber == first && $0.kind != .deletion } }) {
+                        noteText.text = ""
                         noteDraft = NoteDraft(side: .new, lines: first...last, hunk: hunk.id)
                     }
                 }
@@ -93,17 +94,25 @@ struct DiffView: View {
             }
     }
 
+    /// The diff on screen when it is the working tree's full diff of the version of the file
+    /// listed now: the only one whose hunks can be thrown away.
+    private var fullWorkingDiff: (loaded: LoadedDiff, change: FileChange)? {
+        guard commit == nil, let loaded, case .workingTree(let made) = loaded.source,
+              made.contentKey == change.contentKey else { return nil }
+        return (loaded, made)
+    }
+
     /// Asks to throw a hunk away, where that's offered: in the working tree's diff against HEAD,
     /// as loaded for the version of the file listed now.
     private var discardAction: ((DiffHunk) -> Void)? {
-        guard commit == nil, !loadedSinceReview, session.offersDiscarding, let loadedChange, let diff,
-              loadedChange.contentKey == change.contentKey, Discarding.hunkUnsupportedReason(for: loadedChange) == nil else {
+        guard session.offersDiscarding, let working = fullWorkingDiff,
+              Discarding.hunkUnsupportedReason(for: working.change) == nil else {
             return nil
         }
         let session = session
-        let decorations = decorations
         return { hunk in
-            session.discardRequest = DiscardRequest(change: loadedChange, scope: .hunk(hunk), diff: diff, decorations: decorations)
+            session.discardRequest = DiscardRequest(change: working.change, scope: .hunk(hunk),
+                                                    diff: working.loaded.diff, decorations: working.loaded.decorations)
         }
     }
 
@@ -111,12 +120,12 @@ struct DiffView: View {
     /// the full one; otherwise the confirmation reads it.
     private var discardFileAction: (() -> Void)? {
         guard commit == nil, session.offersDiscarding, Discarding.fileUnsupportedReason(for: change) == nil else { return nil }
-        let full = !loadedSinceReview && loadedChange?.contentKey == change.contentKey ? diff : nil
+        let full = fullWorkingDiff?.loaded
         let session = session
         let change = change
-        let decorations = full == nil ? DiffDecorations.empty : decorations
         return {
-            session.discardRequest = DiscardRequest(change: change, scope: .file, diff: full, decorations: decorations)
+            session.discardRequest = DiscardRequest(change: change, scope: .file, diff: full?.diff,
+                                                    decorations: full?.decorations ?? .empty)
         }
     }
 
@@ -142,7 +151,10 @@ struct DiffView: View {
             open: session.notes.open.filter { $0.path == change.path }.count,
             fileUnsent: fileNotes.count, worktreeUnsent: all.count,
             canAddFileNote: diff.map { !$0.hunks.isEmpty } ?? false,
-            addFileNote: { noteDraft = NoteDraft(lines: nil) },
+            addFileNote: {
+                noteText.text = ""
+                noteDraft = NoteDraft(lines: nil)
+            },
             copyFile: { copyNotes(fileNotes) },
             copyAll: { copyNotes(all) })
     }
@@ -187,16 +199,16 @@ struct DiffView: View {
         } else if change.isBinary {
             ContentUnavailableView("Binary File", systemImage: "doc.zipper",
                                    description: Text(binaryDescription))
-        } else if let diff {
-            if diff.hunks.isEmpty {
-                ContentUnavailableView("No Text Changes", systemImage: "doc", description: Text(emptyDiffDescription(diff)))
+        } else if let loaded {
+            if loaded.diff.hunks.isEmpty {
+                ContentUnavailableView("No Text Changes", systemImage: "doc", description: Text(emptyDiffDescription(loaded.diff)))
             } else {
-                DiffContentView(diff: diff, decorations: decorations, wrap: model.settings.wrapDiffLines,
+                DiffContentView(diff: loaded.diff, decorations: loaded.decorations, wrap: model.settings.wrapDiffLines,
                                 sideBySide: model.settings.diffLayout == .sideBySide,
                                 fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID,
                                 flags: AttentionFlag.byLine(change.flags),
                                 currentBranch: commit == nil ? currentSideName : nil,
-                                notes: noteContext, draft: $noteDraft, discard: discardAction)
+                                notes: noteContext, draft: $noteDraft, draftText: noteText, discard: discardAction)
             }
         } else if let errorText {
             ContentUnavailableView("Could Not Load Diff", systemImage: "exclamationmark.triangle",
@@ -252,12 +264,12 @@ struct DiffView: View {
 
     private func load() async {
         errorText = nil
-        if diff?.path != change.path { diff = nil }
+        // Another file's diff goes at once; this file's stays up until its new one is ready.
+        if loaded?.diff.path != change.path { loaded = nil }
         do {
             if wantsSinceReview, let blob = reviewedBlob {
                 if let since = try await session.diffSinceReview(for: change, reviewedBlob: blob) {
-                    loadedSinceReview = true
-                    await show(since)
+                    await show(since, from: .sinceReview)
                     return
                 }
                 missingReviewBlob = blob
@@ -267,11 +279,13 @@ struct DiffView: View {
             } else {
                 try await session.diff(for: change)
             }
-            loadedSinceReview = false
-            await show(full)
-            if !Task.isCancelled { loadedChange = commit == nil && full != nil ? change : nil }
-            if commit == nil, let full { session.reanchorNotes(in: full, for: change) }
-            if full == nil { errorText = "git produced no diff for this file." }
+            if let full {
+                await show(full, from: commit == nil ? .workingTree(change) : .commit)
+                if commit == nil { session.reanchorNotes(in: full, for: change) }
+            } else {
+                loaded = nil
+                errorText = "git produced no diff for this file."
+            }
             if let line = pendingJump {
                 pendingJump = nil
                 jump(toNewLine: line)
@@ -281,22 +295,35 @@ struct DiffView: View {
         }
     }
 
-    /// Shows a loaded diff together with its colors, so it never flashes plain first.
-    private func show(_ loaded: FileDiff?) async {
-        guard let loaded else {
-            diff = nil
-            decorations = .empty
-            return
-        }
+    /// Shows a diff with its colors and where it came from, all at once: it never flashes plain
+    /// first, and Discard never goes with another diff's hunks.
+    private func show(_ diff: FileDiff, from source: LoadedDiff.Source) async {
         let path = change.path
         let highlight = model.settings.syntaxHighlighting
-        let computed = await Task.detached(priority: .userInitiated) {
-            DiffDecorations.compute(for: loaded, path: path, highlightSyntax: highlight)
+        let decorations = await Task.detached(priority: .userInitiated) {
+            DiffDecorations.compute(for: diff, path: path, highlightSyntax: highlight)
         }.value
         guard !Task.isCancelled else { return }
-        decorations = computed
-        diff = loaded
+        loaded = LoadedDiff(diff: diff, decorations: decorations, source: source)
     }
+}
+
+/// A diff as shown, with its colors and what it was made from. One value, so none of the
+/// three can be left over from an earlier load.
+struct LoadedDiff {
+    enum Source: Equatable {
+        /// The working tree against the baseline, made from this version of the file.
+        case workingTree(FileChange)
+        /// The working tree against the version you reviewed.
+        case sinceReview
+        /// One commit against its parent.
+        case commit
+    }
+
+    var diff: FileDiff
+    /// Syntax colors and word emphasis, worked out off the main thread.
+    var decorations: DiffDecorations
+    var source: Source
 }
 
 struct DiffHeaderView: View {
@@ -674,8 +701,10 @@ struct DiffContentView: View {
     var currentBranch: String? = nil
     /// The file's notes, where notes apply.
     var notes: DiffNotes? = nil
-    /// The note being written, kept by the diff's owner so its header can start one too.
+    /// Where the note being written goes, kept by the diff's owner so its header can start one too.
     var draft: Binding<NoteDraft?> = .constant(nil)
+    /// Its words. Only the composer reads them as it draws; this view reads them only to save.
+    var draftText = NoteDraftText()
     /// Asks to throw a hunk away; nil where hunks can't be discarded.
     var discard: ((DiffHunk) -> Void)? = nil
 
@@ -942,7 +971,7 @@ struct DiffContentView: View {
         guard let notes else { return nil }
         let side: ReviewNote.Side = line.kind == .deletion ? .old : .new
         guard let number = ReviewNotes.number(of: line, on: side), side == .new || notes.showsOldSide else { return nil }
-        return { [draft] in
+        return { [draft, draftText] in
             let current = draft.wrappedValue
             if NSEvent.modifierFlags.contains(.shift), var current, current.editing == nil, current.side == side,
                current.hunk == hunk.id, let lines = current.lines {
@@ -950,8 +979,9 @@ struct DiffContentView: View {
                 draft.wrappedValue = current
             } else {
                 // A note you started keeps its words when you pick another line for it.
-                let text = current?.editing == nil ? current?.text ?? "" : ""
-                draft.wrappedValue = NoteDraft(side: side, lines: number...number, hunk: hunk.id, text: text)
+                let writingNew = current != nil && current?.editing == nil
+                if !writingNew { draftText.text = "" }
+                draft.wrappedValue = NoteDraft(side: side, lines: number...number, hunk: hunk.id)
             }
         }
     }
@@ -998,7 +1028,10 @@ struct DiffContentView: View {
             composer(notes)
         } else {
             ReviewNoteCard(note: note, currentBlob: notes.currentBlob,
-                           onEdit: { draft.wrappedValue = NoteDraft(side: note.side, lines: note.lines, editing: note.id, text: note.text) },
+                           onEdit: {
+                               draftText.text = note.text
+                               draft.wrappedValue = NoteDraft(side: note.side, lines: note.lines, editing: note.id)
+                           },
                            onDelete: { notes.delete(note.id) },
                            onResolve: { notes.setResolved(note.id, $0) })
         }
@@ -1006,18 +1039,23 @@ struct DiffContentView: View {
 
     private func composer(_ notes: DiffNotes) -> some View {
         ReviewNoteComposer(
-            draft: Binding(get: { draft.wrappedValue ?? NoteDraft() }, set: { draft.wrappedValue = $0 }),
+            draft: draft.wrappedValue ?? NoteDraft(),
+            words: draftText,
             onSave: {
                 guard let current = draft.wrappedValue else { return }
-                let text = current.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let text = draftText.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if let id = current.editing {
                     notes.edit(id, text)
                 } else {
                     notes.add(current.side, current.lines, quote(for: current), text)
                 }
                 draft.wrappedValue = nil
+                draftText.text = ""
             },
-            onCancel: { draft.wrappedValue = nil })
+            onCancel: {
+                draft.wrappedValue = nil
+                draftText.text = ""
+            })
     }
 
     /// The lines a new note covers, as they read now.

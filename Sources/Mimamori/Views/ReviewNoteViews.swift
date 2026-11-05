@@ -1,7 +1,8 @@
 import SwiftUI
 import MimamoriCore
 
-/// A note being written or edited in the diff.
+/// Where a note is being written or edited in the diff. Its words are kept apart, in
+/// `NoteDraftText`, so the diff doesn't redraw as you type.
 struct NoteDraft: Equatable {
     var side: ReviewNote.Side = .new
     /// The lines it will cover; nil for the whole file.
@@ -10,11 +11,18 @@ struct NoteDraft: Equatable {
     var hunk: Int?
     /// The note being edited, if this is not a new one.
     var editing: UUID?
-    var text = ""
 
     var place: String {
         ReviewNote(path: "", side: side, lines: lines, text: "").place
     }
+}
+
+/// The words of the note being written. Only the composer reads them as it draws, so a
+/// keystroke redraws the composer alone. They outlive it: a new note keeps its words when you
+/// pick another line for it, which puts the composer somewhere else.
+@MainActor @Observable
+final class NoteDraftText {
+    var text = ""
 }
 
 /// What the diff needs to show a file's notes and change them; nil where notes don't apply,
@@ -168,12 +176,13 @@ struct ReviewNoteCard: View {
 
 /// Writes a new note or edits one. Return saves, Option-Return starts a new line, Escape cancels.
 struct ReviewNoteComposer: View {
-    @Binding var draft: NoteDraft
+    let draft: NoteDraft
+    @Bindable var words: NoteDraftText
     let onSave: () -> Void
     let onCancel: () -> Void
     @FocusState private var focused: Bool
 
-    private var isEmpty: Bool { draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var isEmpty: Bool { words.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -189,7 +198,7 @@ struct ReviewNoteComposer: View {
                 }
             }
             .font(.caption)
-            TextField("What should the agent change?", text: $draft.text, axis: .vertical)
+            TextField("What should the agent change?", text: $words.text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.callout)
                 .lineLimit(2...10)

@@ -13,6 +13,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Resizing the Agents window across the width where it switches between one and two columns no
   longer leaves the cards trailing the window's edge, their names cross-fading, until they catch up
   ([#37](https://github.com/CocoaBeans/mimamori/pull/37)).
+- Typing a note no longer redraws the diff around it, and an open session summary no longer
+  rebuilds its Markdown for every agent activity entry
+  ([#34](https://github.com/CocoaBeans/mimamori/pull/34)).
 
 ## [1.1.0] - 2026-11-04
 

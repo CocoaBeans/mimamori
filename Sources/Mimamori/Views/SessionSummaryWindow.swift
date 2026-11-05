@@ -40,6 +40,8 @@ struct SessionSummaryView: View {
     private enum Mode: String, CaseIterable { case preview = "Preview", markdown = "Markdown" }
 
     @State private var summary: SessionSummary?
+    /// `summary` written up with `options`: worked out when either changes, not as the window draws.
+    @State private var rendered = Rendered()
     @State private var summaryHasDiffs = false
     @State private var mode = Mode.preview
     @State private var copied = false
@@ -77,7 +79,19 @@ struct SessionSummaryView: View {
             })
     }
 
-    private var markdown: String { summary?.markdown(options: options) ?? "" }
+    /// The summary as Markdown, and how many lines that is.
+    private struct Rendered {
+        var markdown = ""
+        var lines = 0
+
+        init(_ summary: SessionSummary? = nil, options: SessionSummaryOptions = SessionSummaryOptions()) {
+            guard let summary else { return }
+            markdown = summary.markdown(options: options)
+            lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).count
+        }
+    }
+
+    private var markdown: String { rendered.markdown }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,6 +123,7 @@ struct SessionSummaryView: View {
         }
         .frame(minWidth: 620, idealWidth: 760, minHeight: 480, idealHeight: 680)
         .task(id: stamp) { await gather() }
+        .onChange(of: options) { rendered = Rendered(summary, options: options) }
     }
 
     /// Gathers the summary at first, when asked, and a moment after the worktree settles.
@@ -129,6 +144,7 @@ struct SessionSummaryView: View {
         let gathered = await model.sessionSummary(for: session, includeDiffs: wantDiffs)
         guard !Task.isCancelled else { return }
         summary = gathered
+        rendered = Rendered(gathered, options: options)
         summaryHasDiffs = wantDiffs
         gatheredAt = Date()
         outOfDate = false
@@ -207,9 +223,8 @@ struct SessionSummaryView: View {
     }
 
     private func footerNote(_ summary: SessionSummary) -> String {
-        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).count
         let updated = gatheredAt.map { (outOfDate ? "Out of date · gathered " : "Updated ") + Format.time.string(from: $0) }
-        return [updated, "\(lines) lines", "activity since \(Format.dateTime.string(from: summary.activitySince ?? model.launchedAt))"]
+        return [updated, "\(rendered.lines) lines", "activity since \(Format.dateTime.string(from: summary.activitySince ?? model.launchedAt))"]
             .compactMap { $0 }.joined(separator: " · ")
     }
 
