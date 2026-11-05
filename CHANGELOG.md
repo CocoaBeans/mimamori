@@ -19,6 +19,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Typing a note no longer redraws the diff around it, and an open session summary no longer
   rebuilds its Markdown for every agent activity entry
   ([#34](https://github.com/CocoaBeans/mimamori/pull/34)).
+- Marking the start or taking a snapshot while a refresh runs, as right after adding a large
+  repository, no longer fails with "index.lock: File exists". A worktree you hide, or a repository
+  you remove, while Mimamori is still starting to watch it is no longer watched anyway
+  ([#41](https://github.com/CocoaBeans/mimamori/pull/41)).
 
 ## [1.1.0] - 2026-11-04
 
