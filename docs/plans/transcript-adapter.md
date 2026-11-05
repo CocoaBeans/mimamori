@@ -48,7 +48,9 @@ over the moment they report.
 - **Off (the default).** Nothing changes, except the process-only hint: "No hook events from this
   session. Mimamori can read its transcript instead." Its link opens Settings › Agents › Hooks at
   the switch. This is where you meet the feature: on a row it would help, at the moment it would
-  help (see "Decided").
+  help (see "Decided"). The line also has **Don't suggest this**: once you click it, the offer is
+  gone for good and the line goes back to today's "No hook events from this session yet". Settings
+  › Agents › Hooks can bring the offer back.
 - **The setting.** Settings › Agents › Hooks gains a section, **When hooks are silent**, with one
   switch: **Read an agent's transcript while its hooks are silent**. Under it: which agents
   Mimamori can read, what it reads (the prompt, each tool's name and input, whether it failed, when
@@ -129,9 +131,11 @@ session's directory.
     ever earlier, never past the previous turn's end.
 - `OpenCodeTranscript`: reads `event` after the last rowid seen, for sessions whose `directory` is
   in a watched worktree.
-- `TranscriptPolicy.shouldRead(...)`, a pure function: whether to read a session, given the
-  setting, whether a reader exists for its agent, whether its hooks are installed, and when a hook
-  event from it last arrived.
+- `TranscriptPolicy`, pure functions:
+  - `shouldRead(...)`: whether to read a session, given the setting, whether a reader exists for
+    its agent, whether its hooks are installed, and when a hook event from it last arrived;
+  - `offersTranscripts(...)`: whether a process-only row offers the switch. It does only while the
+    switch is off, a reader exists for the agent, and you haven't dismissed the offer.
 - `AgentStatus.fromSessionFile` becomes `source: .hooks | .sessionRecord | .transcript`, so the UI
   can label where a status comes from.
 - `AgentStatusMachine` ignores a `PreToolUse` whose call id it already holds, so a turn read back
@@ -139,7 +143,8 @@ session's directory.
 
 ### App
 
-- `AppSettings.readTranscripts`, default `false`, decoded with `decodeIfPresent`.
+- `AppSettings.readTranscripts`, default `false`, and `transcriptOfferDismissed`, default
+  `false`, both decoded with `decodeIfPresent`.
 - `AgentHub`:
   - after each scan, asks `TranscriptPolicy` about each session the scan found, and starts or
     stops a reader for it;
@@ -150,9 +155,13 @@ session's directory.
   - on launch, with the switch on, reads each busy session's turn so far once, even where hooks
     work;
   - with the switch off or on, backdates a turn joined midway from the records above.
-- Views: the switch and its text in Settings › Agents › Hooks; the process-only hint, with its
-  link to the switch; the "from its transcript" note and, for Hermes and OpenCode, the line about
-  permissions. The welcome window is unchanged.
+- Views:
+  - the switch and its text in Settings › Agents › Hooks, and, once you've dismissed the offer, a
+    **Suggest it again** button beside it;
+  - the process-only hint, with its link to the switch and its **Don't suggest this**;
+  - the "from its transcript" note and, for Hermes and OpenCode, the line about permissions.
+
+  The welcome window is unchanged.
 - `Diagnostics`: whether the switch is on, and which sessions are read from transcripts (agent,
   worktree, time of the last record read, records skipped). No content.
 - README: the privacy section says Mimamori reads agents' transcripts on your Mac only while the
@@ -194,7 +203,8 @@ session's directory.
   before the previous turn ended.
 - `OpenCodeTranscript`: a tool part going pending, running, completed and error.
 - `TranscriptPolicy`: the switch off means no reader for anyone; a session with hooks reporting
-  isn't read; a session falls back to its transcript after its hooks go quiet.
+  isn't read; a session falls back to its transcript after its hooks go quiet. A process-only row
+  offers the switch only while it is off, for an agent with a reader, and never once dismissed.
 - `AgentStatusMachine`: a step read from the transcript and then reported by its hook shows once;
   hooks take over a status read from a transcript.
 - By hand, in a scratch setup: a Claude Code session started before the hooks were installed, and
@@ -241,9 +251,6 @@ session's directory.
   if setup gains another real decision, such as notifications or answering permissions in
   Mimamori. Its shape then: watch a repository, connect agents, and offer transcripts only when
   something stayed unconnected.
-
-## To decide first
-
-- **The hint while off.** Show it on every silent row, or let you dismiss it for good? Since the
-  hint is now where you meet the feature, dismissing it should probably take one click and be
-  undone from Settings.
+- **The offer on silent rows, dismissed once, stays out of the way.** Someone who keeps the switch
+  off on purpose shouldn't see the suggestion every time an agent runs without hooks. One click
+  dismisses it for good, and Settings brings it back.
