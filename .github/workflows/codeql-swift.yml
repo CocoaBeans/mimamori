@@ -1,0 +1,65 @@
+name: CodeQL (Swift)
+
+on:
+  # Only when the Swift code that `swift build` compiles, or this file, changes: the traced build
+  # takes about 13 minutes, too long to hold up pull requests that change none of it. The Xcode
+  # project, resources, scripts and documentation hold no Swift for it to analyze.
+  pull_request:
+    paths:
+      - 'Sources/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '.github/workflows/codeql-swift.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - '.github/workflows/codeql-swift.yml'
+  # Weekly as well, since new queries can find problems in code that hasn't changed.
+  schedule:
+    - cron: '27 6 * * 1'
+  workflow_dispatch:
+
+# The job asks for what it needs below; nothing else gets the token.
+permissions: {}
+
+# A new push to a pull request cancels the run still going for the one before it. The group is
+# this workflow's own, so the Actions analysis doesn't cancel it.
+concurrency:
+  group: codeql-swift-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (swift)
+    runs-on: macos-15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      # Before CodeQL starts tracing, which makes every tool slow to launch.
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: manual
+
+      # CodeQL analyzes what this step compiles. The package builds everything but the widget
+      # extension's one file of its own. Autobuild can't read the Xcode project (its workspace file
+      # isn't committed) and falls back to this anyway; xcodebuild spends minutes starting up under
+      # the tracer.
+      - name: Build (Swift package)
+        run: swift build
+
+      # The category is the one the combined workflow used, so code scanning keeps matching it.
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:swift

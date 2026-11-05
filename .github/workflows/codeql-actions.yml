@@ -1,0 +1,45 @@
+name: CodeQL (Actions)
+
+on:
+  # Only when the workflows (or anything else under .github) change: they are all it reads.
+  pull_request:
+    paths:
+      - '.github/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/**'
+  # Weekly as well, since new queries can find problems in code that hasn't changed.
+  schedule:
+    - cron: '27 6 * * 1'
+  workflow_dispatch:
+
+# The job asks for what it needs below; nothing else gets the token.
+permissions: {}
+
+# A new push to a pull request cancels the run still going for the one before it. The group is
+# this workflow's own, so the Swift analysis doesn't cancel it.
+concurrency:
+  group: codeql-actions-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (actions)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      # The workflows themselves, read without a build.
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: actions
+          build-mode: none
+
+      # The category is the one the combined workflow used, so code scanning keeps matching it.
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:actions
