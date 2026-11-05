@@ -1,9 +1,11 @@
 # Plan: a history of agent sessions
 
-> **Proposed.** Nothing is built yet. The survey under "What the agents keep" was made on
-> 2026-11-05 on one Mac, with Claude Code 2.1.317 and Hermes 0.22.7. Orca's session history (MIT,
-> `src/main/ai-vault` in `stablyai/orca`) was read the same day. Its first step is a spike, and
-> two choices under "To decide first" come before any code.
+> **Proposed; spike done.** Nothing is built yet. The survey under "What the agents keep" and the
+> spike (see "Spike results") were made on 2026-11-05 on one Mac, with Claude Code 2.1.317 and
+> 2.1.318 and Hermes 0.22.7. Orca's session history (MIT, `src/main/ai-vault` in `stablyai/orca`)
+> was read the same day. Reading the start and end of the 324 transcripts in the watched worktrees
+> took a quarter of a second, and read 4% of their 3 GB. Three choices under "To decide first"
+> come before any code.
 
 ## Goal
 
@@ -81,8 +83,9 @@ Orca's "AI Vault" lists sessions from about a dozen agents. Worth copying, and w
   A session known only from its transcript says "from its transcript", and shows only what the
   transcript gives.
 - **Actions** on the session, each with a tooltip and an accessibility label:
-  - **Copy Resume Command**: `cd '<folder>' && claude --resume <id>`, or the agent's own
-    equivalent. Greyed out, with the reason, when the folder is gone or the agent has no resume.
+  - **Copy Resume Command**: `cd '<folder>' && claude --resume <id>`, or `hermes --resume <id>`,
+    which changes folder itself. Greyed out, with the reason, when the folder is gone or the agent
+    has no resume.
   - **Copy as a Prompt**: a hand-off for another agent. The title, the worktree and branch, the
     first and latest prompts, the files changed with their counts, the open review notes in
     `ReviewNotePrompt`'s shape, the pull request, and the transcript's path.
@@ -147,8 +150,14 @@ far back they reach depends on that setting.
   | `pr-link` | `prNumber`, `prRepository`, `prUrl`, `timestamp` | 132 |
   | `ai-title` | `aiTitle` | 11 |
 
-- **Lines that aren't prompts.** A user line with `isMeta`, with a tool result, or with
-  `isCompactSummary` (25 files) isn't a prompt.
+- **Lines that aren't prompts.** These user lines aren't prompts:
+  - a line with `isMeta`, with a tool result, or with `isCompactSummary` (25 files);
+  - a line that is only a `<task-notification>` or a command's output.
+
+  A prompt often starts with a `<system-reminder>` block the app put before it. The prompt is the
+  text after it.
+- **A title beside the file.** 197 sessions also have `<sessionId>/custom-title.json`, holding
+  `customTitle`. In the spike, every session with one also had a title record near its end.
 - **Model.** An assistant line's `message.model`. It is `<synthetic>` for Claude Code's own
   messages, so those are skipped.
 - **Size.** Our own session's file is 19 MB with 4,415 lines. The transcript adapter's survey saw
@@ -177,17 +186,63 @@ are.
   Then confirm each file's `cwd`.
 - **The start and end of each file, never the middle.**
   - From the start: up to 64 KB, read on to 1 MB at most, for the `cwd`, the branch, the start time
-    and the first real prompt.
+    and the first real prompt. The first 64 KB held it in 317 of 324 files, and 1 MB in 322.
   - From the end: 256 KB, read back to 8 MB at most, for the newest title records, the last prompt,
-    the pull request, the last time and the model.
-  - Turn counts come from Mimamori's own record. A session known only from its transcript shows
-    none, unless the spike finds a count cheap enough.
+    the pull request, the last time and the model. The last 256 KB held a title in 304 files and
+    the last prompt in 306. 8 MB held them in 320 and 324. The 4 files with no title record use
+    their first prompt.
+  - Turn counts come from Mimamori's own record. For a session known only from its transcript, see
+    "To decide first".
 - **Only when asked.** The index is built when the Sessions list opens. While it is open, a
   session's entry is read again when a hook reports that session's turn ending or the session
   ending. No file system watch on `projects/`, and no timer.
 - **Remembered, not reread.** Results stay in memory, keyed by path, size and modification time,
   so reopening the list reads only files that changed.
 - **Off the main thread**, one file at a time, at utility priority.
+
+## Spike results
+
+Run on 2026-11-05, read-only, with a Python script that reads each file the way this plan says.
+Python's JSON parsing is slower than Swift's, so the times are an upper bound. Mimamori watched 11
+repositories with 36 worktrees. The page cache was warm: emptying it needs root, so a cold run
+wasn't measured.
+
+| What | Result |
+| :- | :- |
+| Project folders matched to the watched worktrees | 72 of 101, holding 324 of 349 transcripts |
+| Confirmed by the `cwd` inside | 318; the `cwd` of the other 6 was elsewhere, or not in their first 1 MB |
+| Indexing the 324, start and end only | 0.26 s, reading 108 MB of 3.0 GB; the slowest file 10 ms |
+| Indexing all 349 | 0.29 s, reading 117 MB of 4.0 GB |
+| A full pass over the 324, to count prompts | 1.5 s for 3.0 GB (all 349: 1.8 s for 4.0 GB) |
+| First prompt in the first 64 KB, or 1 MB | 317, or 322, of 324 |
+| A title in the last 256 KB, or 8 MB | 304, or 320; 4 have none |
+| The last prompt in the last 256 KB, or 8 MB | 306, or 324 |
+| A pull request link | 125 |
+
+The first run took any prompt starting with `<system-reminder>` for one the app had injected, and
+missed the first prompt in 68 files. Once the text after the reminder counted, 317 had it in the
+first 64 KB.
+
+**Resuming.** Tested with a throwaway session in a scratch folder and two forks of it, which went
+to the Trash afterwards. No real session was resumed.
+- **Any folder finds the session.** Claude Code 2.1.318 finds a session by its id from any folder.
+  `--fork-session` left the original untouched, and saved the fork under the folder it ran in, not
+  the session's. So the copied command still changes to the session's folder first: the agent
+  works in the right worktree, and the resumed session stays in its history.
+- **An unknown id** fails at once with "No conversation found with session ID: <id>".
+- **By pull request.** `claude --from-pr <number or URL>` resumes the session linked to a pull
+  request.
+- **The command line may not be signed in.** On this Mac, 66,289 of 68,125 prompt lines came from
+  the desktop app, which has its own sign-in. The CLI isn't signed in, so the copied command stops
+  at "Not logged in · Please run /login". That is the error Orca showed as a session's latest
+  turn, with the model `<synthetic>`. For a desktop session, **Go to Agent** is the way back while
+  it runs. Once it has ended, the copied command needs the CLI signed in, and the action's help
+  says so.
+- **Not tested:** resuming a desktop-app session from the CLI. Its file is the same format in the
+  same folder, so it should work once the CLI is signed in.
+- **Hermes.** `hermes --resume <id>` changes to the session's recorded folder itself
+  (`--no-restore-cwd` turns that off), so its command needs no `cd`.
+- **Codex** isn't installed here.
 
 ## Design
 
@@ -205,8 +260,10 @@ are.
 - `ClaudeSessionIndex`:
   - `projectFolders(for worktrees:, in projects:)`, with the lossy encoding;
   - `summary(of file:) -> TranscriptSummary?`, from the start and the end as above;
-  - the title in Orca's order (`custom-title`, `ai-title`, `agent-name`, the first prompt), with
-    `isMeta`, tool results, `isCompactSummary` and `<synthetic>` skipped;
+  - the title in Orca's order (`custom-title`, `ai-title`, `agent-name`, the first prompt), then
+    `custom-title.json`;
+  - the prompt taken from the text after any leading `<system-reminder>` blocks;
+  - `isMeta`, tool results, `isCompactSummary`, `<task-notification>` and `<synthetic>` skipped;
   - subagents from their `.meta.json` files, never their transcripts.
 
   The reading back from the end is shared with the transcript adapter's `ClaudeTranscript`.
@@ -235,15 +292,8 @@ are.
 
 ## Steps
 
-1. **Spike** (read-only, on this Mac):
-   - time and bytes read to index the watched worktrees' sessions, and all 349 files, cold and
-     warm;
-   - how often the last 256 KB holds the title and the last prompt, and the first 64 KB the first
-     prompt;
-   - whether counting a file's prompts is cheap enough to show turns for transcript-only sessions;
-   - whether `claude --resume <id>` finds a session started in the desktop app, and one started in
-     another folder;
-   - Hermes's and Codex's resume commands.
+1. **Spike.** Done on 2026-11-05; see "Spike results". Still open: resuming a desktop-app session
+   from the CLI, and Codex.
 2. **Mimamori's own record and the list** (about 800–1,100 lines with tests). The session id in the
    feed, `SessionHistory`, the Sessions segment, the row, the detail, Copy Resume Command, Copy as
    a Prompt, Show Transcript in Finder, Show Session, README and Help. No transcripts yet.
@@ -268,13 +318,17 @@ are.
   session belongs to a worktree as its commits do. The alternatives:
   - a tab in the Agents window, which is about now, not the past;
   - a window of its own, which would need its own way to pick a worktree.
+- **Turn counts for sessions known only from their transcripts.** A full pass over the watched
+  worktrees' 3 GB took 1.5 s with a warm cache. *Recommended:* count each file once, in the
+  background after the list has drawn, then read only the bytes added since, and keep the counts in
+  memory. The alternative is no count for those sessions.
 
 ## Decided
 
 - **Watched worktrees only.** Mimamori reads nothing about repositories you haven't added. A
   history of every project is Orca's job, not Mimamori's.
-- **Never the middle of a file** for the list. Exact message and token counts aren't worth reading
-  4 GB once and caching what it held.
+- **Never the middle of a file to draw the list.** Turn counts may read on afterwards (see "To
+  decide first"). Token counts aren't shown at all.
 - **Nothing read from a transcript is written to disk**, the index included. Only the session id
   joins what the feed already saves.
 - **No account, no costs, no delete.** Mimamori shows what you need to pick work back up, and
@@ -291,8 +345,10 @@ are.
 - `ClaudeSessionIndex`:
   - the folder encoding, a subfolder, and two worktrees whose encoded names collide;
   - the title order;
-  - `isMeta`, tool results, `isCompactSummary` and `<synthetic>` skipped;
-  - a title found only by reading further back, and one beyond the cap;
+  - `isMeta`, tool results, `isCompactSummary`, `<task-notification>` and `<synthetic>` skipped;
+  - a prompt after a leading `<system-reminder>`, and a line that is only a reminder;
+  - a title found only by reading further back, one beyond the cap, and one from
+    `custom-title.json`;
   - a partial last line;
   - unknown record types;
   - subagents from `.meta.json`.
@@ -317,9 +373,12 @@ are.
 - **History that disappears.** Claude Code deletes old transcripts after `cleanupPeriodDays`, and
   Mimamori prunes its feed after the days you choose. The list shows what is left, and the README
   says so.
-- **Resuming in the wrong place.** `claude --resume` looks for the session under the folder it runs
-  in, so the command changes to the session's folder first. A removed folder greys the action out.
-  The spike checks sessions from the desktop app.
+- **Resuming in the wrong place.** `claude --resume` finds the session from any folder, but saves
+  it under the folder it runs in. So the command changes to the session's folder first, and a
+  removed folder greys the action out.
+- **A command line that isn't signed in.** Someone who uses Claude Code only in the desktop app may
+  never have signed in the CLI, so the copied command stops at "Not logged in". The action's help
+  says the CLI must be signed in.
 - **Privacy.** With transcripts off, nothing new is read and only the session id is saved. With
   them on, the list reads the start and end of the watched worktrees' transcripts while it's open,
   and keeps what it read in memory.
