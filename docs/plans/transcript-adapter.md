@@ -233,6 +233,14 @@ session's directory.
   and why you might want it. It is also a fallback for when hooks are missing, and the welcome
   window is where you install them. The moment the switch helps is when a row shows only a
   process, so the offer goes there, with its link to Settings, where there is room to explain.
+- **A setup wizard, only later.** A paged setup would give each decision room, and could branch.
+  When you skip connecting an agent, or one you use has no ready-made hooks (Codex, OpenCode), a
+  page could offer to read its transcript instead, which is exactly when the switch makes sense.
+  Today the welcome window holds two decisions, which fit on one page, and a wizard would cost
+  everyone extra clicks for a step most people won't need. Revisit once transcripts ship (step 2)
+  if setup gains another real decision, such as notifications or answering permissions in
+  Mimamori. Its shape then: watch a repository, connect agents, and offer transcripts only when
+  something stayed unconnected.
 
 ## To decide first
 
