@@ -60,13 +60,10 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
 
     /// The command every hook runs. It posts the event to Mimamori's socket, gives up after a second
     /// and always succeeds, so it can never hold up or block the agent.
-    public static func command(socketPath: String, agent: String) -> String {
-        // $HOME keeps the setup portable between machines and users.
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let portable = socketPath.hasPrefix(home + "/") ? "$HOME" + socketPath.dropFirst(home.count) : socketPath
+    public static func command(socketPath: String, agent: String, home: String = HookCommand.defaultHome) -> String {
         let name = AgentKind.named(agent)?.id ?? AgentKind.unnamed.id
         let safe = String(name.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || "-_.".unicodeScalars.contains($0) })
-        return "curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' --unix-socket \"\(portable)\" --data-binary @- 'http://mimamori/event?agent=\(safe.isEmpty ? AgentKind.unnamed.id : safe)' >/dev/null 2>&1 || true"
+        return HookCommand.event(socketPath: socketPath, address: "/event?agent=\(safe.isEmpty ? AgentKind.unnamed.id : safe)", home: home)
     }
 
     /// The agent name the setup reports as.

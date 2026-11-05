@@ -39,14 +39,9 @@ public struct ClaudeSessionRecord: Sendable, Hashable {
 /// nothing until you next use it, and one started before the hooks were installed never does.
 public enum ClaudeSessionFiles {
     /// Claude Code's own folder: `$CLAUDE_CONFIG_DIR`, or `~/.claude`.
-    public static var configDirectory: URL {
-        if let custom = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"], !custom.isEmpty {
-            return URL(fileURLWithPath: (custom as NSString).expandingTildeInPath)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
-    }
+    public static var configDirectory: URL { AgentConfigLocations.current.claudeConfigDirectory }
 
-    public static var directory: URL { configDirectory.appendingPathComponent("sessions") }
+    public static var directory: URL { AgentConfigLocations.current.claudeSessions }
 
     public static func parse(_ data: Data) -> ClaudeSessionRecord? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

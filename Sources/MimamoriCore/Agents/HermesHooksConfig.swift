@@ -2,10 +2,10 @@ import Foundation
 
 /// Text-level helpers for wiring Hermes Agent's shell hooks to Mimamori.
 ///
-/// Hermes reads a `hooks:` block from `~/.hermes/config.yaml` and runs each command
-/// through `shlex.split` without a shell, so the hook is a small script file. Because the
-/// config is hand-edited YAML full of comments, Mimamori only appends or removes its own
-/// clearly delimited block, and never rewrites the rest of the file.
+/// Hermes reads a `hooks:` block from `config.yaml` in its home (`~/.hermes`, or `$HERMES_HOME`)
+/// and runs each command through `shlex.split` without a shell, so the hook is a small script
+/// file. Because the config is hand-edited YAML full of comments, Mimamori only appends or
+/// removes its own clearly delimited block, and never rewrites the rest of the file.
 public enum HermesHooksConfig {
     public static let scriptRelativePath = "agent-hooks/mimamori.sh"
     public static let beginMarker = "# --- Mimamori hooks (added by Mimamori; remove this block to uninstall) ---"
@@ -29,16 +29,12 @@ public enum HermesHooksConfig {
 
     /// The script Hermes runs for every subscribed event. Exits 0 whatever happens, so it can
     /// never block a tool call, and prints nothing, which Hermes treats as a no-op response.
-    public static func script(socketPath: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let portable = socketPath.hasPrefix(home + "/") ? "$HOME" + socketPath.dropFirst(home.count) : socketPath
-        return """
+    public static func script(socketPath: String, home: String = HookCommand.defaultHome) -> String {
+        """
         #!/bin/sh
         # Installed by Mimamori. Forwards Hermes hook events to Mimamori's local socket.
         # Never blocks: a one-second timeout, output discarded, exit status always 0.
-        curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \\
-          --unix-socket "\(portable)" \\
-          --data-binary @- http://mimamori/event/hermes >/dev/null 2>&1
+        \(HookCommand.curl(socketPath: socketPath, address: "/event/hermes", timeout: 1, home: home)) >/dev/null 2>&1
         exit 0
 
         """
@@ -46,8 +42,9 @@ public enum HermesHooksConfig {
 
     /// The YAML to add under `hooks:`; `scriptPath` is written as given (usually with `~`).
     public static func yamlEntries(scriptPath: String) -> String {
-        HermesHookParser.subscribedEvents.map { event in
-            "  \(event):\n    - command: \"\(scriptPath)\"\n      timeout: 5\n"
+        let quoted = scriptPath.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        return HermesHookParser.subscribedEvents.map { event in
+            "  \(event):\n    - command: \"\(quoted)\"\n      timeout: 5\n"
         }.joined()
     }
 
