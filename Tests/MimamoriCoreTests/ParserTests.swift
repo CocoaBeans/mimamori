@@ -196,6 +196,53 @@ struct DiffParserTests {
         #expect(diffs[4].path == "dir with space/file.txt" && diffs[4].oldMode == "100644" && diffs[4].newMode == "100755")
     }
 
+    @Test func readsWindowsLineEndings() {
+        // Each "\r" here is followed by the literal's "\n", as in a CRLF file's diff.
+        let patch = """
+        diff --git a/win.txt b/win.txt
+        index 1111111..2222222 100644
+        --- a/win.txt
+        +++ b/win.txt
+        @@ -1,4 +1,4 @@ heading
+         one\r
+        -two\r
+        +TWO\r
+         three\r
+        -four\r
+        \\ No newline at end of file
+        +four\r
+        diff --git a/unix.txt b/unix.txt
+        index 3333333..4444444 100644
+        --- a/unix.txt
+        +++ b/unix.txt
+        @@ -1 +1 @@
+        -left
+        +right
+        """
+        let diffs = DiffParser.parse(patch)
+        #expect(diffs.map(\.path) == ["win.txt", "unix.txt"])
+        let hunk = diffs[0].hunks[0]
+        #expect(hunk.header == "@@ -1,4 +1,4 @@ heading")
+        #expect(hunk.lines.map(\.kind) == [.context, .deletion, .addition, .context, .deletion, .noNewline, .addition])
+        #expect(hunk.lines.map(\.text) == ["one", "two", "TWO", "three", "four", "No newline at end of file", "four"])
+        #expect(hunk.lines.map(\.oldNumber) == [1, 2, nil, 3, 4, nil, nil])
+        #expect(hunk.lines.map(\.newNumber) == [1, nil, 2, 3, nil, nil, 4])
+        #expect(diffs[0].additions == 2 && diffs[0].deletions == 2)
+        // The next file is read on its own, not as more lines of the first.
+        #expect(diffs[1].hunks.count == 1)
+        #expect(diffs[1].hunks[0].lines.map(\.kind) == [.deletion, .addition])
+        #expect(diffs[1].hunks[0].lines.map(\.text) == ["left", "right"])
+    }
+
+    @Test func aCombiningMarkAfterTheMarkerStaysInTheText() {
+        // "+" and U+0301 make one Character, but the line is still an addition.
+        let patch = "diff --git a/m.txt b/m.txt\n--- a/m.txt\n+++ b/m.txt\n@@ -1 +1 @@\n-e\n+\u{301}e\n"
+        let lines = DiffParser.parse(patch).first?.hunks.first?.lines ?? []
+        #expect(lines.map(\.kind) == [.deletion, .addition])
+        #expect(lines.last?.text.unicodeScalars.map(\.value) == [0x301, 0x65])
+        #expect(lines.last?.newNumber == 1)
+    }
+
     @Test func unquotesCStyle() {
         #expect(DiffParser.unquote("\"a\\303\\251.txt\"") == "aé.txt")
         #expect(DiffParser.unquote("\"tab\\there\"") == "tab\there")

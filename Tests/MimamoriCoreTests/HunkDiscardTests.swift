@@ -408,8 +408,8 @@ struct HunkDiscardIntegrationTests {
         #expect(try box.read("notes.txt") == Self.committed)
     }
 
-    /// Windows line endings: the discard is either exact or refused, never a file rewritten wrong.
-    @Test func carriageReturnsAreKeptOrTheFileIsLeftAlone() async throws {
+    /// Windows line endings: the hunk is discarded and the carriage returns are kept.
+    @Test func carriageReturnsAreKept() async throws {
         let box = try await makeSandbox()
         defer { box.cleanup() }
         let committed = "one\r\ntwo\r\nthree\r\n"
@@ -421,14 +421,13 @@ struct HunkDiscardIntegrationTests {
         let inspector = try await box.inspector()
         let (change, diff) = try await uncommitted("crlf.txt", in: inspector)
         let hunk = try #require(diff.hunks.first)
+        #expect(hunk.lines.map(\.kind) == [.context, .deletion, .addition, .context])
 
-        do {
-            _ = try await inspector.discard(hunk, of: change)
-            #expect(try box.read("crlf.txt") == committed)
-        } catch {
-            #expect(error is HunkDiscardError)
-            #expect(try box.read("crlf.txt") == edited)
-        }
+        let discarded = try await inspector.discard(hunk, of: change)
+        #expect(try box.read("crlf.txt") == committed)
+        let restored = try await inspector.restore(discarded)
+        #expect(restored.exact)
+        #expect(try box.read("crlf.txt") == edited)
     }
 
     private func mode(_ box: Sandbox, _ path: String) throws -> Int {

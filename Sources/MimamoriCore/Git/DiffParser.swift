@@ -110,8 +110,12 @@ public enum DiffParser {
             current = nil
         }
 
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = String(rawLine)
+        // Split on the newline byte. Swift reads "\r\n" as one Character, so splitting the
+        // String on "\n" would leave every line of a CRLF file joined to the next.
+        for rawLine in text.utf8.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false) {
+            let line = String(Substring(rawLine))
+            // The marker is the first scalar. A Character could fold a combining mark into it.
+            let marker = line.unicodeScalars.first
             if line.hasPrefix("diff --git ") {
                 finishFile()
                 current = FileDiff(headerLines: [line])
@@ -121,7 +125,7 @@ public enum DiffParser {
             }
             guard current != nil else { continue }
 
-            if hunk != nil, remainingOld <= 0, remainingNew <= 0, !line.hasPrefix("\\") {
+            if hunk != nil, remainingOld <= 0, remainingNew <= 0, marker != "\\" {
                 finishHunk()
             }
 
@@ -150,16 +154,16 @@ public enum DiffParser {
             // Inside a hunk.
             let kind: DiffLineKind
             var body = line
-            switch line.first {
+            switch marker {
             case "+":
                 kind = .addition
-                body.removeFirst()
+                body.unicodeScalars.removeFirst()
             case "-":
                 kind = .deletion
-                body.removeFirst()
+                body.unicodeScalars.removeFirst()
             case " ":
                 kind = .context
-                body.removeFirst()
+                body.unicodeScalars.removeFirst()
             case "\\":
                 kind = .noNewline
             case nil:
@@ -167,7 +171,7 @@ public enum DiffParser {
             default:
                 kind = .context
             }
-            if body.hasSuffix("\r") { body.removeLast() }
+            if body.unicodeScalars.last == "\r" { body.unicodeScalars.removeLast() }
 
             let diffLine: DiffLine
             switch kind {
