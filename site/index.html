@@ -147,7 +147,9 @@
 
   /* Demo */
   .demo { margin: 8px auto 0; }
-  .window { position: relative; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); background: #1c1e22; aspect-ratio: 1360 / 780; }
+  /* The recording's corners are 26 of its 1360 by 780 points; rounding by the same share at any
+     width hides the black the video has outside them. */
+  .window { position: relative; border-radius: 1.92% / 3.34%; overflow: hidden; box-shadow: var(--shadow); background: #1c1e22; aspect-ratio: 1360 / 780; }
   .window video, .window img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .caption { text-align: center; color: var(--faint); font-size: 14px; margin-top: 14px; }
 
@@ -253,11 +255,11 @@
   <div class="wrap demo">
     <div class="window">
       <video autoplay muted loop playsinline preload="auto" poster="media/demo-poster.jpg" width="1360" height="780"
-             aria-label="Mimamori as three agents start work: Claude Code's edits appear in the change list and the diff, the activity feed fills, and the toolbar pill turns to Codex needs you">
+             aria-label="Mimamori as agents start work: Claude Code's edits appear in the change list and the diff, a review note is typed on a line it just wrote, the activity feed fills, and the toolbar pill turns to Codex needs you">
         <source src="media/demo.mp4" type="video/mp4">
       </video>
     </div>
-    <p class="caption">Three agents start work in a web shop's worktrees. Each edit shows up within moments, and the toolbar says who needs you.</p>
+    <p class="caption">Agents start work in a web shop's worktrees. Each edit shows up within moments, a note for Claude Code goes on a line it just wrote, and the toolbar says who needs you.</p>
   </div>
 
   <section>
@@ -299,6 +301,18 @@
           <p>Mark files reviewed as you read them. When an agent edits one again, it comes back as changed since your review, with just the new edits.</p>
         </div>
         <div class="card">
+          <h3><span class="dot" style="background:var(--string)"></span>Takes review notes for the agent</h3>
+          <p>Leave a note on a line, a range of lines or a whole file. Notes follow their code as the file changes, and Copy as Prompt hands them to the agent in one go.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--vermilion)"></span>Answers permission requests</h3>
+          <p>When Claude Code asks to run something, allow or deny it from Mimamori: the agent's banner, the Agents window or a notification.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--ident)"></span>Throws a change away, if you let it</h3>
+          <p>Discard a hunk or a whole file from an uncommitted diff. It's off until you turn it on, waits while an agent is mid-turn, and keeps a snapshot so Undo can put it back.</p>
+        </div>
+        <div class="card">
           <h3><span class="dot" style="background:var(--keyword)"></span>Writes up a session</h3>
           <p>A Markdown summary of what changed, what needs attention, the commits and what the agent did, ready for a pull request or a handoff note.</p>
         </div>
@@ -310,13 +324,13 @@
     <div class="wrap split">
       <div>
         <h2>Every agent, at a glance</h2>
-        <p class="lede">The Agents window lists each worktree with an agent in it, grouped by who needs you, who's working and who's ready. Each card shows the agent's task, its latest steps, the files it touched, and a strip of its tool calls over time. The menu bar and a desktop widget keep the same picture in view.</p>
+        <p class="lede">The Agents window lists each worktree with an agent in it, grouped under Needs you, Working, Ready and Ended. Each card shows the agent's task, its latest steps, the files it touched, and a strip of its tool calls over time. The menu bar's popover groups them the same way, and a desktop widget keeps the one that needs you in view.</p>
         <ul class="agents" aria-label="Agents Mimamori recognises">
           <li>Claude Code</li><li>Codex</li><li>Gemini CLI</li><li>Cursor</li><li>Aider</li><li>Hermes</li><li>Goose</li><li>OpenCode</li><li>Amp</li>
         </ul>
         <p class="fine" style="text-align:left">Or any agent that can run a command from a hook.</p>
       </div>
-      <img src="media/mimamori-agents.png" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through ten steps, and Gemini CLI ready for its next prompt" loading="lazy" width="1333" height="1953">
+      <img src="media/mimamori-agents.png" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through its steps, Gemini CLI ready for its next prompt, and Cursor's ended session folded away" loading="lazy" width="1333" height="1953">
     </div>
   </section>
 

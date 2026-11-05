@@ -11,7 +11,7 @@ A lightweight mac app that keeps watch over git worktrees while coding agents wo
 
 Mimamori is read-only unless you turn on its one escape hatch, discarding a hunk or a file. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
 
-![Mimamori as three agents start work in a web shop's worktrees: Claude Code's edits appear in the change list and the diff, the activity feed fills, the sidebar shows each repository under its own icon with each worktree's agent, and the toolbar pill turns to Codex needs you](docs/mimamori-demo.gif)
+![Mimamori as agents start work in a web shop's worktrees: Claude Code's edits appear in the change list and the diff, a review note is typed on a line it just wrote, the activity feed fills, the sidebar shows each worktree's agent, and the toolbar pill turns to Codex needs you](docs/mimamori-demo.gif)
 
 ## Why
 
@@ -19,7 +19,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 ## What it does
 
-![Mimamori watching a worktree while agents work: the sidebar with two repositories under their app icons and an agent in each of three worktrees, the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars, a diff, and the activity feed](docs/mimamori-main.png)
+![Mimamori watching a worktree while agents work: the sidebar with two repositories under their app icons and an agent in each worktree, the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars and note counts, and a diff with two review notes on Claude Code's new lines and Discard on each hunk, beside the activity feed](docs/mimamori-main.png)
 
 - **Watches live.** FSEvents on the worktree and the git directory drive refreshes a few hundred milliseconds after files settle. Recently touched files glow and say "12s ago", so you can see where the agent is working. Each file shows an icon for its kind and a five-block diff bar: the more lines changed, the more blocks light (green for added, red for removed), so the big edits stand out in any list. Bursts that only touch ignored paths (build output, `node_modules`) are discarded without a refresh.
 - **Compares against the right baseline.** Agents commit as they go, so a plain working-tree diff goes blank after each commit. Switch between:
@@ -31,10 +31,10 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - Each repository wears its own icon when Mimamori finds one (an Xcode app icon, a Mac `.icns`, an Android launcher icon, or a web app's touch icon or favicon), or else its initials on a muted colour taken from the icon or the name. The same mark heads its section in the sidebar and the menu bar and tags its agents' rows, so you can tell repositories apart at a glance. Pick another colour, or set the icon aside, from the repository's context menu.
 - **Flags what deserves a look.** Lockfiles, `.env` and key material, secret-looking strings in added lines, CI and agent instruction files, `.gitignore` edits, mass deletions, deleted or skipped tests, conflict markers, lint suppressions, debug leftovers, permission changes, huge files, and edits outside a scope you define. Click the orange count to see every flagged file and why. In the diff, a flagged line takes its flag's colour (orange, or red for a secret or conflict marker) with a stripe down its edge and the reason on hover, and the strip beside a long diff marks where those lines are. Every rule can be switched off and thresholds are adjustable.
 - **Shows diffs the way you read them.**
-  - Unified or side-by-side (⌥⌘L), with line numbers, syntax colors for about 25 languages and formats, and word-level emphasis on the parts of a line that actually changed.
+  - Unified or side-by-side (⌥⌘L), with line numbers, syntax colors for about 25 languages and formats, and word-level emphasis on the parts of a line that actually changed. The highlighter is built in, with no dependencies, and runs off the main thread once per diff.
   - Wrapping or horizontal scrolling, copy as a patch, and flags that jump to the offending line.
   - Each hunk's header stays at the top while you scroll through it. On longer diffs, a strip beside the diff marks where the added and removed lines are, with a box around what is on screen; click or drag on it to go there.
-  - ⌘F filters the file list. The highlighter is built in, with no dependencies, and runs off the main thread once per diff.
+  - ⌘F filters the file list.
 - **Shows merges, rebases and their conflicts.** A worktree stopped in the middle of a merge, rebase, cherry-pick or revert (or bisecting) gets a banner above its changes: "Merging feature/euros into main · 1 file conflicted", "Rebasing feature/login onto main · 3 of 7 · Stopped at 1a2b3c4 Friendlier greeting". Its sidebar row and the menu bar say so too, and mid-rebase it goes by the branch being rebased rather than "detached".
   - A conflicted file is marked **U**, and its diff draws each conflict as the two sides git could not merge rather than as lines someone added: the current side (HEAD, named with its branch) in blue, the incoming side in purple, and in diff3 style the common ancestor in gray between them.
   - Each marker becomes a labelled divider ("Conflict 1 of 2 · Current: HEAD (main)", "Incoming: feature/euros", "End of conflict 1"), in one column or side by side, and the strip beside a long diff marks where each conflict starts.
@@ -73,10 +73,11 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - **Go to agent** brings the app the agent runs in (Terminal, iTerm, VS Code, the Claude or Hermes app) to the front. It appears, with Summary, in place of the step count when you point at a card; an agent waiting on you keeps a tinted Go to agent button, since that is where you answer it.
   - Click a card to jump to that worktree, switch off Details for one line per agent, widen the window past about 900 points for two columns, or pin the window above everything else.
 
-<p align="center"><img src="docs/mimamori-agents.png" width="460" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through ten steps, and Gemini CLI ready for its next prompt, each card led by its project's icon, with its task, turn timeline, latest steps and files"></p>
+<p align="center"><img src="docs/mimamori-agents.png" width="460" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through its steps, Gemini CLI ready for its next prompt, and Cursor's ended session folded away, each card led by its project's icon, with its task, turn timeline, latest steps and files"></p>
 
 - **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you. Click it for a popover drawn like the desktop widget: each agent at work with a live timer, its task and latest steps, grouped under Needs you, Working, Ready and Ended as in the Agents window, then every repository and worktree with what changed. Click an agent or a worktree to open it in Mimamori. Fold the Agents or Worktrees section, or any of the agents' groups, away by its header, and pin the popover (the pin at its foot) to keep it open as a small window that floats above the others; it opens again at launch until you unpin it.
 
+<p align="center"><img src="docs/mimamori-menu-bar.png" width="360" alt="The menu-bar popover: Codex under Needs you, Claude Code under Working, Gemini CLI under Ready and Cursor under Ended, each with its timer, task and latest steps, then the web shop's and the iPhone app's worktrees with what changed in each"></p>
 
 ## Requirements
 
@@ -335,7 +336,7 @@ Scripts/capture-window.sh shot --app com.kevinross.Mimamori --out docs/shot.png
 Scripts/capture-window.sh record --pid 1234 --out demo.mov --until /tmp/stop --seconds 60 --no-shadow
 ```
 
-`shot` keeps the window at full Retina resolution with its shadow around it (`--no-shadow` leaves it out). `record` writes a video until `--seconds` pass or the `--until` file appears. While a window is recorded, macOS shows a "being shared" indicator in place of its traffic lights, so patch that corner from a `shot` when making a GIF. A recording keeps the window's starting size, so make the window big enough not to grow while it runs; the tool warns if it does.
+`shot` keeps the window at full Retina resolution with its shadow around it (`--no-shadow` leaves it out). `record` writes a video until `--seconds` pass or the `--until` file appears. While a window is recorded, macOS shows a "being shared" indicator in place of its traffic lights, so paint the buttons back over that corner when making a GIF, using the recording's own pixels (patching from a `shot` comes out a shade lighter). A recording keeps the window's starting size, so make the window big enough not to grow while it runs; the tool warns if it does.
 
 ### Debug hooks
 
@@ -398,10 +399,14 @@ Example: `open --env MIMAMORI_SCREENSHOT=/tmp/mimamori.png build/Mimamori.app`
 - **Publishing.** The app reads its feed from `https://github.com/<owner>/mimamori/releases/latest/download/appcast.xml` (`MIMAMORI_FEED_URL`), so each GitHub release carries the DMG and `appcast.xml`, tagged `v<version>`; the newest release's appcast is the one every copy sees.
 - It refuses uncommitted changes, so About names the commit released. `RELEASE_DRY_RUN=1 Scripts/release.sh` checks the archive, the entitlements, the DMG and the appcast with the everyday development signing, without notarizing. Add `RELEASE_FEED_URL=http://127.0.0.1:8765/appcast.xml` to build a copy that looks for updates there instead, with the DMG offered beside the feed: build one version, then a higher one, serve the second's DMG and appcast with `python3 -m http.server 8765`, and the first finds and installs it.
 
-## Ideas not built yet
+## What's next
 
-- A read-only transcript adapter for agents without hooks installed.
-- A timeline scrubber across snapshots.
+The [roadmap](ROADMAP.md) lists what is planned. The two larger pieces have plans of their own in [docs/plans](docs/plans):
+
+- Reading an agent's transcript while its hooks are silent, opt-in, so a session without hooks still shows its task and steps ([transcript-adapter.md](docs/plans/transcript-adapter.md)). Its first step is built: a turn already under way when Mimamori starts shows its real start.
+- An iPhone companion: the agents at work, who needs you, and Allow or Deny from the phone ([iphone-companion.md](docs/plans/iphone-companion.md)).
+
+An idea not planned yet: a timeline scrubber across snapshots.
 
 ## Contributing
 
