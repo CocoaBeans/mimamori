@@ -40,6 +40,9 @@ ID, if you like), and keep them out of your pull request:
   (`MIMAMORI_SCREENSHOT`, `MIMAMORI_DEBUG_FLAGS` and friends) take one from a scratch run, and
   `MIMAMORI_SUPPORT_DIR` keeps that run away from your real state, hooks socket and desktop widget.
 - **One change per pull request**, with a description of what changed and why.
+- **Note it in the [changelog](CHANGELOG.md)** if people using Mimamori would notice it. Add a line
+  under *Unreleased*, in the section that fits (Added, Changed, Fixed, Removed, Security), with a
+  link to the pull request. Changes only contributors see, such as CI or scripts, need no entry.
 - Comments explain why the code is the way it is, not what it does.
 
 ## Reporting a security problem

@@ -60,6 +60,15 @@ else
   echo "Write the release notes in $NOTES_FILE first (or point RELEASE_NOTES at them)." >&2
   exit 1
 fi
+# The changelog's short record needs a dated section for this version, renamed from Unreleased.
+if ! grep -qE "^## \[${VERSION//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+  if [[ $DRY_RUN == 1 ]]; then
+    echo "Note: CHANGELOG.md has no '## [$VERSION] - <date>' section yet; a release would stop here." >&2
+  else
+    echo "Add a '## [$VERSION] - $(date +%F)' section to CHANGELOG.md first, from what is under Unreleased." >&2
+    exit 1
+  fi
+fi
 OUT=build/release
 ARCHIVE=$OUT/Mimamori.xcarchive
 EXPORT=$OUT/export
