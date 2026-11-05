@@ -17,6 +17,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- Undo after a discard is refused while an agent is in the middle of a turn in that worktree, as
+  Discard is. Both are checked again just before Mimamori writes, so a turn that starts after you
+  confirm stops the write ([#43](https://github.com/CocoaBeans/mimamori/pull/43)).
 - Removing a repository while Mimamori is looking for its worktrees no longer can crash Mimamori,
   give another repository its worktrees, or leave it watched until you quit
   ([#40](https://github.com/CocoaBeans/mimamori/pull/40)).
