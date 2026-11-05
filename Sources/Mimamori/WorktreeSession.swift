@@ -50,7 +50,7 @@ final class WorktreeSession: Identifiable {
     private(set) var discards: [DiscardedChange] = []
     /// Why putting the latest one back failed.
     private(set) var restoreError: String?
-    /// A discard or a restore is writing to the working tree; refreshes wait for it.
+    /// A discard or an Undo you asked for is under way; until it is done, another is turned down.
     private(set) var isWriting = false
     /// The discard waiting for your word, from the diff or the file list.
     var discardRequest: DiscardRequest?
@@ -87,6 +87,7 @@ final class WorktreeSession: Identifiable {
     private var needsRefresh = false
     private var isRefreshing = false
     private var firstPendingAt: Date?
+    private var startTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
     private var lastSnapshotAt: Date?
@@ -198,8 +199,16 @@ final class WorktreeSession: Identifiable {
 
     // MARK: Lifecycle
 
+    /// Starts watching, and returns once started. A `stop()` before or during it wins: a stopped
+    /// session never starts, since it is never used again.
     func start(git: GitClient) async {
-        stopped = false
+        guard !stopped, startTask == nil else { return }
+        let task = Task { await self.load(git: git) }
+        startTask = task
+        await task.value
+    }
+
+    private func load(git: GitClient) async {
         phase = .starting
         guard FileManager.default.fileExists(atPath: id) else {
             phase = .missing
@@ -211,12 +220,16 @@ final class WorktreeSession: Identifiable {
                 git: git, worktree: URL(fileURLWithPath: id, isDirectory: true),
                 shadowIndexDirectory: Persistence.shadowIndexDirectory,
                 configuration: inspectorConfiguration)
+            guard !stopped else { return }
             self.inspector = inspector
-            snapshots = await inspector.snapshots()
+            let snapshots = await inspector.snapshots()
+            guard !stopped else { return }
+            self.snapshots = snapshots
             startWatching(layout: inspector.layout)
             startSafetyPolling()
             requestRefresh(force: true)
         } catch {
+            guard !stopped else { return }
             phase = .failed
             lastError = error.localizedDescription
         }
@@ -224,6 +237,7 @@ final class WorktreeSession: Identifiable {
 
     func stop() {
         stopped = true
+        startTask?.cancel()
         watcher?.stop()
         watcher = nil
         watcherActive = false
@@ -273,6 +287,7 @@ final class WorktreeSession: Identifiable {
 
     private func startWatching(layout: RepoLayout) {
         watcher?.stop()
+        guard !stopped else { return }
         var paths = [layout.topLevel.path]
         let gitDir = layout.gitDir.standardizedFileURL.path
         let commonDir = layout.commonDir.standardizedFileURL.path
@@ -365,16 +380,18 @@ final class WorktreeSession: Identifiable {
     private func startSafetyPolling() {
         pollTask?.cancel()
         let interval = watcherActive ? settings.backstopPollSeconds : 3
-        guard interval > 0 else { return }
+        guard !stopped, interval > 0 else { return }
         // Stagger sessions so a safety sweep never lights up every row at once.
         let initialDelay = Double.random(in: 0...interval)
         pollTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(initialDelay))
-            while !Task.isCancelled {
-                guard let self else { return }
+            var delay = initialDelay
+            while true {
+                try? await Task.sleep(for: .seconds(delay))
+                // Bound after the sleep, so a sleeping poll doesn't keep the session alive.
+                guard !Task.isCancelled, let self else { return }
                 // With a live watcher the poll is only a backstop: refresh without the spinner.
                 self.requestRefresh(force: !self.watcherActive, quiet: self.watcherActive)
-                try? await Task.sleep(for: .seconds(interval))
+                delay = interval
             }
         }
     }
@@ -404,11 +421,11 @@ final class WorktreeSession: Identifiable {
     }
 
     private func runRefreshLoop() async {
-        // A write under way asks for a refresh once it is done.
-        guard !isRefreshing, !isWriting else { return }
+        // One loop at a time: it picks up whatever is asked for while it runs.
+        guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        while needsRefresh, !stopped, !isWriting {
+        while needsRefresh, !stopped {
             needsRefresh = false
             firstPendingAt = nil
             let paths = pendingPaths
@@ -454,6 +471,8 @@ final class WorktreeSession: Identifiable {
                 showBusy?.cancel()
                 throw error
             }
+            // Stopped meanwhile: nothing more is recorded or snapshotted for this worktree.
+            guard !stopped else { return }
             var commits: [CommitSummary] = []
             if let previous, previous.branch.headOID != fresh.branch.headOID {
                 commits = await inspector.commits(from: previous.branch.headOID, to: fresh.branch.headOID)
@@ -687,11 +706,11 @@ final class WorktreeSession: Identifiable {
         restoreError = nil
     }
 
-    /// Runs a write to the working tree once any refresh under way is done, holding the next off.
+    /// Runs a discard or an Undo, shown as under way until it is done. The inspector queues it
+    /// behind any refresh or snapshot already running.
     private func writing<T: Sendable>(_ operation: () async throws -> T) async throws -> T {
         isWriting = true
         defer { isWriting = false }
-        while isRefreshing { try? await Task.sleep(for: .milliseconds(25)) }
         return try await operation()
     }
 

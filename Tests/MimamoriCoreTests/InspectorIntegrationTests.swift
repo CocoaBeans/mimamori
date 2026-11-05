@@ -127,6 +127,26 @@ struct InspectorIntegrationTests {
         #expect(await inspector.snapshots().isEmpty)
     }
 
+    /// A refresh and a snapshot both run `git add` on the shadow index, and two at once fail on
+    /// git's index.lock. Each round starts a new shadow index over 1,500 new files, as when a
+    /// repository is first added, so the two would overlap if the inspector let them.
+    @Test func refreshAndSnapshotTakeTurnsAtTheShadowIndex() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        for number in 0..<1500 {
+            try box.write("many/\(number / 100)/file\(number).txt", "line \(number)\n")
+        }
+        for round in 0..<3 {
+            let indexDir = box.root.appendingPathComponent("index-\(round)")
+            let inspector = try await WorktreeInspector(git: box.git, worktree: box.repo, shadowIndexDirectory: indexDir)
+            async let refreshed = inspector.refresh(baseline: .head)
+            async let snapshot = inspector.takeSnapshot(force: true)
+            let (state, record) = try await (refreshed, snapshot)
+            #expect(state.changes.count == 1500)
+            #expect(record != nil)
+        }
+    }
+
     @Test func snapshotDiskUsageCountsOnlyWhatSnapshotsAloneKeep() async throws {
         let box = try await makeSandbox()
         defer { box.cleanup() }

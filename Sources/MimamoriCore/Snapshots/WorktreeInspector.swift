@@ -47,6 +47,9 @@ public actor WorktreeInspector {
     /// HEAD's commit subject, kept while HEAD stays put.
     private var headSubject: (oid: String, subject: String?)?
     private var loadedSnapshotsOnce = false
+    /// Whether a writer holds the shadow index (see `exclusively`), and who waits for it, in order.
+    private var shadowIndexHeld = false
+    private var shadowIndexQueue: [CheckedContinuation<Void, Never>] = []
 
     public static func worktreeID(for path: URL) -> String {
         let standardized = path.standardizedFileURL.path
@@ -78,9 +81,32 @@ public actor WorktreeInspector {
     public nonisolated var startRef: String { "refs/monitor/\(worktreeID)/start" }
     public nonisolated var refNamespace: String { "refs/monitor/\(worktreeID)/" }
 
+    // MARK: One writer at a time
+
+    /// Runs `body` once every writer that asked before it is done, and holds the next one off
+    /// until it is. The actor alone doesn't do this: another call gets in at every `await`, and
+    /// two `git add` runs on one index fail on git's index.lock. Refreshes, snapshots, discards
+    /// and restores all go through here; the methods named `…Locked` expect the caller to.
+    private func exclusively<T: Sendable>(_ body: () async throws -> T) async rethrows -> T {
+        if shadowIndexHeld {
+            await withCheckedContinuation { shadowIndexQueue.append($0) }
+        } else {
+            shadowIndexHeld = true
+        }
+        defer {
+            // Handed straight to the next in line, so a newcomer can't get in first.
+            if shadowIndexQueue.isEmpty { shadowIndexHeld = false } else { shadowIndexQueue.removeFirst().resume() }
+        }
+        return try await body()
+    }
+
     // MARK: Refresh
 
     public func refresh(baseline: Baseline) async throws -> WorktreeState {
+        try await exclusively { try await refreshLocked(baseline: baseline) }
+    }
+
+    private func refreshLocked(baseline: Baseline) async throws -> WorktreeState {
         // Status first: its list of untracked files saves the shadow index a walk of its own.
         let status = try await git.status(in: worktree)
         let excluded = try await syncShadowIndex(untracked: status.untracked)
@@ -373,6 +399,10 @@ public actor WorktreeInspector {
     /// (unless `force` or `markStart`).
     @discardableResult
     public func takeSnapshot(markStart: Bool = false, force: Bool = false) async throws -> SnapshotRecord? {
+        try await exclusively { try await takeSnapshotLocked(markStart: markStart, force: force) }
+    }
+
+    private func takeSnapshotLocked(markStart: Bool = false, force: Bool = false) async throws -> SnapshotRecord? {
         _ = try await syncShadowIndex()
         let tree = try await git.writeTree(indexFile: shadowIndexURL, in: worktree)
         if !markStart, !force, tree == lastSnapshotTree { return nil }
@@ -392,15 +422,17 @@ public actor WorktreeInspector {
     }
 
     public func clearStartMarker() async throws {
-        try await git.deleteRef(startRef, in: worktree)
+        try await exclusively { try await git.deleteRef(startRef, in: worktree) }
     }
 
     /// Keeps the newest `keep` snapshots.
     public func pruneSnapshots(keep: Int) async {
-        let all = await snapshots().filter { $0.id.hasPrefix(snapshotRefPrefix) }
-        guard all.count > keep else { return }
-        for record in all.dropFirst(keep) {
-            try? await git.deleteRef(record.id, in: worktree)
+        await exclusively {
+            let all = await snapshots().filter { $0.id.hasPrefix(snapshotRefPrefix) }
+            guard all.count > keep else { return }
+            for record in all.dropFirst(keep) {
+                try? await git.deleteRef(record.id, in: worktree)
+            }
         }
     }
 
@@ -411,11 +443,13 @@ public actor WorktreeInspector {
     }
 
     public func deleteAllSnapshots() async {
-        let records = (try? await git.refRecords(withPrefix: refNamespace, in: worktree)) ?? []
-        for record in records {
-            try? await git.deleteRef(record.name, in: worktree)
+        await exclusively {
+            let records = (try? await git.refRecords(withPrefix: refNamespace, in: worktree)) ?? []
+            for record in records {
+                try? await git.deleteRef(record.name, in: worktree)
+            }
+            lastSnapshotTree = nil
         }
-        lastSnapshotTree = nil
     }
 
     // MARK: Discarding changes
@@ -426,6 +460,10 @@ public actor WorktreeInspector {
     /// comes out cleanly. Then a snapshot is recorded, and Mimamori writes that one file: the same
     /// bytes with only the hunk's lines swapped, never the index.
     public func discard(_ hunk: DiffHunk, of change: FileChange) async throws -> DiscardedChange {
+        try await exclusively { try await discardLocked(hunk, of: change) }
+    }
+
+    private func discardLocked(_ hunk: DiffHunk, of change: FileChange) async throws -> DiscardedChange {
         if let reason = Discarding.hunkUnsupportedReason(for: change) { throw HunkDiscardError.unsupported(reason) }
         guard let oldOID = change.oldOID, let newOID = change.newOID else {
             throw HunkDiscardError.unsupported("This kind of change can't be discarded a hunk at a time.")
@@ -456,6 +494,10 @@ public actor WorktreeInspector {
     /// written again. Nothing is written unless the file is still the version the diff was made
     /// from and HEAD still has the other; then a snapshot is recorded first, holding the file.
     public func discardFile(_ change: FileChange, trashNewFiles: Bool = true) async throws -> DiscardedChange {
+        try await exclusively { try await discardFileLocked(change, trashNewFiles: trashNewFiles) }
+    }
+
+    private func discardFileLocked(_ change: FileChange, trashNewFiles: Bool) async throws -> DiscardedChange {
         if let reason = Discarding.fileUnsupportedReason(for: change) { throw HunkDiscardError.unsupported(reason) }
         let url = try fileURL(for: change.path)
         guard await git.blobOID(at: "HEAD", path: change.path, in: worktree) == change.oldOID else {
@@ -481,7 +523,7 @@ public actor WorktreeInspector {
         if let newOID = change.newOID {
             snapshot = try await snapshotHolding(change.path, blob: newOID)
         } else {
-            guard let taken = try await takeSnapshot(force: true) else { throw HunkDiscardError.fileChanged }
+            guard let taken = try await takeSnapshotLocked(force: true) else { throw HunkDiscardError.fileChanged }
             snapshot = taken
         }
         let permissions = Self.permissions(of: url)
@@ -507,12 +549,16 @@ public actor WorktreeInspector {
     /// their surroundings still match, as `git apply` places them; a whole file changed since is
     /// left alone, since putting it back would lose the change.
     public func restore(_ discarded: DiscardedChange) async throws -> DiscardRestore {
+        try await exclusively { try await restoreLocked(discarded) }
+    }
+
+    private func restoreLocked(_ discarded: DiscardedChange) async throws -> DiscardRestore {
         let url = try fileURL(for: discarded.path)
         let exists = (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
         let current = exists ? try Self.contents(of: url) : nil
         let untouched = current.map(Self.digest) == discarded.resultDigest
         if untouched {
-            let snapshot = try await takeSnapshot(force: true)
+            let snapshot = try await takeSnapshotLocked(force: true)
             guard let snapshot else { throw HunkDiscardError.fileChanged }
             switch (discarded.originalBlob, current) {
             case (let blob?, let current?):
@@ -533,7 +579,7 @@ public actor WorktreeInspector {
         } catch let error as GitError {
             throw HunkDiscardError.restoreDoesNotApply(error.stderr)
         }
-        guard let snapshot = try await takeSnapshot(force: true) else { throw HunkDiscardError.fileChanged }
+        guard let snapshot = try await takeSnapshotLocked(force: true) else { throw HunkDiscardError.fileChanged }
         do {
             try await git.applyToWorkingTree(patch.restore, reverse: false, checkOnly: false, in: worktree)
         } catch let error as GitError {
@@ -555,7 +601,7 @@ public actor WorktreeInspector {
 
     /// A snapshot taken now, checked to hold `path` as `blob`, so the discard can always be undone.
     private func snapshotHolding(_ path: String, blob: String) async throws -> SnapshotRecord {
-        guard let snapshot = try await takeSnapshot(force: true),
+        guard let snapshot = try await takeSnapshotLocked(force: true),
               await git.blobOID(at: snapshot.commitOID, path: path, in: worktree) == blob else {
             throw HunkDiscardError.notInSnapshot
         }
