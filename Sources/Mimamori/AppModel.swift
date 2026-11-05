@@ -848,7 +848,7 @@ final class AppModel {
     }
 
     /// An agent asks permission and its hook waits for an answer from Mimamori too.
-    private func permissionRequested(_ pending: PendingPermission) {
+    private func permissionRequested(_ pending: PermissionRequest) {
         guard settings.notifyOnAgentPermission else { return }
         let name = sessions[pending.worktree]?.displayName ?? (pending.worktree as NSString).lastPathComponent
         var body = [pending.detail, name].compactMap { $0 }.joined(separator: " · ")
@@ -859,7 +859,7 @@ final class AppModel {
     }
 
     /// Every answer given in Mimamori goes in the feed, so there is a record of what it allowed.
-    private func permissionAnswered(_ pending: PendingPermission, allow: Bool, automatically: Bool) {
+    private func permissionAnswered(_ pending: PermissionRequest, allow: Bool, automatically: Bool) {
         let how = automatically ? "by itself, after \(settings.autoAnswerSeconds) s" : "in Mimamori"
         record([ActivityEntry(worktreePath: pending.worktree, kind: .agentAttention, path: nil,
                               title: "\(allow ? "Allowed" : "Denied") \(how): \(pending.tool)", detail: pending.detail,

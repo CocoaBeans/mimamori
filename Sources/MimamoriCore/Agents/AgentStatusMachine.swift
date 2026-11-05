@@ -107,6 +107,29 @@ public struct PendingPermission: Sendable, Hashable, Codable {
         self.agentID = agentID
         self.command = command
     }
+
+    /// Whether `event`, from the same session, settles this request: the call that asked ended
+    /// (with no call matched to it, a call of the asking agent's ended), the turn or session
+    /// ended, a new prompt came, or another request took its place. While a subagent waits on you
+    /// the others carry on, so their calls settle nothing; nor does Claude Code's reminder that it
+    /// is waiting, nor another call starting, since the request's hook may still wait meanwhile.
+    /// `endedCall` is the call a PostToolUse, PostToolUseFailure or PermissionDenied ended, as
+    /// the status matched it (by tool name, for an agent that sends no call id); by default, the
+    /// call the event names.
+    public func isSettled(by event: HookEvent, endedCall: String? = nil) -> Bool {
+        switch event.name {
+        case .postToolUse, .postToolUseFailure, .permissionDenied:
+            if let callID { return callID == (endedCall ?? event.toolUseID) }
+            return agentID == event.agentID
+        case .postToolBatch:
+            if let callID { return event.batchToolUseIDs.contains(callID) }
+            return agentID == event.agentID
+        case .permissionRequest, .stop, .stopFailure, .userPromptSubmit, .sessionStart, .sessionEnd:
+            return true
+        case .preToolUse, .notification, .subagentStop, .preCompact, .other:
+            return false
+        }
+    }
 }
 
 public struct AgentStatus: Sendable, Hashable, Codable {
@@ -254,12 +277,10 @@ public struct AgentStatusMachine: Sendable {
             return current.recentToolCalls[index].id
         }
 
-        /// Whether a call ending (`id`, from `agentID`) answers the open permission request, if any.
-        /// While a subagent waits on you, the others carry on; their calls settle nothing.
-        func settlesPermission(_ id: String?, agentID: String?) -> Bool {
+        /// Whether a call ending (`endedCall`) answers the open permission request, if any.
+        func settlesPermission(endedCall: String?) -> Bool {
             guard case .needsPermission = current.activity, let pending = current.pendingPermission else { return true }
-            if let pendingID = pending.callID { return pendingID == id }
-            return pending.agentID == agentID
+            return pending.isSettled(by: event, endedCall: endedCall)
         }
 
         /// A turn that ended (or was abandoned for a new one) leaves nothing running.
@@ -329,7 +350,8 @@ public struct AgentStatusMachine: Sendable {
             let waitingElsewhere: Bool
             if case .needsPermission = current.activity, let pending = current.pendingPermission {
                 // One agent moving on settles its own request; a subagent waiting on you does
-                // not stop the others.
+                // not stop the others. Unlike `isSettled(by:)`, this guesses: for an agent with no
+                // hook waiting on the request, the next call may be the only word it was answered.
                 waitingElsewhere = pending.agentID != event.agentID
             } else {
                 waitingElsewhere = false
@@ -346,14 +368,14 @@ public struct AgentStatusMachine: Sendable {
 
         case .postToolUse, .postToolUseFailure, .permissionDenied:
             let finished = finish(id: event.toolUseID, tool: event.toolName, failed: event.name != .postToolUse)
-            if settlesPermission(finished ?? event.toolUseID, agentID: event.agentID) { set(.working(tool: nil, detail: nil)) }
+            if settlesPermission(endedCall: finished) { set(.working(tool: nil, detail: nil)) }
 
         case .postToolBatch:
             // Denied calls get no PostToolUse; the batch is the only word that they are done.
             for id in event.batchToolUseIDs { finish(id: id, tool: nil) }
             let settled: Bool
             if case .needsPermission = current.activity, let pending = current.pendingPermission {
-                settled = pending.callID.map(event.batchToolUseIDs.contains) ?? (pending.agentID == event.agentID)
+                settled = pending.isSettled(by: event)
             } else {
                 settled = event.agentID == nil
             }

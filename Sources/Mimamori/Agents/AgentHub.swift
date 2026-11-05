@@ -77,7 +77,7 @@ struct AgentContact: Hashable, Identifiable {
 }
 
 /// A permission request whose hook waits for an answer from Mimamori.
-struct PendingPermission: Hashable, Identifiable {
+struct PermissionRequest: Hashable, Identifiable {
     var id: String
     /// The session asking (`AgentStatus.key`).
     var session: String
@@ -86,6 +86,9 @@ struct PendingPermission: Hashable, Identifiable {
     var tool: String
     var detail: String?
     var since: Date
+    /// The call that asked and the subagent it came from, as the session's status matched them:
+    /// what tells which events settle the request.
+    var call: PendingPermission
     /// When Mimamori answers by itself, and how; nil while it waits for you.
     var autoAnswer: AutoAnswer? = nil
     /// The Claude Code ask rule that keeps an auto-allow from applying to this call.
@@ -121,7 +124,7 @@ final class AgentHub {
     /// The latest requests to the hook socket and what became of them, newest first.
     private(set) var hookLog: [HookLogEntry] = []
     /// Permission requests you can answer in Mimamori, by session (`AgentStatus.key`).
-    private(set) var pendingPermissions: [String: PendingPermission] = [:]
+    private(set) var pendingPermissions: [String: PermissionRequest] = [:]
     static let hookLogCapacity = 200
 
     let socketPath: String = Persistence.supportDirectory.appendingPathComponent("mimamori.sock").path
@@ -137,10 +140,10 @@ final class AgentHub {
     var onUnwatchedWork: @MainActor (_ directories: [String], _ agent: AgentKind) -> Void = { _, _ in }
     /// A permission request waits for an answer from Mimamori, or no longer does (answered here,
     /// in the agent's own prompt, or let go).
-    var onPermissionRequest: @MainActor (PendingPermission) -> Void = { _ in }
+    var onPermissionRequest: @MainActor (PermissionRequest) -> Void = { _ in }
     var onPermissionSettled: @MainActor (_ id: String) -> Void = { _ in }
     /// You or the countdown answered a request in Mimamori, for the activity feed.
-    var onPermissionAnswered: @MainActor (_ pending: PendingPermission, _ allow: Bool, _ automatically: Bool) -> Void = { _, _, _ in }
+    var onPermissionAnswered: @MainActor (_ pending: PermissionRequest, _ allow: Bool, _ automatically: Bool) -> Void = { _, _, _ in }
 
     // Bookkeeping that views never read, kept out of observation.
     /// One machine per session (`AgentStatus.key`) in each worktree.
@@ -338,24 +341,6 @@ final class AgentHub {
             return
         }
         record(HookLogEntry(event, outcome: .placed(worktree: worktree)))
-        if let id = event.permissionRequestID {
-            let session = AgentStatus.key(session: event.sessionID, agent: event.agent)
-            var pending = PendingPermission(id: id, session: session, worktree: worktree, agent: event.agent,
-                                            tool: event.toolName ?? "", detail: event.summary, since: event.receivedAt)
-            if settings.autoAnswerPermissions {
-                let allow = settings.autoAnswer == .allow
-                // A call you asked Claude Code to always ask about is never allowed by itself.
-                if allow, let rule = askRules(cwd: event.cwd, worktree: worktree).matchingAskRule(tool: pending.tool, command: event.command) {
-                    pending.waitsForAskRule = rule
-                } else {
-                    pending.autoAnswer = .init(allow: allow, at: event.receivedAt.addingTimeInterval(TimeInterval(settings.autoAnswerSeconds)))
-                }
-            }
-            pendingPermissions[session] = pending
-            scheduleAutoAnswer(pending)
-            Log.agents.notice("\(event.agent.displayName, privacy: .public) asks to use \(pending.tool, privacy: .public); waiting for an answer here or in its own prompt")
-            onPermissionRequest(pending)
-        }
         // The session moved on: do not leave its old status behind. That includes a status taken
         // from Claude Code's record of the session where its process started.
         let key = AgentStatus.key(session: event.sessionID, agent: event.agent)
@@ -375,6 +360,25 @@ final class AgentHub {
         notes += machine.apply(Self.anchored(event, in: worktree))
         if let status = machine.status, let start = recordedTurnStart(for: status) { machine.backdateTurn(to: start) }
         machines[worktree, default: [:]][key] = machine
+        if let id = event.permissionRequestID {
+            // The status matched the request to the call that asked, which tells what settles it.
+            let call = machine.status?.pendingPermission ?? PendingPermission(callID: event.toolUseID, agentID: event.agentID)
+            var pending = PermissionRequest(id: id, session: key, worktree: worktree, agent: event.agent,
+                                            tool: event.toolName ?? "", detail: event.summary, since: event.receivedAt, call: call)
+            if settings.autoAnswerPermissions {
+                let allow = settings.autoAnswer == .allow
+                // A call you asked Claude Code to always ask about is never allowed by itself.
+                if allow, let rule = askRules(cwd: event.cwd, worktree: worktree).matchingAskRule(tool: pending.tool, command: event.command) {
+                    pending.waitsForAskRule = rule
+                } else {
+                    pending.autoAnswer = .init(allow: allow, at: event.receivedAt.addingTimeInterval(TimeInterval(settings.autoAnswerSeconds)))
+                }
+            }
+            pendingPermissions[key] = pending
+            scheduleAutoAnswer(pending)
+            Log.agents.notice("\(event.agent.displayName, privacy: .public) asks to use \(pending.tool, privacy: .public); waiting for an answer here or in its own prompt")
+            onPermissionRequest(pending)
+        }
         if moved || before == nil { attributeProcesses() }
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
         if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
@@ -434,7 +438,7 @@ final class AgentHub {
         pendingPermissions[pending.session]?.autoAnswer = nil
     }
 
-    private func scheduleAutoAnswer(_ pending: PendingPermission) {
+    private func scheduleAutoAnswer(_ pending: PermissionRequest) {
         autoAnswerTasks.removeValue(forKey: pending.id)?.cancel()
         guard let plan = pending.autoAnswer else { return }
         autoAnswerTasks[pending.id] = Task { [weak self] in
@@ -467,18 +471,14 @@ final class AgentHub {
         onPermissionSettled(pending.id)
     }
 
-    /// The agent's own prompt was answered, or the session moved on: the step finished or was
-    /// denied, the turn ended, or another request came. Claude Code's reminder that it is waiting
-    /// (a Notification) and other agents' events leave the request open.
+    /// The agent's own prompt was answered, or the session moved on: the step that asked finished
+    /// or was denied, the turn ended, or another request came. The status settles it by the same
+    /// rule, `PendingPermission.isSettled(by:)`.
     private func settlePermission(movedOnBy event: HookEvent) {
         let session = AgentStatus.key(session: event.sessionID, agent: event.agent)
-        guard let pending = pendingPermissions[session], event.permissionRequestID != pending.id else { return }
-        let settles: Bool = switch event.name {
-        case .postToolUse, .postToolUseFailure, .permissionDenied: event.toolName == nil || event.toolName == pending.tool
-        case .postToolBatch, .permissionRequest, .stop, .stopFailure, .userPromptSubmit, .sessionStart, .sessionEnd: true
-        default: false
-        }
-        if settles { settlePermission(for: session) }
+        guard let pending = pendingPermissions[session], event.permissionRequestID != pending.id,
+              pending.call.isSettled(by: event) else { return }
+        settlePermission(for: session)
     }
 
     enum HookTestResult: Equatable {

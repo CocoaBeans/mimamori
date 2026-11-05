@@ -674,7 +674,7 @@ struct PermissionAnswerButtons: View {
     @Environment(AppModel.self) private var model
     let requestID: String
 
-    private var pending: PendingPermission? {
+    private var pending: PermissionRequest? {
         model.agentHub.pendingPermissions.values.first { $0.id == requestID }
     }
 

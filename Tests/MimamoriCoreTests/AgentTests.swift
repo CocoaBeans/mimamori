@@ -861,6 +861,72 @@ struct PermissionRequestTests {
         #expect(machine.status?.activity == .working(tool: nil, detail: nil))
     }
 
+    @Test func anotherSubagentsCommandDoesNotSettleIt() {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.userPromptSubmit, at: 0))
+        _ = machine.apply(event(.preToolUse, tool: "Bash", id: "a-1", summary: "git push", agentID: "a", at: 1))
+        _ = machine.apply(event(.preToolUse, tool: "Bash", id: "b-1", summary: "swift build", agentID: "b", at: 1.05))
+        _ = machine.apply(event(.permissionRequest, tool: "Bash", summary: "git push", agentID: "a", at: 1.1))
+        // The request is a's call, though b's Bash call is open too.
+        #expect(machine.status?.pendingPermission == asked)
+        _ = machine.apply(event(.postToolUse, tool: "Bash", id: "b-1", agentID: "b", at: 4))
+        _ = machine.apply(event(.postToolBatch, agentID: "b", batch: ["b-1"], at: 4.1))
+        #expect(machine.status?.activity == .needsPermission(tool: "Bash", detail: "git push"))
+        #expect(machine.status?.pendingPermission == asked)
+    }
+
+    // The rule the hub also uses to let go of a request it holds for you.
+
+    private let asked = PendingPermission(callID: "a-1", agentID: "a", command: "git push")
+
+    @Test func anotherSubagentsCallOfTheSameToolLeavesTheRequestOpen() {
+        for name in [HookEvent.Name.postToolUse, .postToolUseFailure, .permissionDenied] {
+            #expect(!asked.isSettled(by: event(name, tool: "Bash", id: "b-1", agentID: "b", at: 4)))
+        }
+        // Nor the main agent's.
+        #expect(!asked.isSettled(by: event(.postToolUse, tool: "Bash", id: "t9", at: 4)))
+    }
+
+    @Test func aBatchWithoutTheCallLeavesTheRequestOpen() {
+        #expect(!asked.isSettled(by: event(.postToolBatch, agentID: "b", batch: ["b-1", "b-2"], at: 4)))
+        #expect(!asked.isSettled(by: event(.postToolBatch, batch: ["t9"], at: 4)))
+        #expect(!asked.isSettled(by: event(.postToolBatch, agentID: "a", at: 4)))
+    }
+
+    @Test func theCallThatAskedEndingSettlesIt() {
+        for name in [HookEvent.Name.postToolUse, .postToolUseFailure, .permissionDenied] {
+            #expect(asked.isSettled(by: event(name, tool: "Bash", id: "a-1", agentID: "a", at: 9)))
+        }
+        #expect(asked.isSettled(by: event(.postToolBatch, agentID: "a", batch: ["a-0", "a-1"], at: 9)))
+        // Matched by tool name, for an agent that sends no call id.
+        #expect(asked.isSettled(by: event(.postToolUse, tool: "Bash", agentID: "a", at: 9), endedCall: "a-1"))
+    }
+
+    @Test func withNoCallMatchedTheAskingAgentsNextCallSettlesIt() {
+        let unmatched = PendingPermission(callID: nil, agentID: "a")
+        #expect(unmatched.isSettled(by: event(.postToolUse, tool: "Bash", id: "a-2", agentID: "a", at: 9)))
+        #expect(!unmatched.isSettled(by: event(.postToolUse, tool: "Bash", id: "b-1", agentID: "b", at: 9)))
+        #expect(!unmatched.isSettled(by: event(.postToolBatch, agentID: "b", batch: ["b-1"], at: 9)))
+    }
+
+    @Test(arguments: [HookEvent.Name.stop, .stopFailure, .userPromptSubmit, .sessionStart, .sessionEnd, .permissionRequest])
+    func theTurnEndingOrMovingOnSettlesIt(_ name: HookEvent.Name) {
+        #expect(asked.isSettled(by: event(name, at: 9)))
+    }
+
+    @Test(arguments: [HookEvent.Name.notification, .subagentStop, .preCompact, .other])
+    func otherEventsLeaveTheRequestOpen(_ name: HookEvent.Name) {
+        // A Notification is Claude Code's reminder that it is still waiting.
+        #expect(!asked.isSettled(by: event(name, tool: "Bash", message: "Claude needs your permission to use Bash",
+                                           type: "permission_prompt", agentID: "a", at: 7)))
+    }
+
+    @Test func anotherCallStartingLeavesTheRequestOpen() {
+        // Its hook may still wait while the agent's other calls run alongside.
+        #expect(!asked.isSettled(by: event(.preToolUse, tool: "Read", id: "b-2", agentID: "b", at: 5)))
+        #expect(!asked.isSettled(by: event(.preToolUse, tool: "Read", id: "a-2", agentID: "a", at: 5)))
+    }
+
     @Test func theSameAgentMovingOnSettlesIt() {
         var machine = waitingMachine()
         // An install without the batch event: the agent's next call still shows it was answered.
