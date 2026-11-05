@@ -130,7 +130,10 @@ private struct AgentsWindowContent: View {
                         }
                     }
                     .padding([.horizontal, .bottom], 10)
-                    .animation(.default, value: rows.map(\.id))
+                    // Brief: an agent changes section at every turn, and the whole grid is drawn
+                    // again for each frame of the move. The default spring ran long enough to
+                    // cost a third of the window's CPU with three agents at work.
+                    .animation(.easeOut(duration: 0.2), value: rows.map(\.id))
                 }
                 // Only the column count, so a resize redraws the window when it crosses the line,
                 // not every frame. Not animated: the count changes mid-drag, and an animated change
