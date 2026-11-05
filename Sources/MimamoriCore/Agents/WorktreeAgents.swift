@@ -25,9 +25,10 @@ public struct WorktreeAgents: Sendable, Hashable {
 
     /// Live sessions, the most pressing first.
     public var live: [AgentStatus]
-    /// The agent processes each live session accounts for, by session key.
+    /// The agent processes each session accounts for, by session key. An ended session keeps the
+    /// process it ran in while that runs on, though the session no longer counts.
     public var claims: [String: [Int32]]
-    /// Agent processes no live session accounts for, which count as agents of their own.
+    /// Agent processes no session accounts for, which count as agents of their own.
     public var unclaimed: [AgentProcess]
     /// Files more than one session edited recently, most recent first.
     public var collisions: [Collision]
@@ -55,12 +56,18 @@ public struct WorktreeAgents: Sendable, Hashable {
             }
         }
         for status in statuses.sorted(by: Self.morePressing) {
-            // Any other session takes one process of its kind, the longest running.
+            // Any other session takes one process of its kind, the longest running. An ended session
+            // keeps the one it ran in, so that process is no second agent: ended sessions sort last,
+            // so live ones choose first, and a process started after it ended is not its own.
+            let ended = status.activity == .idle
             let candidate = claims[status.key] == nil
-                ? available.firstIndex { $0.kind.id == status.agent.id && $0.claudeSession == nil } : nil
+                ? available.firstIndex { process in
+                    process.kind.id == status.agent.id && process.claudeSession == nil
+                        && (!ended || process.startedAt <= status.lastEventAt)
+                } : nil
             let hasProcess = claims[status.key] != nil || candidate != nil
             let isLive: Bool
-            if status.activity == .idle {
+            if ended {
                 isLive = false
             } else if status.fromSessionRecord {
                 // Live while its record is: Claude Code's goes with its process, and Hermes's
@@ -69,12 +76,11 @@ public struct WorktreeAgents: Sendable, Hashable {
             } else {
                 isLive = hasProcess || now.timeIntervalSince(status.lastEventAt) < Self.liveWindow
             }
-            guard isLive else { continue }
-            live.append(status)
             if let candidate {
                 claims[status.key] = [available[candidate].pid]
                 available.remove(at: candidate)
             }
+            if isLive { live.append(status) }
         }
 
         // A process another agent here started is that agent's helper (or a `claude -p` it runs).
@@ -88,7 +94,7 @@ public struct WorktreeAgents: Sendable, Hashable {
         }
 
         self.live = live
-        self.claims = claims.filter { key, _ in live.contains { $0.key == key } }
+        self.claims = claims
         self.unclaimed = unclaimed
         self.collisions = Self.collisions(among: live, now: now)
     }

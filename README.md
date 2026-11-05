@@ -170,7 +170,7 @@ Hooks only report what happens while Mimamori runs: a session sitting at its pro
 
 ### Several agents in one worktree
 
-Two agents working in the same folder can undo each other's work. Mimamori keeps each session apart, by the `session_id` its hooks send (subagents share their parent's), and counts an agent process that no session accounts for once two scans have seen it and no other agent there started it. A session counts while it is live: it has not ended, and it reported in the last 10 minutes or its process still runs.
+Two agents working in the same folder can undo each other's work. Mimamori keeps each session apart, by the `session_id` its hooks send (subagents share their parent's), and counts an agent process that no session accounts for once two scans have seen it and no other agent there started it. A session counts while it is live: it has not ended, and it reported in the last 10 minutes or its process still runs. A session that ended still accounts for the process it ran in, so that process isn't counted as another agent while it keeps running.
 
 When a worktree has more than one live agent:
 

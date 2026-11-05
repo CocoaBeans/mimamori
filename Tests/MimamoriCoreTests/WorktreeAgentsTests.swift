@@ -63,6 +63,52 @@ struct WorktreeAgentsTests {
         #expect(running.claims["s2"] == [20])
     }
 
+    @Test func anEndedSessionKeepsTheProcessItRanIn() {
+        // Cursor Agent's session ended while `cursor-agent` runs on: one agent, not a second one.
+        let ended = session("c1", .cursor, .idle, minutesAgo: 1)
+        let result = agents([ended], [process(30, .cursor)])
+        #expect(result.live.isEmpty)
+        #expect(result.claims["c1"] == [30])
+        #expect(result.unclaimed.isEmpty)
+        #expect(!result.isShared)
+        // Beside a live session it is still no second agent.
+        let beside = agents([ended, session("s1")], [process(30, .cursor), process(10, session: "s1")])
+        #expect(beside.live.map(\.key) == ["s1"])
+        #expect(beside.agentCount == 1)
+        #expect(beside.unclaimed.isEmpty)
+        // A live session of its kind chooses first: a new session in the same process.
+        let next = agents([ended, session("c2", .cursor, .ready)], [process(30, .cursor)])
+        #expect(next.live.map(\.key) == ["c2"])
+        #expect(next.claims["c2"] == [30])
+        #expect(next.claims["c1"] == nil)
+        // A process started after the session ended is not its own.
+        let later = agents([session("c1", .cursor, .idle, minutesAgo: 5)], [process(31, .cursor, startedMinutesAgo: 1)])
+        #expect(later.claims["c1"] == nil)
+        #expect(later.unclaimed.map(\.pid) == [31])
+    }
+
+    @Test func aClaudeCodeProcessGoesToTheSessionClearStarts() {
+        // `/clear` ends one session and starts another in the same process.
+        let old = session("s1", .claudeCode, .idle, minutesAgo: 1)
+        let new = session("s2", .claudeCode, .ready)
+        let recorded = agents([old, new], [process(10, session: "s2")])
+        #expect(recorded.live.map(\.key) == ["s2"])
+        #expect(recorded.claims["s2"] == [10])
+        #expect(recorded.claims["s1"] == nil)
+        #expect(recorded.unclaimed.isEmpty)
+        // Without Claude Code's record to say so, the new session still takes it first.
+        let unrecorded = agents([old, new], [process(10)])
+        #expect(unrecorded.live.map(\.key) == ["s2"])
+        #expect(unrecorded.claims["s2"] == [10])
+        #expect(unrecorded.claims["s1"] == nil)
+        #expect(unrecorded.agentCount == 1)
+        // An ended session whose process runs on keeps it by its session id.
+        let lingering = agents([old], [process(10, session: "s1")])
+        #expect(lingering.live.isEmpty)
+        #expect(lingering.claims["s1"] == [10])
+        #expect(lingering.unclaimed.isEmpty)
+    }
+
     @Test func aReaderBesideAWriterIsSharedButNoCollision() {
         let result = agents([session("s1", edits: [("/repo/a.swift", 1)]), session("s2", .codex, reads: [("/repo/a.swift", 1)])])
         #expect(result.isShared)

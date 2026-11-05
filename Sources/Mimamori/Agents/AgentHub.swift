@@ -901,7 +901,8 @@ final class AgentHub {
         // The most pressing session leads; an ended one only while its process still runs.
         if let status = statuses[worktree]?.first, status.activity != .idle || !running.isEmpty {
             let others = (here?.live ?? []).filter { $0.key != status.key }
-            let elsewhere = Set(others.flatMap { claims[$0.key] ?? [] } + unclaimed.map(\.pid))
+            // Processes another session claims (an ended one keeps its own) or that are agents of their own.
+            let elsewhere = Set(claims.filter { $0.key != status.key }.values.joined()).union(unclaimed.map(\.pid))
             var presence = sessionPresence(status, processIDs: claims[status.key] ?? running.map(\.pid).filter { !elsewhere.contains($0) },
                                            running: running)
             presence.others = others.map { sessionPresence($0, processIDs: claims[$0.key] ?? [], running: running) }
