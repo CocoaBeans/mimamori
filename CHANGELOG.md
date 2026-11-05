@@ -33,6 +33,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
   repository, no longer fails with "index.lock: File exists". A worktree you hide, or a repository
   you remove, while Mimamori is still starting to watch it is no longer watched anyway
   ([#41](https://github.com/CocoaBeans/mimamori/pull/41)).
+- An agent whose session ended while its process kept running no longer counts as two agents:
+  the menu-bar popover no longer reads "+1" beside it, nor the sidebar "2 agents · ended"
+  ([#42](https://github.com/CocoaBeans/mimamori/pull/42)).
 
 ## [1.1.0] - 2026-11-04
 
