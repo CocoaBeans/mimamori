@@ -579,6 +579,16 @@ final class AgentHub {
         if machines[worktree]?.isEmpty == true { machines.removeValue(forKey: worktree) }
     }
 
+    /// Forgets sessions put to sleep. Not every agent says goodbye as it quits, and a session
+    /// still "ready" would keep showing for minutes after its process went.
+    func forgetSessions(_ sessionIDs: Set<String>, in worktree: String) {
+        guard let sessions = machines[worktree] else { return }
+        for (key, machine) in sessions where machine.status?.sessionID.map(sessionIDs.contains) == true {
+            remove(session: key, from: worktree)
+        }
+        publishStatuses()
+    }
+
     /// The directory Hermes records for the event's session. A session's row is written when its
     /// first turn starts, so a miss is asked again a few seconds later.
     private func hermesDirectory(for event: HookEvent) -> String? {
@@ -919,6 +929,28 @@ final class AgentHub {
         }
         return processPresence(running)
     }
+
+    /// Every agent in `worktree` with the processes sleep would stop: each live session with the
+    /// processes it accounts for, and each process that is an agent of its own. Straight from the
+    /// machines, since published statuses may lag by a moment.
+    func sleepCandidates(in worktree: String) -> [SleepCandidate] {
+        let running = processes[worktree] ?? []
+        let statuses = (machines[worktree] ?? [:]).values.compactMap(\.status)
+        let here = WorktreeAgents(statuses: statuses, processes: running, established: establishedPIDs)
+        var candidates = here.live.map { status in
+            let pids = here.claims[status.key] ?? []
+            return SleepCandidate(agent: status.agent, sessionID: status.sessionID, activity: status.activity,
+                                  processes: running.filter { pids.contains($0.pid) }, task: status.task)
+        }
+        candidates += here.unclaimed.map { process in
+            SleepCandidate(agent: process.kind, sessionID: process.claudeSession?.sessionID,
+                           activity: process.claudeSession?.activity, processes: [process])
+        }
+        return candidates
+    }
+
+    /// Agent processes running in `worktree`, as the last scan found them.
+    func runningProcesses(in worktree: String) -> [AgentProcess] { processes[worktree] ?? [] }
 
     private func sessionPresence(_ status: AgentStatus, processIDs: [Int32], running: [AgentProcess]) -> AgentPresence {
         let own = running.filter { processIDs.contains($0.pid) }

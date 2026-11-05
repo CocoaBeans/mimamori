@@ -79,6 +79,14 @@ struct GeneralSettingsView: View {
                 Text("Off, Mimamori never writes to your working tree. On, an Uncommitted diff has Discard… on each hunk and Discard File… in its header, and the file list's context menu has Discard Changes…. Each shows what goes and asks first, won't while an agent is in the middle of a turn there, checks that the file still matches the diff, and takes a snapshot first, even with automatic snapshots off, so Undo can put it back. Only that file changes, and a new file goes to the Trash; the index is never touched.")
             }
             Section {
+                Toggle("Offer putting agents to sleep", isOn: settings.allowsSleepingAgents)
+                    .help("Let Mimamori stop an agent between turns and keep its session, to resume it later")
+            } header: {
+                Text("Sleeping agents")
+            } footer: {
+                Text("Off, Mimamori never stops an agent. On, the agent banner's moon and a worktree's context menu put its Claude Code or Codex agents to sleep: once you confirm, Mimamori stops their processes, as closing their terminal would, and keeps their sessions. Not while one is in the middle of a turn. Wake opens a terminal in the worktree that resumes each session where it left off.")
+            }
+            Section {
                 Stepper("Keep activity for \(settings.wrappedValue.activityRetentionDays) day\(settings.wrappedValue.activityRetentionDays == 1 ? "" : "s")",
                         value: settings.activityRetentionDays, in: 1...90)
             } header: {

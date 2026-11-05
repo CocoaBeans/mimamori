@@ -19,6 +19,7 @@ struct ContentView: View {
         .onChange(of: model.selectedWorktreeID) { model.persistUISoon() }
         .frame(minHeight: 480)
         .modifier(StateNoticeAlert())
+        .modifier(SleepDialogs())
         .onAppear {
             // The Agents window opens again if it was open when Mimamori last quit.
             if model.agentsWindowOpen || model.debugFlags.contains("agents-window") { openWindow(id: "agents") }
@@ -375,6 +376,10 @@ private struct AgentBannerSlot: View {
     let worktree: String
 
     var body: some View {
+        let sleepers = model.sleepers(in: worktree)
+        if !sleepers.isEmpty {
+            SleepingAgentsBanner(sleepers: sleepers, now: model.now)
+        }
         if let presence = model.agentHub.presence(for: worktree) {
             let session = model.sessions[worktree]
             AgentStatusBanner(presence: presence, now: model.agentNow, details: AgentBannerDetails(
@@ -390,7 +395,10 @@ private struct AgentBannerSlot: View {
                 onOpenFile: { path in session?.selectedPath = path },
                 onGoToAgent: { AgentApps.bringForward(presence) },
                 onSummary: { openWindow.summary(for: worktree) },
-                onDismissCollision: { model.agentHub.dismissCollision(in: worktree) }))
+                onDismissCollision: { model.agentHub.dismissCollision(in: worktree) },
+                canSleep: model.settings.allowsSleepingAgents,
+                isFallingAsleep: model.fallingAsleep.contains(worktree),
+                onSleep: { model.requestSleep(in: worktree) }))
         }
     }
 }

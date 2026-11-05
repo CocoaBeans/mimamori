@@ -19,6 +19,14 @@ public enum AgentActivity: Sendable, Hashable, Codable {
         }
     }
 
+    /// In a turn: working, or stopped in one to wait on you.
+    public var isMidTurn: Bool {
+        switch self {
+        case .working, .needsPermission, .askedQuestion: true
+        case .ready, .idle: false
+        }
+    }
+
     /// Lower is more pressing: waiting on you, then working, then ready, then ended.
     public var urgency: Int {
         switch self {

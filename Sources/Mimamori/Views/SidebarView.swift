@@ -130,9 +130,11 @@ private struct RepositorySection: View {
 
         Section(isExpanded: Binding(get: { !model.isCollapsed(repo) }, set: { model.setCollapsed(!$0, for: repo.id) })) {
             ForEach(visible) { worktree in
+                let presence = model.agentHub.presence(for: worktree.path)
+                let asleep = model.sleepers(in: worktree.path).map(\.agent)
                 WorktreeRow(info: worktree, session: model.sessions[worktree.path], now: model.now,
                             recencyWindow: model.settings.recencyWindowSeconds,
-                            presence: model.agentHub.presence(for: worktree.path))
+                            presence: presence, asleep: asleep)
                     .equatable()
                     .tag(worktree.path)
                     .contextMenu {
@@ -143,6 +145,17 @@ private struct RepositorySection: View {
                         Button("Refresh") { model.sessions[worktree.path]?.requestRefresh(force: true) }
                         Button("Session Summary…") { openWindow.summary(for: worktree.path) }
                             .disabled(model.sessions[worktree.path] == nil)
+                        if !asleep.isEmpty || presence != nil && model.settings.allowsSleepingAgents {
+                            Divider()
+                        }
+                        if !asleep.isEmpty {
+                            Button("Wake \(WorktreeAgents.describe(asleep))") { model.wake(in: worktree.path) }
+                        }
+                        if let presence, model.settings.allowsSleepingAgents {
+                            Button("Put \(presence.agentCount > 1 ? "Agents" : presence.kind.displayName) to Sleep…") {
+                                model.requestSleep(in: worktree.path)
+                            }
+                        }
                         Divider()
                         Button("Hide Worktree") { model.hideWorktree(worktree.path) }
                         Button("Stop Watching \(repo.displayName)…", role: .destructive) { model.requestRemoval(of: repo) }
@@ -197,7 +210,7 @@ private struct RepositorySection: View {
 extension WorktreeRow: @preconcurrency Equatable {
     static func == (a: WorktreeRow, b: WorktreeRow) -> Bool {
         a.info == b.info && a.session === b.session && a.now == b.now
-            && a.recencyWindow == b.recencyWindow && a.presence == b.presence
+            && a.recencyWindow == b.recencyWindow && a.presence == b.presence && a.asleep == b.asleep
     }
 }
 
@@ -207,6 +220,8 @@ struct WorktreeRow: View {
     let now: Date
     let recencyWindow: Double
     var presence: AgentPresence? = nil
+    /// Agents put to sleep here.
+    var asleep: [AgentKind] = []
 
     private var isRecentlyActive: Bool {
         guard let date = session?.lastActivityDate else { return false }
@@ -219,6 +234,8 @@ struct WorktreeRow: View {
             Group {
                 if let presence {
                     AgentBadge(presence: presence, size: 22)
+                } else if let sleeper = asleep.first {
+                    SleepingBadge(agent: sleeper, size: 22)
                 } else {
                     Image(systemName: info.isMain ? "shippingbox" : "arrow.triangle.branch")
                         .foregroundStyle(.secondary)
@@ -230,6 +247,11 @@ struct WorktreeRow: View {
                     .lineLimit(1)
                 if let presence {
                     AgentPresenceBadge(presence: presence)
+                } else if !asleep.isEmpty {
+                    Text("\(WorktreeAgents.describe(asleep)) asleep")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 } else {
                     Text(info.isMain ? "main worktree" : info.name)
                         .font(.caption)

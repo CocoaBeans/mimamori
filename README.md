@@ -9,7 +9,7 @@
 
 A lightweight mac app that keeps watch over git worktrees while coding agents work. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: **what is it doing right now**, and **should I be worried**.
 
-Mimamori is read-only unless you turn on its one escape hatch, discarding a hunk or a file. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
+Mimamori is read-only unless you turn on one of its two escape hatches: discarding a hunk or a file, or putting an idle agent to sleep. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
 
 ![Mimamori as agents start work in a web shop's worktrees: Claude Code's edits appear in the change list and the diff, a review note is typed on a line it just wrote, the activity feed fills, the sidebar shows each worktree's agent, and the toolbar pill turns to Codex needs you](docs/mimamori-demo.gif)
 
@@ -74,6 +74,10 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - Click a card to jump to that worktree, switch off Details for one line per agent, widen the window past about 900 points for two columns, or pin the window above everything else.
 
 <p align="center"><img src="docs/mimamori-agents.png" width="460" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through its steps, Gemini CLI ready for its next prompt, and Cursor's ended session folded away, each card led by its project's icon, with its task, turn timeline, latest steps and files"></p>
+
+- **Puts idle agents to sleep, if you let it.** Off until you turn it on in Settings › General › Sleeping agents. An agent waiting for your next prompt still holds hundreds of megabytes; the moon in its banner, or **Put … to Sleep…** in the worktree's context menu, stops it and keeps its session.
+  - It works for Claude Code and Codex, and only between turns: Mimamori refuses while an agent here is working or waiting on you, or can't say which session it runs, and looks again just before it stops anything. It sends the agent SIGTERM, as closing its terminal would, and checks each process is still the one it saw start.
+  - A sleeping agent shows a moon in the sidebar and a card above the diff with its last task. **Wake** writes a short script that removes itself as it runs and opens it in your terminal: it changes to the worktree and runs `claude --resume <session>` or `codex resume <session>`, leaving a shell there when the agent quits. Copy the command instead to resume it wherever you like; Mimamori notices the session is awake either way.
 
 - **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you. Click it for a popover drawn like the desktop widget: each agent at work with a live timer, its task and latest steps, grouped under Needs you, Working, Ready and Ended as in the Agents window, then every repository and worktree with what changed. Click an agent or a worktree to open it in Mimamori. Fold the Agents or Worktrees section, or any of the agents' groups, away by its header, and pin the popover (the pin at its foot) to keep it open as a small window that floats above the others; it opens again at launch until you unpin it.
 
@@ -373,6 +377,8 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `note-line:<n>` or `note-line:<n>-<m>` | Start a note on new-file lines n to m of the selected file, as their bubbles do |
 | `discard:<n>` or `discard:file` | Ask to discard hunk n, or the whole file, of the selected file, as their buttons do (with discarding on in Settings); add `:confirm` to go ahead 2 s later |
 | `discard-undo` | Press Undo once, 3 s after a discard |
+| `sleep` | Ask to put the selected worktree's agents to sleep; `sleep:confirm` goes ahead 2 s later |
+| `wake` | Wake the selected worktree's sleeping agents, 3 s after they sleep (opens a real terminal) |
 | `about` | Open the About window |
 | `companion` | Advertise Mimamori over Bonjour and stream the agents to the iPhone companion, unencrypted and unpaired, as step 1 of [its plan](docs/plans/iphone-companion.md) does. macOS asks for local network access the first time |
 | `permission:allow` | Answer a waiting permission request once it has waited 5 s, as Allow does (`permission:deny` for Deny) |

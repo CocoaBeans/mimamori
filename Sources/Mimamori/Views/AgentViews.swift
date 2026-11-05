@@ -248,6 +248,10 @@ struct AgentBannerDetails {
     var onDismissCollision: () -> Void = {}
     /// Offer the button that shows more or less; off where the banner is always shown in full.
     var canToggle = true
+    /// Offer putting the agents here to sleep: on in Settings.
+    var canSleep = false
+    var isFallingAsleep = false
+    var onSleep: () -> Void = {}
 }
 
 /// A prominent status banner for the top of the detail column.
@@ -434,6 +438,9 @@ struct AgentStatusBanner: View {
                     .help("Go to agent: bring the app it runs in to the front")
                     .accessibilityLabel("Go to agent")
                 }
+                if details.canSleep {
+                    sleepButton(details)
+                }
                 Button(action: details.onSummary) {
                     Image(systemName: "doc.text")
                 }
@@ -449,6 +456,27 @@ struct AgentStatusBanner: View {
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Mid-turn the agent can't sleep, so the button waits; other reasons it can't are given when
+    /// it is clicked, since a disabled button shows no tooltip to say why.
+    @ViewBuilder
+    private func sleepButton(_ details: AgentBannerDetails) -> some View {
+        let midTurn = presence.source == .hooks && presence.activity.isMidTurn
+        if details.isFallingAsleep {
+            ProgressView()
+                .controlSize(.mini)
+                .help("Going to sleep…")
+                .accessibilityLabel("Going to sleep")
+        } else {
+            Button(action: details.onSleep) {
+                Image(systemName: "moon.zzz")
+            }
+            .disabled(midTurn)
+            .help(midTurn ? "Put to sleep once it's ready for your next prompt"
+                : "Put to sleep: stop the agent and keep its session, to wake it later")
+            .accessibilityLabel("Put to sleep")
         }
     }
 

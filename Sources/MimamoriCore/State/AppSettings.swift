@@ -21,6 +21,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var diffLayout: DiffLayout = .unified
     /// Offer Discard Hunk in uncommitted diffs: the one thing that has Mimamori write to a working tree.
     public var allowsDiscardingChanges: Bool = false
+    /// Offer putting an agent to sleep between turns: stopping its process, to resume its session later.
+    public var allowsSleepingAgents: Bool = false
     public var summaryOptions = SessionSummaryOptions()
     /// How long the activity feed is kept on disk.
     public var activityRetentionDays: Int = 7
@@ -78,6 +80,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         syntaxHighlighting = c.decode(.syntaxHighlighting, or: defaults.syntaxHighlighting)
         diffLayout = c.decode(.diffLayout, or: defaults.diffLayout)
         allowsDiscardingChanges = c.decode(.allowsDiscardingChanges, or: defaults.allowsDiscardingChanges)
+        allowsSleepingAgents = c.decode(.allowsSleepingAgents, or: defaults.allowsSleepingAgents)
         summaryOptions = c.decode(.summaryOptions, or: defaults.summaryOptions)
         activityRetentionDays = c.decode(.activityRetentionDays, or: defaults.activityRetentionDays)
         inspector = c.decode(.inspector, or: defaults.inspector)

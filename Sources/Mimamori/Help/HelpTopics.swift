@@ -164,6 +164,14 @@ struct HelpTopic: Identifiable {
 
             ## Several agents in one worktree
             Mimamori keeps each session apart. When two of them edit the same file, the banner warns you and names the files, since one may undo the other's work.
+
+            ## Put an agent to sleep
+            _Off until you turn on Offer putting agents to sleep, in Settings › General._
+            An agent waiting for your next prompt still holds its memory. Put it to sleep and Mimamori stops its process and keeps its session, to carry on later where it left off.
+            - Click the moon in the agent's banner, or choose **Put … to Sleep…** in the worktree's context menu, and confirm. Its terminal is left as if you had quit the agent.
+            - It works for Claude Code and Codex, between turns: not while one is working or waiting on you, and not while another agent in the worktree can't sleep too.
+            - A sleeping agent shows a moon in the sidebar and a card above the diff. **Wake** opens a terminal in the worktree that resumes its session (`claude --resume …` or `codex resume …`). The copy button copies that command, to run wherever you like.
+            - Resume the session yourself and Mimamori notices it's awake. The ✕ forgets a sleeping agent without waking it.
             """),
 
         HelpTopic(
@@ -264,6 +272,7 @@ struct HelpTopic: Identifiable {
             - Its settings, the repositories you watch, your review marks and the activity feed, in `~/Library/Application Support/Mimamori/`.
             - Snapshots, inside each repository under `refs/monitor/`.
             - Your files only when you discard a hunk or a file, which is off until you turn it on: that one file, after a snapshot, and never the index.
+            - It stops an agent only when you put it to sleep, which is off until you turn it on, and Wake writes a short script to the temporary folder that removes itself as it runs.
             - The hooks you choose to install, in Claude Code's or Hermes's settings, after a backup of the file. It keeps the newest five backups.
 
             ## Removing Mimamori

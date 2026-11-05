@@ -8,6 +8,13 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Added
+
+- Put an agent to sleep between turns: Mimamori stops its process and keeps its session, and
+  **Wake** opens a terminal in the worktree that resumes it. For Claude Code and Codex, off until
+  you turn it on in Settings › General
+  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
+
 ### Changed
 
 - With git from Xcode or its Command Line Tools, Mimamori runs that git directly rather than

@@ -53,6 +53,14 @@ final class AppModel {
     private let activityLog: ActivityLog
     /// Repository awaiting the user's confirmation in the sidebar's dialog.
     var repositoryPendingRemoval: RepositoryEntry?
+    /// Agents put to sleep, to be woken on their sessions.
+    private(set) var sleepingAgents: [SleepingAgent]
+    /// Agents awaiting your confirmation before they are put to sleep.
+    var sleepRequest: SleepRequest?
+    /// Worktrees whose agents are being stopped right now.
+    private(set) var fallingAsleep: Set<String> = []
+    /// Why agents could not be put to sleep or woken, for an alert.
+    var sleepProblem: SleepProblem?
     var showActivity: Bool
     var flaggedOnly: Bool
     var hideReviewed: Bool
@@ -143,6 +151,7 @@ final class AppModel {
         self.overviewWindowOpen = persisted.ui.overviewWindowOpen
         self.collapsedRepositories = persisted.collapsedRepositories
         self.hiddenWorktrees = persisted.hiddenWorktrees
+        self.sleepingAgents = persisted.sleepingAgents
         self.activityLog = ActivityLog(url: Persistence.activityURL,
                                        retention: Double(persisted.settings.activityRetentionDays) * 86_400)
         startTicker()
@@ -150,7 +159,10 @@ final class AppModel {
         agentHub.resolveWorktree = { [weak self] cwd in self?.worktree(containing: cwd) }
         agentHub.onNotes = { [weak self] worktree, agent, notes in self?.record(agentNotes: notes, agent: agent, worktree: worktree) }
         agentHub.onStatusChange = { [weak self] in self?.agentStatusChanged() }
-        agentHub.onAgentsChange = { [weak self] in self?.publishWidgets() }
+        agentHub.onAgentsChange = { [weak self] in
+            self?.publishWidgets()
+            self?.forgetResumedSleepers()
+        }
         agentHub.onUnwatchedWork = { [weak self] folders, agent in self?.agentWorks(in: folders, agent: agent) }
         notifier.handleAnswers { [weak self] answer in
             switch answer {
@@ -256,6 +268,108 @@ final class AppModel {
         persisted.hiddenWorktrees = hiddenWorktrees
         persistSoon()
         Task { await rediscoverWorktrees(for: repoID) }
+    }
+
+    // MARK: Sleeping agents
+
+    func sleepers(in worktree: String) -> [SleepingAgent] { sleepingAgents.filter { $0.worktree == worktree } }
+
+    /// Whether the agents in `worktree` may be put to sleep now, and why not; nil while sleeping
+    /// is off in Settings or no agent is here.
+    func sleepVerdict(for worktree: String) -> AgentSleep.Verdict? {
+        guard settings.allowsSleepingAgents else { return nil }
+        if fallingAsleep.contains(worktree) { return .refused("Going to sleep…") }
+        let candidates = agentHub.sleepCandidates(in: worktree)
+        return candidates.isEmpty ? nil : AgentSleep.check(candidates)
+    }
+
+    /// Asks you to confirm putting the agents in `worktree` to sleep, or says why they can't be.
+    func requestSleep(in worktree: String) {
+        guard settings.allowsSleepingAgents else { return }
+        let candidates = agentHub.sleepCandidates(in: worktree)
+        switch AgentSleep.check(candidates) {
+        case .allowed: sleepRequest = SleepRequest(worktree: worktree, candidates: candidates)
+        case .refused(let reason): sleepProblem = SleepProblem(title: "Can't Put to Sleep", message: reason)
+        }
+    }
+
+    /// Stops the agents' processes and keeps their sessions to wake them on. What you agreed to
+    /// is looked at again first: an agent may have started a turn while you read the question.
+    func putToSleep(_ request: SleepRequest) async {
+        let worktree = request.worktree
+        guard settings.allowsSleepingAgents, !fallingAsleep.contains(worktree) else { return }
+        let candidates = agentHub.sleepCandidates(in: worktree)
+        if case .refused(let reason) = AgentSleep.check(candidates) {
+            sleepProblem = SleepProblem(title: "Can't Put to Sleep", message: reason)
+            return
+        }
+        guard AgentSleep.same(candidates, request.candidates) else {
+            sleepProblem = SleepProblem(title: "Can't Put to Sleep", message: "The agents here changed while you were deciding. Try again.")
+            return
+        }
+        fallingAsleep.insert(worktree)
+        defer { fallingAsleep.remove(worktree) }
+        let running = Set(await AgentSleeper.stop(candidates.flatMap(\.processes)).map(\.pid))
+        let now = Date()
+        let slept = candidates.compactMap { candidate -> SleepingAgent? in
+            guard let session = candidate.sessionID, !candidate.processes.contains(where: { running.contains($0.pid) }) else { return nil }
+            return SleepingAgent(agent: candidate.agent, sessionID: session, worktree: worktree, task: candidate.task, sleptAt: now)
+        }
+        let sessions = Set(slept.map(\.sessionID))
+        sleepingAgents.removeAll { sessions.contains($0.sessionID) }
+        sleepingAgents += slept
+        saveSleepers()
+        agentHub.forgetSessions(sessions, in: worktree)
+        record(slept.map { sleeper in
+            ActivityEntry(worktreePath: worktree, kind: .agentSession, title: "Put to sleep",
+                          detail: sleeper.resumeCommand.map { "Wake resumes it with \($0)" }, agent: sleeper.agent.displayName)
+        })
+        let awake = candidates.filter { $0.processes.contains { running.contains($0.pid) } }
+        if !awake.isEmpty {
+            let names = WorktreeAgents.describe(awake.map(\.agent))
+            sleepProblem = SleepProblem(title: "Still Running", message: "\(names) didn't quit within \(AgentSleeper.stopTimeout.components.seconds) seconds and \(awake.count == 1 ? "is" : "are") still running.")
+        }
+    }
+
+    /// Opens a terminal in the worktree for each sleeping agent, resuming its session.
+    func wake(in worktree: String) {
+        for sleeper in sleepers(in: worktree) { wake(sleeper) }
+    }
+
+    func wake(_ sleeper: SleepingAgent) {
+        do {
+            try AgentSleeper.wake(sleeper)
+        } catch {
+            sleepProblem = SleepProblem(title: "Couldn't Wake \(sleeper.agent.displayName)", message: error.localizedDescription)
+            return
+        }
+        forgetSleeper(sleeper.id)
+        record([ActivityEntry(worktreePath: sleeper.worktree, kind: .agentSession, title: "Woken",
+                              detail: sleeper.resumeCommand.map { "Resuming its session with \($0)" },
+                              agent: sleeper.agent.displayName)])
+    }
+
+    /// Forgets a sleeping agent without waking it. Its session stays with the agent, to resume by hand.
+    func forgetSleeper(_ id: UUID) {
+        sleepingAgents.removeAll { $0.id == id }
+        saveSleepers()
+    }
+
+    /// A sleeping agent resumed some other way (by hand, or from another app) is awake.
+    private func forgetResumedSleepers() {
+        guard !sleepingAgents.isEmpty else { return }
+        let statuses = agentHub.statuses.values.flatMap { $0 }
+        let awake = sleepingAgents.filter { sleeper in
+            sleeper.isAwake(statuses: statuses, processes: agentHub.runningProcesses(in: sleeper.worktree))
+        }
+        guard !awake.isEmpty else { return }
+        sleepingAgents.removeAll { sleeper in awake.contains { $0.id == sleeper.id } }
+        saveSleepers()
+    }
+
+    private func saveSleepers() {
+        persisted.sleepingAgents = sleepingAgents
+        persistSoon()
     }
 
     var totalChangedFiles: Int { sessions.values.reduce(0) { $0 + $1.changes.count } }
@@ -500,7 +614,9 @@ final class AppModel {
             sessions[worktree.path]?.stop()
             sessions.removeValue(forKey: worktree.path)
             persisted.worktreeSettings.removeValue(forKey: worktree.path)
+            sleepingAgents.removeAll { $0.worktree == worktree.path }
         }
+        saveSleepers()
         repositoryWatchers.stop(id)
         rediscoverTasks.removeValue(forKey: id)?.cancel()
         worktreeListings.remove(id)
@@ -997,4 +1113,21 @@ final class AppModel {
         saveTask?.cancel()
         Persistence.state.save(persisted)
     }
+}
+
+struct SleepProblem: Identifiable {
+    var title: String
+    var message: String
+
+    var id: String { title + message }
+}
+
+/// Agents waiting for you to confirm putting them to sleep.
+struct SleepRequest: Identifiable {
+    var worktree: String
+    var candidates: [SleepCandidate]
+
+    var id: String { worktree }
+    /// "Claude Code", "Claude Code and Codex".
+    var names: String { WorktreeAgents.describe(candidates.map(\.agent)) }
 }

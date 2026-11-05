@@ -26,6 +26,8 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=note-line:12-14      start a note on new-file lines 12 to 14 of the selected file
 ///     MIMAMORI_DEBUG_FLAGS=discard:2            ask to discard hunk 2 of the selected file (discard:file: the whole
 ///                                               file; add :confirm to go ahead 2 s later); discard-undo presses Undo once
+///     MIMAMORI_DEBUG_FLAGS=sleep                ask to put the selected worktree's agents to sleep (sleep:confirm: go
+///                                               ahead 2 s later); wake wakes them once they sleep
 ///     MIMAMORI_DEBUG_FLAGS=about                open the About window
 ///     MIMAMORI_DEBUG_FLAGS=companion            advertise over Bonjour and stream the agents to the iPhone companion,
 ///                                               unencrypted and unpaired (docs/plans/iphone-companion.md, step 1)
@@ -72,6 +74,8 @@ enum DebugHooks {
         var openedSummary = false
         var ranHookTest = false
         var openedAbout = false
+        var askedSleep = false
+        var woke = false
         var renderedWidgets = false
         var openedCommit = false
         var openedMenuBar = false
@@ -102,6 +106,26 @@ enum DebugHooks {
                 if model.debugFlags.contains("widgets"), !renderedWidgets, let dump {
                     renderedWidgets = true
                     writeWidgetPreviews(agents: model.widgetAgents(), to: dump)
+                }
+                // "sleep" / "sleep:confirm": what the banner's moon does, then the dialog's Put to Sleep.
+                if model.debugFlags.contains(where: { $0.hasPrefix("sleep") }), !askedSleep, let session = model.selectedSession,
+                   model.agentHub.presence(for: session.id) != nil {
+                    askedSleep = true
+                    model.requestSleep(in: session.id)
+                    if model.debugFlags.contains("sleep:confirm") {
+                        try? await Task.sleep(for: .seconds(2))
+                        if let request = model.sleepRequest {
+                            model.sleepRequest = nil
+                            await model.putToSleep(request)
+                        }
+                    }
+                }
+                // "wake": what Wake does, once the selected worktree has agents asleep.
+                if model.debugFlags.contains("wake"), !woke, let session = model.selectedSession,
+                   !model.sleepers(in: session.id).isEmpty {
+                    woke = true
+                    try? await Task.sleep(for: .seconds(3))
+                    model.wake(in: session.id)
                 }
                 if model.debugFlags.contains("about"), !openedAbout {
                     openedAbout = true
@@ -348,6 +372,11 @@ enum DebugHooks {
         lines.append("selected: \(model.selectedWorktreeID ?? "-") showActivity=\(model.showActivity) sort=\(model.sortOrder.rawValue) flaggedOnly=\(model.flaggedOnly)")
         lines.append("settings updates: requested=\(model.settingsUpdateRequests) applied=\(model.settingsUpdatesApplied) hideReviewed=\(model.hideReviewed)")
         lines.append("state notice: \(model.stateNotice.map { "\($0.message) [\($0.file.lastPathComponent)]" } ?? "-")")
+        lines.append("sleep: request=\(model.sleepRequest?.worktree ?? "-") problem=\(model.sleepProblem?.message ?? "-") asleep=\(model.sleepingAgents.map { "\($0.agent.id):\($0.sessionID)@\($0.worktree)" })")
+        if let selected = model.selectedWorktreeID {
+            let candidates = model.agentHub.sleepCandidates(in: selected)
+            lines.append("sleep candidates: \(candidates.map { "\($0.agent.id) session=\($0.sessionID ?? "-") pids=\($0.processes.map(\.pid))" }) verdict=\(AgentSleep.check(candidates))")
+        }
         for window in NSApp.windows {
             lines.append("window \(type(of: window)) \"\(window.title)\" number=\(window.windowNumber) visible=\(window.isVisible) key=\(window.isKeyWindow) frame=\(window.frame)")
         }

@@ -17,6 +17,8 @@ public struct PersistedState: Codable, Equatable, Sendable {
     public var collapsedRepositories: Set<UUID> = []
     /// Worktree paths the user hid; they are not watched until shown again.
     public var hiddenWorktrees: Set<String> = []
+    /// Agents put to sleep, to be woken on their sessions.
+    public var sleepingAgents: [SleepingAgent] = []
 
     public init() {}
 
@@ -30,6 +32,7 @@ public struct PersistedState: Codable, Equatable, Sendable {
         ui = c.decode(.ui, or: defaults.ui)
         collapsedRepositories = c.decode(.collapsedRepositories, or: defaults.collapsedRepositories)
         hiddenWorktrees = c.decode(.hiddenWorktrees, or: defaults.hiddenWorktrees)
+        sleepingAgents = c.decode(.sleepingAgents, or: defaults.sleepingAgents)
     }
 }
 

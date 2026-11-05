@@ -45,6 +45,16 @@ public enum ProcessInspector {
         return Date(timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec) + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
     }
 
+    /// Whether `pid` is still the process that started at `startedAt`: alive, not a zombie waiting
+    /// to be reaped, and not a later process given the same pid.
+    public static func isRunning(_ pid: Int32, startedAt: Date) -> Bool {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size, info.pbi_status != UInt32(SZOMB) else { return false }
+        let started = TimeInterval(info.pbi_start_tvsec) + TimeInterval(info.pbi_start_tvusec) / 1_000_000
+        return abs(started - startedAt.timeIntervalSince1970) < 1
+    }
+
     /// Total CPU time consumed by the process, in seconds.
     public static func cpuTime(of pid: Int32) -> TimeInterval? {
         var info = proc_taskinfo()
