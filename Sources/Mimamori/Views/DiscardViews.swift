@@ -426,7 +426,7 @@ struct DiscardUndoBar: View {
         await session.restoreLatestDiscard()
     }
 
-    private static var undidForDebugging = false
+    @MainActor private static var undidForDebugging = false
 }
 
 extension View {

@@ -688,7 +688,7 @@ final class WorktreeSession: Identifiable {
     }
 
     /// Runs a write to the working tree once any refresh under way is done, holding the next off.
-    private func writing<T>(_ operation: () async throws -> T) async throws -> T {
+    private func writing<T: Sendable>(_ operation: () async throws -> T) async throws -> T {
         isWriting = true
         defer { isWriting = false }
         while isRefreshing { try? await Task.sleep(for: .milliseconds(25)) }

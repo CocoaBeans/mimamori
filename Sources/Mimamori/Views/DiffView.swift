@@ -27,7 +27,7 @@ struct DiffView: View {
     /// The version of the file `diff` was made from, when it is the working tree's diff against the baseline.
     @State private var loadedChange: FileChange?
     /// Debug builds: the `discard:` flags open their confirmation once per launch.
-    private static var openedDebugDiscard = false
+    @MainActor private static var openedDebugDiscard = false
 
     private var review: ReviewStatus { commit == nil ? session.reviewStatus(of: change) : .unreviewed }
 
