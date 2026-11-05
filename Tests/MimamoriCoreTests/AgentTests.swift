@@ -1067,7 +1067,7 @@ struct SessionFileStatusTests {
         #expect(changed1)
         var status = try #require(machine.status)
         #expect(status.activity == .ready)
-        #expect(status.fromSessionFile)
+        #expect(status.fromSessionRecord)
         #expect(status.sessionID == "s1")
         #expect(status.since == Date(timeIntervalSince1970: 1000))
         let changed2 = machine.adopt(record("idle", at: 0))
@@ -1083,7 +1083,7 @@ struct SessionFileStatusTests {
         // The session's first hook event takes over, and the record no longer overrides it.
         _ = machine.apply(event(.preToolUse, tool: "Bash", at: 10))
         status = try #require(machine.status)
-        #expect(!status.fromSessionFile)
+        #expect(!status.fromSessionRecord)
         #expect(status.activity == .working(tool: "Bash", detail: nil))
         let changed5 = machine.adopt(record("idle", at: 11))
         #expect(!changed5)
@@ -1096,7 +1096,7 @@ struct SessionFileStatusTests {
         let changed6 = machine.adopt(record("busy", session: "new", at: 1))
         #expect(changed6)
         #expect(machine.status?.sessionID == "new")
-        #expect(machine.status?.fromSessionFile == true)
+        #expect(machine.status?.fromSessionRecord == true)
         #expect(machine.status?.activity == .working(tool: nil, detail: nil))
         // A status Mimamori does not know changes nothing.
         let changed7 = machine.adopt(ClaudeSessionRecord(pid: 7, sessionID: "other", status: "parked"))

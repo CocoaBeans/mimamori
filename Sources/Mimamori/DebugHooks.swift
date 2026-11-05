@@ -376,7 +376,7 @@ enum DebugHooks {
         }
         for (worktree, sessions) in hub.statuses.sorted(by: { $0.key < $1.key }) {
             for status in sessions {
-                lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) tools=\(status.recentToolCalls.count) session=\(status.sessionID?.prefix(8) ?? "-") from=\(status.fromSessionFile ? "session-file" : "hooks")")
+                lines.append("  status \((worktree as NSString).lastPathComponent): \(status.agent.id) \(status.activity.title) since=\(Format.time.string(from: status.since)) turn=\(status.turnStartedAt.map { "-\(Int(Date().timeIntervalSince($0)))s" } ?? "-") tools=\(status.recentToolCalls.count) session=\(status.sessionID?.prefix(8) ?? "-") from=\(status.fromSessionRecord ? "record" : "hooks")")
             }
         }
         for (worktree, here) in hub.agents.sorted(by: { $0.key < $1.key }) where here.agentCount > 0 {

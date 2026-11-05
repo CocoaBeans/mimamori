@@ -169,6 +169,8 @@ final class AgentHub {
     @ObservationIgnored private var approvalWatch: Task<Void, Never>?
     /// Where Hermes says each of its sessions works, and when that was looked up.
     @ObservationIgnored private var hermesDirectories: [String: (directory: String?, at: Date)] = [:]
+    /// The Hermes turns running at the last scan, by session, from Hermes's leases on them.
+    @ObservationIgnored private var hermesTurns: [String: HermesTurn] = [:]
     /// Countdowns to answering a permission request by itself, by request id.
     @ObservationIgnored private var autoAnswerTasks: [String: Task<Void, Never>] = [:]
     /// Tests sent from Settings that have arrived, by token, until the test that sent them sees it.
@@ -371,6 +373,7 @@ final class AgentHub {
             for earlier in held { notes += machine.apply(Self.anchored(earlier, in: worktree)) }
         }
         notes += machine.apply(Self.anchored(event, in: worktree))
+        if let status = machine.status, let start = recordedTurnStart(for: status) { machine.backdateTurn(to: start) }
         machines[worktree, default: [:]][key] = machine
         if moved || before == nil { attributeProcesses() }
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
@@ -757,6 +760,8 @@ final class AgentHub {
         lastScan = scan
         refreshHookState()
         var changed = adoptSessionRecords()
+        if adoptHermesTurns() { changed = true }
+        if backdateUnheardTurns() { changed = true }
         let previous = processes
         let found = scan.attributed(homes: sessionHomes)
         if Self.visibleSummary(found) != Self.visibleSummary(previous) { processes = found }
@@ -776,7 +781,7 @@ final class AgentHub {
         }
         // Hook statuses outlive their process briefly; drop them once the agent is gone for a while,
         // and an ended session soon after it ends. A status taken from Claude Code's record goes
-        // with the process.
+        // with the process; one from Hermes's lease goes with the lease (see adoptHermesTurns).
         let now = Date()
         for (worktree, sessions) in machines {
             let running = found[worktree] ?? []
@@ -786,7 +791,7 @@ final class AgentHub {
                     process.claudeSession.map { $0.sessionID == status.sessionID } ?? (process.kind.id == status.agent.id)
                 }
                 let silence = now.timeIntervalSince(status.lastEventAt)
-                let gone = status.fromSessionFile ? !ownProcess
+                let gone = status.fromSessionRecord ? status.agent == .claudeCode && !ownProcess
                     : status.activity == .idle ? silence > 2 * 60
                     : !ownProcess && silence > WorktreeAgents.liveWindow
                 if gone {
@@ -811,14 +816,15 @@ final class AgentHub {
             }
             // A status taken from a record that is gone goes with it.
             for (key, machine) in machines[worktree] ?? [:]
-            where machine.status?.fromSessionFile == true && !records.contains(where: { $0.sessionID == key }) {
+            where machine.status?.fromSessionRecord == true && machine.status?.agent == .claudeCode
+                && !records.contains(where: { $0.sessionID == key }) {
                 remove(session: key, from: worktree)
                 changed = true
             }
             // Each session its own status; one its hooks report on keeps theirs, unless it ended.
             for record in records {
                 var machine = machines[worktree]?[record.sessionID] ?? AgentStatusMachine()
-                if let current = machine.status, !current.fromSessionFile, current.activity != .idle { continue }
+                if let current = machine.status, !current.fromSessionRecord, current.activity != .idle { continue }
                 if machine.adopt(record) {
                     machines[worktree, default: [:]][record.sessionID] = machine
                     changed = true
@@ -826,6 +832,68 @@ final class AgentHub {
             }
         }
         return changed
+    }
+
+    /// Gives a Hermes session whose hooks have not reported, with a turn under way in a watched
+    /// worktree, the status Hermes's lease on that turn implies: working since the turn began.
+    /// The session's first hook event takes over. Returns whether a status changed.
+    private func adoptHermesTurns() -> Bool {
+        let turns = watchedWorktrees.isEmpty ? [] : HermesTurns.running(in: HermesHookInstaller.stateDatabaseURL)
+        hermesTurns = Dictionary(turns.map { ($0.sessionID, $0) }, uniquingKeysWith: { first, _ in first })
+        var changed = false
+        // A status taken from a lease that is gone goes with it: the turn ended, or its process did.
+        for (worktree, sessions) in machines {
+            for (key, machine) in sessions
+            where machine.status?.fromSessionRecord == true && machine.status?.agent == .hermes && hermesTurns[key] == nil {
+                remove(session: key, from: worktree)
+                changed = true
+            }
+        }
+        let homes = sessionHomes
+        for turn in turns {
+            let key = turn.sessionID
+            let home = homes[key]
+            // One its hooks report on keeps theirs, unless it ended.
+            if let current = home.flatMap({ machines[$0]?[key]?.status }), !current.fromSessionRecord, current.activity != .idle {
+                continue
+            }
+            // Where Hermes says the session works, or else where its process does.
+            guard let worktree = turn.directory.flatMap(resolveWorktree)
+                    ?? turn.pid.flatMap({ pid in lastScan.byWorktree.first { $0.value.contains { $0.pid == pid } }?.key })
+            else { continue }
+            var machine = home.flatMap { machines[$0]?[key] } ?? AgentStatusMachine()
+            guard machine.adopt(turn) else { continue }
+            if let home, home != worktree { remove(session: key, from: home) }
+            machines[worktree, default: [:]][key] = machine
+            changed = true
+        }
+        return changed
+    }
+
+    /// Moves the start of each turn Mimamori joined midway back to when the agent's own record
+    /// says it began. Returns whether one moved.
+    private func backdateUnheardTurns() -> Bool {
+        var changed = false
+        for (worktree, sessions) in machines {
+            for (key, var machine) in sessions {
+                guard let status = machine.status, let start = recordedTurnStart(for: status), machine.backdateTurn(to: start) else { continue }
+                machines[worktree]?[key] = machine
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    /// When the agent's own record says the current turn began, for a turn whose start Mimamori
+    /// did not hear: Hermes's lease on it, or Claude Code's session file while it says busy.
+    private func recordedTurnStart(for status: AgentStatus) -> Date? {
+        guard status.turnStartUnheard, let session = status.sessionID else { return nil }
+        if status.agent == .hermes { return hermesTurns[session]?.startedAt }
+        guard status.agent == .claudeCode,
+              let record = (lastScan.byWorktree.values.joined() + lastScan.elsewhere).lazy.compactMap(\.claudeSession)
+                .first(where: { $0.sessionID == session }),
+              record.status == "busy" else { return nil }
+        return record.statusUpdatedAt
     }
 
     private func refreshHookState() {

@@ -62,8 +62,10 @@ public struct WorktreeAgents: Sendable, Hashable {
             let isLive: Bool
             if status.activity == .idle {
                 isLive = false
-            } else if status.fromSessionFile {
-                isLive = hasProcess
+            } else if status.fromSessionRecord {
+                // Live while its record is: Claude Code's goes with its process, and Hermes's
+                // lease holds while the turn runs, wherever its process sits (a gateway's is in ~/.hermes).
+                isLive = hasProcess || status.agent == .hermes
             } else {
                 isLive = hasProcess || now.timeIntervalSince(status.lastEventAt) < Self.liveWindow
             }

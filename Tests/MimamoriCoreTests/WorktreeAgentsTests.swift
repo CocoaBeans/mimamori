@@ -143,7 +143,7 @@ struct WorktreeAgentsTests {
         #expect(result.isShared)
         // Once its status comes from Claude Code's record, it is a session of its own.
         var recorded = session("s2", .claudeCode, .ready, minutesAgo: 30)
-        recorded.fromSessionFile = true
+        recorded.fromSessionRecord = true
         let both = agents([session("s1"), recorded], [first, second])
         #expect(both.live.count == 2)
         #expect(both.unclaimed.isEmpty)

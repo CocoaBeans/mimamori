@@ -10,14 +10,8 @@ public enum HermesSessions {
     /// Nil when the database, the session or the column is missing: the session's row is
     /// written at the start of its first turn, after its first events may have arrived.
     public static func directory(forSession id: String, in database: URL) -> String? {
-        guard FileManager.default.fileExists(atPath: database.path) else { return nil }
-        var db: OpaquePointer?
-        guard sqlite3_open_v2(database.path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
-            sqlite3_close(db)
-            return nil
-        }
+        guard let db = openReadOnly(database) else { return nil }
         defer { sqlite3_close(db) }
-        sqlite3_busy_timeout(db, 200)
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, "SELECT cwd, git_repo_root FROM sessions WHERE id = ?", -1, &statement, nil) == SQLITE_OK else {
             return nil
@@ -32,5 +26,18 @@ public enum HermesSessions {
             }
         }
         return nil
+    }
+
+    /// Opens Hermes's database read-only, waiting a moment for a busy writer; nil when it is
+    /// missing or will not open. The caller closes it.
+    static func openReadOnly(_ database: URL) -> OpaquePointer? {
+        guard FileManager.default.fileExists(atPath: database.path) else { return nil }
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(database.path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+            sqlite3_close(db)
+            return nil
+        }
+        sqlite3_busy_timeout(db, 200)
+        return db
     }
 }

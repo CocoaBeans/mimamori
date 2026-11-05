@@ -124,9 +124,16 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var lastTurnStartedAt: Date?
     /// Set while `activity` is `needsPermission`.
     public var pendingPermission: PendingPermission?
-    /// The status comes from Claude Code's record of the session, not its hooks: none has
-    /// reported since Mimamori started. The session's first hook event takes over.
-    public var fromSessionFile = false
+    /// The status comes from the agent's own record of the session, not its hooks: none has
+    /// reported since Mimamori started. For Claude Code that is its session file, for Hermes the
+    /// lease on a turn under way. The session's first hook event takes over.
+    public var fromSessionRecord = false
+    /// Mimamori did not hear the current turn begin: it started in the middle of the turn, which
+    /// so far starts at the first step heard. `AgentStatusMachine.backdateTurn(to:)` moves the
+    /// start back to when the agent's own record says the turn began.
+    public var turnStartUnheard = false
+    /// When the session's previous turn ended, as far as Mimamori heard.
+    public var lastTurnEndedAt: Date?
 
     public init(agent: AgentKind, activity: AgentActivity, since: Date, lastEventAt: Date, sessionID: String? = nil,
                 turnStartedAt: Date? = nil, toolCallsThisTurn: Int = 0, recentToolCalls: [AgentToolCall] = []) {
@@ -203,6 +210,7 @@ public struct AgentStatusMachine: Sendable {
         let now = event.receivedAt
         var current = status ?? AgentStatus(agent: event.agent, activity: .idle, since: now, lastEventAt: now)
         let otherSession = event.sessionID.flatMap { session in current.sessionID.map { $0 != session } } ?? false
+        let heardBefore = status != nil && !otherSession && current.agent == event.agent
         if status != nil, otherSession || current.agent != event.agent {
             // Another session took the worktree over, perhaps another agent: the last one's turn,
             // task and open steps are not this one's. Its calls stay, so its changes stay credited.
@@ -217,10 +225,12 @@ public struct AgentStatusMachine: Sendable {
             current.toolCallsThisTurn = 0
             current.pendingPermission = nil
             current.sessionID = nil
+            current.turnStartUnheard = false
+            current.lastTurnEndedAt = nil
         }
         current.agent = event.agent
         current.lastEventAt = now
-        current.fromSessionFile = false
+        current.fromSessionRecord = false
         if let session = event.sessionID { current.sessionID = session }
         var notes: [AgentNote] = []
         let agentName = event.agent.displayName
@@ -263,12 +273,14 @@ public struct AgentStatusMachine: Sendable {
         case .sessionStart:
             set(.ready)
             current.turnStartedAt = nil
+            current.turnStartUnheard = false
             current.toolCallsThisTurn = 0
             notes.append(AgentNote(kind: .sessionStarted, title: "\(agentName) session started", detail: event.message))
 
         case .sessionEnd:
             set(.idle)
             closeOpenCalls()
+            current.lastTurnEndedAt = now
             notes.append(AgentNote(kind: .sessionEnded, title: "\(agentName) session ended", detail: event.message))
 
         case .userPromptSubmit:
@@ -291,6 +303,9 @@ public struct AgentStatusMachine: Sendable {
                 set(.working(tool: nil, detail: nil))
                 current.turnStartedAt = now
                 current.lastTurnStartedAt = now
+                // Hermes's prompt hook fires before every model call: the first one heard from a
+                // session may come in the middle of its turn.
+                current.turnStartUnheard = event.agent == .hermes && !heardBefore
                 current.task = event.message
                 current.toolCallsThisTurn = 0
                 notes.append(AgentNote(kind: .turnStarted, title: "\(agentName) started a turn", detail: event.message))
@@ -303,6 +318,7 @@ public struct AgentStatusMachine: Sendable {
             if current.turnStartedAt == nil {
                 current.turnStartedAt = now
                 current.lastTurnStartedAt = now
+                current.turnStartUnheard = true
                 current.toolCallsThisTurn = 0
             }
             current.toolCallsThisTurn += 1
@@ -396,6 +412,8 @@ public struct AgentStatusMachine: Sendable {
                 notes.append(AgentNote(kind: .turnFinished, title: "\(agentName) finished a turn", detail: detail))
             }
             current.turnStartedAt = nil
+            current.turnStartUnheard = false
+            current.lastTurnEndedAt = now
 
         case .subagentStop:
             notes.append(AgentNote(kind: .notification, title: "\(agentName) subagent finished"))
@@ -434,6 +452,8 @@ public struct AgentStatusMachine: Sendable {
         current.pendingPermission = nil
         current.since = date
         current.turnStartedAt = nil
+        current.turnStartUnheard = false
+        current.lastTurnEndedAt = date
         status = current
         return true
     }
@@ -475,7 +495,7 @@ public struct AgentStatusMachine: Sendable {
         guard let activity = record.activity else { return false }
         let at = record.statusUpdatedAt ?? now
         if var current = status, current.sessionID == record.sessionID {
-            guard current.fromSessionFile, current.activity != activity else { return false }
+            guard current.fromSessionRecord, current.activity != activity else { return false }
             current.activity = activity
             current.since = at
             current.lastEventAt = at
@@ -483,8 +503,45 @@ public struct AgentStatusMachine: Sendable {
             return true
         }
         var fresh = AgentStatus(agent: .claudeCode, activity: activity, since: at, lastEventAt: at, sessionID: record.sessionID)
-        fresh.fromSessionFile = true
+        fresh.fromSessionRecord = true
         status = fresh
+        return true
+    }
+
+    /// Takes a Hermes turn under way, from its lease, for a session its hooks have not reported:
+    /// working since the turn began. A new turn's lease replaces the last; the session's first
+    /// hook event takes over, and the turn keeps its start. Never overrides what the hooks said,
+    /// unless they said the session ended before this turn began. Returns whether the status changed.
+    @discardableResult
+    public mutating func adopt(_ turn: HermesTurn) -> Bool {
+        if let current = status, current.sessionID == turn.sessionID {
+            if current.fromSessionRecord {
+                guard current.turnStartedAt != turn.startedAt else { return false }
+            } else {
+                guard current.activity == .idle, turn.startedAt > current.lastEventAt else { return false }
+            }
+        }
+        var fresh = AgentStatus(agent: .hermes, activity: .working(tool: nil, detail: nil), since: turn.startedAt,
+                                lastEventAt: turn.startedAt, sessionID: turn.sessionID, turnStartedAt: turn.startedAt)
+        fresh.lastTurnStartedAt = turn.startedAt
+        fresh.fromSessionRecord = true
+        fresh.turnStartUnheard = true
+        status = fresh
+        return true
+    }
+
+    /// Moves the start of a turn whose beginning Mimamori did not hear (it started mid-turn, so
+    /// the turn starts at the first step it heard) back to `date`, when the agent's own record
+    /// says the turn began: Hermes's lease, or Claude Code's session file while it says busy.
+    /// Only ever earlier, and never before the session's previous turn ended: a record from
+    /// before then is about an earlier turn. Returns whether the start moved.
+    @discardableResult
+    public mutating func backdateTurn(to date: Date) -> Bool {
+        guard var current = status, current.turnStartUnheard, let start = current.turnStartedAt, date < start,
+              current.lastTurnEndedAt.map({ date >= $0 }) ?? true else { return false }
+        current.turnStartedAt = date
+        current.lastTurnStartedAt = date
+        status = current
         return true
     }
 
