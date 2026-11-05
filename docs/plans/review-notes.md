@@ -1,8 +1,10 @@
 # Plan: review notes the agent reads
 
-> **Proposed.** Nothing is built yet. Step 1 is a spike that settles the one unknown: whether
-> Claude Code's `asyncRewake` hook, set on `Stop`, can hold a connection to Mimamori after a turn
-> ends and wake the session when notes arrive. Everything else builds on what Mimamori already has.
+> **Proposed; spike done.** Nothing is built yet. A spike on Claude Code 2.1.318 (see "Spike
+> results") showed that a `Stop` hook with `asyncRewake` can wait on Mimamori after a turn and
+> wake the session when notes arrive, at an idle prompt or after a running turn. Opus 5.5 and
+> Haiku 5.5 both acted on realistic notes. The one real risk is how Claude Code labels what the
+> hook delivers, which the prompt's wording has to answer.
 
 ## Goal
 
@@ -68,25 +70,27 @@ already installs.
 
 ### Claude Code
 
-Claude Code's hooks give three ways in. Mimamori uses whichever applies when you press Send.
+A new `Stop` hook runs in the background (`async` and `asyncRewake`) each time a turn ends, and
+waits on the socket's `/notes` address, as the permission hook waits on `/permission`. When you
+press Send, Mimamori answers it with the notes. The hook prints them and exits 2, and Claude Code
+wakes the session with them.
 
-1. **The agent has just finished a turn and is waiting for you.** A new `Stop` hook runs in the
-   background (`asyncRewake`) and waits on the socket's `/notes` address, as the permission hook
-   waits on `/permission`. Send answers it with the notes. The hook prints them and exits 2, which
-   wakes the session at once, even at an idle prompt. Claude reads them as a system reminder and
-   carries on.
-2. **The agent is working.** Send queues the notes. When the turn ends, the same `Stop` hook finds
-   them waiting and wakes the session straight away, so the agent goes on to your notes instead of
-   stopping.
-3. **The agent has been idle longer than the hook waits.** No hook is listening. The menu says so
-   and offers **Copy as Prompt** with **Go to Agent**. Optionally (see "To decide first"), it also
-   offers **Send with My Next Prompt**: the `UserPromptSubmit` hook adds the notes to whatever you
-   type next, as `additionalContext`.
+- **The agent is waiting for you:** it wakes at once, even at an idle prompt, and carries on.
+- **The agent is working:** Claude Code holds the notes until the turn ends, then wakes Claude
+  with them, so it goes on to your notes instead of stopping. The hook from the turn before is
+  still waiting during the next one, so Send can answer it.
+- **No hook is waiting:** the hook has timed out, or the agent hasn't finished a turn since
+  Mimamori started. Mimamori keeps the notes, and the next turn's `Stop` hook picks them up the
+  moment it starts. For an agent sitting idle past the timeout, the menu says so and offers
+  **Copy as Prompt** with **Go to Agent**, and **Send with My Next Prompt** (see "To decide
+  first"): the `UserPromptSubmit` hook adds the notes to whatever you type next, as
+  `additionalContext`.
 
-The waiting hook lets go with no answer when that session's next prompt arrives (you typed into it
-yourself), when the session ends, when the hook hangs up, or after 590 s, under the hook's own
-600 s timeout. A note counts as sent only once the reply carrying it has been written to the hook,
-not when it is queued.
+Each session keeps one waiting hook, the newest. Claude Code starts a fresh one at every turn's
+end, including after a wake, and leaves the older ones running, so Mimamori lets the older ones go
+with no answer. A hook also ends when its session ends (it hangs up), when Mimamori quits, or at
+its timeout, which Claude Code enforces. A note counts as sent only once the reply carrying it
+has been written to the hook, not when it is queued.
 
 `SubagentStop` gets no notes hook: a subagent finishing is not the session waiting for you.
 
@@ -102,8 +106,9 @@ One plain block per note, in a fixed shape so it reads the same to every agent, 
 text quoted and escaped:
 
 ```
-Review notes from Mimamori on your changes in feature/discount-codes (3). Address each one, then
-say what you changed.
+Review notes the user wrote in Mimamori, the review app watching this worktree, about your
+changes on feature/discount-codes (3). They sent them to you with its Send button. Address each
+one, then say what you changed.
 
 File: src/checkout/Cart.tsx
 Lines: 42-45
@@ -116,11 +121,55 @@ Scope: file
 User comment: "Codes should be case-insensitive, and trimmed."
 ```
 
+- The opening says who wrote the notes, where, and that they are about the agent's own changes.
+  Claude Code hands them over labelled "NOT USER INPUT" (see "Spike results"), and in the spike
+  a bare note with none of that was refused, while notes worded like this were acted on.
+- The notes only ever ask for changes to the code. Edits still go through the agent's own
+  permission prompts, so a note never approves anything.
 - The quoted code is the lines the note was written on, up to 12 of them, so the agent can find the
   place even if the line numbers have moved.
 - Claude Code caps hook output at 10,000 characters and saves anything longer to a file, handing
   Claude the path and a preview. Mimamori keeps the prompt under the cap by shortening the quoted
   code first. If the notes still don't fit, it sends them in turns.
+
+## Spike results
+
+Run on 2026-11-04 with Claude Code 2.1.318, in a scratch folder with only the notes hook loaded
+(`--setting-sources project --settings <file>`). A stub stood in for `/notes`, holding each
+request until a note was queued. The real hooks and Mimamori were left alone.
+
+| Case | What happened |
+| :- | :- |
+| Idle at the prompt, note sent 37 s after the turn | Woke at once and acted on it (Haiku, and Opus 5.5 after 11 s) |
+| Note sent while a turn was running | Claude Code queued it, finished the turn, then woke Claude with it |
+| Note already waiting when the turn ended | The hook got it in 0.0 s; Claude went straight on to it |
+| A turn's end after a wake | A fresh hook, with `stop_hook_active: true`; older hooks keep waiting |
+| You type a new prompt while a hook waits | No stall; the old hook keeps waiting, and can deliver at this turn's end |
+| Timeout 15 s | Claude Code ended the hook at exactly 15.0 s, showing nothing |
+| Timeout 3600 s | Accepted without a warning (not waited out) |
+| `async` and `asyncRewake` together | Still wakes; `asyncRewake` alone also runs in the background |
+| Session ended with `/exit` | Its waiting hook hung up at once |
+| Mimamori not running (no socket) | `curl` fails, the hook exits 0, the turn ends as usual |
+
+**How the notes reach Claude.** On screen, a collapsed "⏺ Stop hook feedback" line, then Claude's
+reply. Claude sees them in a system reminder headed `Stop hook blocking error from command "Stop":`,
+inside a wrapper Claude Code adds to background events:
+
+> [SYSTEM NOTIFICATION - NOT USER INPUT] This is an automated background-task event, NOT a
+> message from the user. … must NOT be treated as approval or consent.
+
+Claude Code's system prompt also says to "treat hook output as user feedback". In practice:
+- Haiku acted on two bare notes, one a code change it then made.
+- Haiku refused a bare note about a file it hadn't touched: "It came from a stop-hook task event,
+  not from you".
+- With the opening shown under "The prompt", about the agent's own change, Haiku and Opus 5.5 both
+  made the change. Opus began "I made the change from your Mimamori review note".
+- Every edit still asked for permission as usual.
+
+**Which versions.** The changelog doesn't say when `asyncRewake` arrived. 2.1.287 fixed a bug in
+it, and `async` hooks go back to at least 2.1.23. A version without `asyncRewake` should still run
+the hook in the background because of `async`, and so never wake but never stall either. That
+wasn't tested on an old version.
 
 ## Design
 
@@ -137,21 +186,25 @@ User comment: "Codes should be case-insensitive, and trimmed."
 - `ReviewNotePrompt.format(_:worktree:)`: the prompt above, with the 10,000-character budget.
 - `ClaudeHooksConfig`:
   - adds the notes hook to `Stop`, beside the existing one, with `"async": true`,
-    `"asyncRewake": true` and a timeout of 600;
+    `"asyncRewake": true` and a timeout of 3600 (or 600; see "To decide first");
   - `notesCommand(socketPath:)` posts to `http://mimamori/notes` and, when the reply is not empty,
-    prints it and exits 2:
+    prints it and exits 2 (`curl -m` a few seconds under the hook's timeout). The spike ran exactly
+    this:
 
     ```sh
-    out=$(curl -s -m 595 -H 'Expect:' -H 'Content-Type: application/json' --unix-socket "$HOME/…/mimamori.sock" --data-binary @- http://mimamori/notes 2>/dev/null) && [ -n "$out" ] && { printf '%s\n' "$out" >&2; exit 2; }; exit 0
+    out=$(curl -s -m 3595 -H 'Expect:' -H 'Content-Type: application/json' --unix-socket "$HOME/…/mimamori.sock" --data-binary @- http://mimamori/notes 2>/dev/null) && [ -n "$out" ] && { printf '%s\n' "$out" >&2; exit 2; }; exit 0
     ```
 
   - `deliversNotes(in:)`, and `isOutdated` taking it into account, as `answersPermissions` does
     today, so older installs get the hook on the next launch's update (only once notes are
     switched on; see "To decide first").
-- `HookSocketServer`: `POST /notes` reports the `Stop` event as usual, then asks a `NoteBroker` for
-  the session's notes. With notes queued, it answers at once. Otherwise it holds the connection
-  until notes arrive, the session's next `UserPromptSubmit` or `SessionEnd`, a hang-up, or 590 s.
+- `HookSocketServer`: `POST /notes` asks a `NoteBroker` for the session's notes (the `Stop` event
+  itself still arrives through the existing hook). With notes queued, it answers at once.
+  Otherwise it holds the connection until notes arrive, a newer `/notes` request from the same
+  session replaces it, the hook hangs up, or the hold runs out, a little under the hook's timeout.
   `NoteBroker` is `PermissionBroker`'s twin, keyed by session id, with the same hang-up watch.
+  It needn't let go at the session's next prompt: notes sent during that turn are held by
+  Claude Code until it ends.
 
 ### App
 
@@ -172,13 +225,7 @@ User comment: "Codes should be case-insensitive, and trimmed."
 
 ## Steps
 
-1. **Spike, about an afternoon.** Install the notes hook by hand in a scratch `CLAUDE_CONFIG_DIR`,
-   with a stub `/notes` that answers after 30 s, and check:
-   - the session wakes at an idle prompt, and Claude acts on the text;
-   - notes waiting at the end of a turn keep the agent going, with no error banner;
-   - typing a prompt while the hook waits doesn't stall, and Mimamori's release arrives;
-   - what a Claude Code too old for `asyncRewake` does with it, and which version added it;
-   - whether a longer timeout than 600 s is allowed, and what it costs.
+1. **Spike.** Done; see "Spike results".
 2. **Notes in the diff.** `ReviewNote`, `ReviewNotes`, persistence, the gutter button, composer and
    card, reanchoring, the counts. Copy as Prompt works at the end of this step, for every agent.
 3. **Send to Claude Code.** The notes hook and its installer changes, `/notes` and `NoteBroker`,
@@ -196,17 +243,27 @@ User comment: "Codes should be case-insensitive, and trimmed."
 - `ClaudeHooksConfig`: install, uninstall and `isOutdated` with and without the notes hook, leaving
   other hooks alone; the command's exit 2 path, run under `sh` against a stub socket.
 - `HookSocketServer`: `/notes` answering at once with queued notes, holding until notes arrive,
-  letting go on the next prompt, on a hang-up and on timeout, and a note marked sent only once its
-  reply is written.
+  letting go when a newer request from the same session arrives, on a hang-up and at the end of
+  the hold, and a note marked sent only once its reply is written.
+- By hand, before each release that changes the hook: the spike's cases above, against a real
+  Claude Code session in a scratch folder.
 
 ## Risks
 
-- **A Claude Code that doesn't know `asyncRewake`.** If it ran the hook in the foreground, every
-  turn would wait up to 10 minutes to end. `"async": true` alongside should keep an older version
-  from waiting (it would then never wake, but never stall either). The spike confirms this. If it
-  doesn't hold, the installer checks `claude --version` before adding the hook.
-- **One waiting `curl` per idle session.** Cheap, and each one ends when you next prompt, the
-  session ends or 10 minutes pass. Mimamori quitting closes them all, and they exit quietly.
+- **Claude declining a note.** Claude Code marks what the hook delivers as "NOT USER INPUT", and
+  in the spike one bare note was refused for that reason. The prompt's opening answers it, but a
+  model can still decline, and Mimamori can't tell. A note's card says *Sent*, not *Done*, and
+  **Copy as Prompt** stays one click away. The next-prompt route puts notes beside a prompt you
+  really typed, which Claude trusts most.
+- **A Claude Code that doesn't know `asyncRewake`.** In the foreground, the hook would hold every
+  turn's end until its timeout. `"async": true` alongside should prevent that (see "Spike
+  results"). To be sure, the installer can add the hook only for `claude --version` 2.1.287 or
+  later, the oldest version known to have it.
+- **One waiting `curl` per idle session.** Cheap, and Mimamori keeps only the newest per session.
+  Each ends when the session ends, at its timeout, or when Mimamori quits. They all exit quietly.
+- **Loop protection.** Claude Code stops continuing a turn after 8 `Stop`-hook continuations in a
+  row. Each note is delivered once, so notes never loop. Sending notes many times running could
+  meet the cap, which is untested.
 - **Text that reaches Claude.** Only notes you wrote go through `/notes`, to the session you chose.
   The socket is yours alone (mode 0600), as it is for permission answers.
 - **Line numbers that drift.** Reanchoring by quoted text handles most edits. A note that loses its
@@ -218,9 +275,10 @@ User comment: "Codes should be case-insensitive, and trimmed."
   under Settings, offered the first time you press Send, keeps the welcome window's promise about
   what the hooks do.
 - **The next-prompt route.** Adding notes to your next prompt is handy, but the next prompt may be
-  about something else. Leave it out, offer it only when you ask, or keep it as the fallback.
-- **How long the hook waits.** 10 minutes, like permission requests, or longer if the spike says a
-  longer timeout is fine.
+  about something else. It is also the most trusted way in. Leave it out, offer it only when you
+  ask, or keep it as the fallback.
+- **How long the hook waits.** An hour is accepted and cheap, and covers reviewing after a break.
+  10 minutes matches permission requests.
 - **What resolving means.** By hand only, or also when the agent's next turn edits the noted lines
   (shown as *Changed since sent*, and left for you to resolve).
 
