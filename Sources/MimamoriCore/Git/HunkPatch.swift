@@ -283,6 +283,8 @@ public enum HunkDiscardError: Error, LocalizedError, Sendable, Equatable {
     case restoreBlocked
     /// The path is not a regular file inside the worktree (a link, a folder, or gone).
     case notAFile
+    /// An agent is in the middle of a turn in the worktree; the `WriteGate`'s reason.
+    case refused(String)
 
     public var errorDescription: String? {
         switch self {
@@ -306,6 +308,8 @@ public enum HunkDiscardError: Error, LocalizedError, Sendable, Equatable {
             "The file changed since it was discarded, so putting it back would lose that. The snapshot taken before the discard still has it as it was."
         case .notAFile:
             "The path is no longer a plain file inside the worktree, so nothing was written."
+        case .refused(let reason):
+            reason
         }
     }
 

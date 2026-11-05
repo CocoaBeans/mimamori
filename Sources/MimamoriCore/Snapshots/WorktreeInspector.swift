@@ -35,6 +35,9 @@ public actor WorktreeInspector {
     public nonisolated let worktreeID: String
     public nonisolated let shadowIndexURL: URL
     public var configuration: InspectorConfiguration
+    /// The agents in this worktree as they are now, asked before each discard or restore writes.
+    /// Without it nothing is written.
+    private let agents: (@Sendable () async -> [WriteGate.Agent])?
 
     private var emptyTree: String?
     private var defaultBranchValue: String??
@@ -57,7 +60,11 @@ public actor WorktreeInspector {
         return digest.prefix(6).map { String(format: "%02x", $0) }.joined()
     }
 
-    public init(git: GitClient, worktree: URL, shadowIndexDirectory: URL, configuration: InspectorConfiguration = InspectorConfiguration()) async throws {
+    /// `agents` lists the agents in the worktree for the `WriteGate`; with none given, discards
+    /// and restores are refused.
+    public init(git: GitClient, worktree: URL, shadowIndexDirectory: URL,
+                configuration: InspectorConfiguration = InspectorConfiguration(),
+                agents: (@Sendable () async -> [WriteGate.Agent])? = nil) async throws {
         let layout = try await git.layout(of: worktree)
         try FileManager.default.createDirectory(at: shadowIndexDirectory, withIntermediateDirectories: true)
         let id = Self.worktreeID(for: layout.topLevel)
@@ -67,6 +74,7 @@ public actor WorktreeInspector {
         self.worktreeID = id
         self.shadowIndexURL = shadowIndexDirectory.appendingPathComponent("\(id).index")
         self.configuration = configuration
+        self.agents = agents
     }
 
     public func setConfiguration(_ configuration: InspectorConfiguration) {
@@ -455,15 +463,17 @@ public actor WorktreeInspector {
     // MARK: Discarding changes
 
     /// Throws away one hunk of an uncommitted change, putting its lines back as HEAD has them.
-    /// `change` is the change the hunk's diff was made from. Nothing is written unless the file on
-    /// disk is still that version byte for byte, HEAD still has the other, and git agrees the hunk
-    /// comes out cleanly. Then a snapshot is recorded, and Mimamori writes that one file: the same
-    /// bytes with only the hunk's lines swapped, never the index.
+    /// `change` is the change the hunk's diff was made from. Nothing is written while an agent here
+    /// is mid-turn (`WriteGate`), nor unless the file on disk is still that version byte for byte,
+    /// HEAD still has the other, and git agrees the hunk comes out cleanly. Then a snapshot is
+    /// recorded, and Mimamori writes that one file: the same bytes with only the hunk's lines
+    /// swapped, never the index.
     public func discard(_ hunk: DiffHunk, of change: FileChange) async throws -> DiscardedChange {
         try await exclusively { try await discardLocked(hunk, of: change) }
     }
 
     private func discardLocked(_ hunk: DiffHunk, of change: FileChange) async throws -> DiscardedChange {
+        try await requireWriteGate()
         if let reason = Discarding.hunkUnsupportedReason(for: change) { throw HunkDiscardError.unsupported(reason) }
         guard let oldOID = change.oldOID, let newOID = change.newOID else {
             throw HunkDiscardError.unsupported("This kind of change can't be discarded a hunk at a time.")
@@ -482,6 +492,7 @@ public actor WorktreeInspector {
             throw HunkDiscardError.doesNotApply(error.stderr)
         }
         let snapshot = try await snapshotHolding(change.path, blob: newOID)
+        try await requireWriteGate()
         let permissions = Self.permissions(of: url)
         try Self.replace(url, expecting: original, with: result, permissions: permissions)
         return DiscardedChange(path: change.path, date: snapshot.date, scope: .hunk(header: hunk.header, patch: patch),
@@ -491,13 +502,15 @@ public actor WorktreeInspector {
 
     /// Puts a whole uncommitted file back as HEAD has it: a changed file gets HEAD's bytes and
     /// mode, a new file goes (to the Trash, unless `trashNewFiles` is off), a deleted file is
-    /// written again. Nothing is written unless the file is still the version the diff was made
-    /// from and HEAD still has the other; then a snapshot is recorded first, holding the file.
+    /// written again. Nothing is written while an agent here is mid-turn, nor unless the file is
+    /// still the version the diff was made from and HEAD still has the other; then a snapshot is
+    /// recorded first, holding the file.
     public func discardFile(_ change: FileChange, trashNewFiles: Bool = true) async throws -> DiscardedChange {
         try await exclusively { try await discardFileLocked(change, trashNewFiles: trashNewFiles) }
     }
 
     private func discardFileLocked(_ change: FileChange, trashNewFiles: Bool) async throws -> DiscardedChange {
+        try await requireWriteGate()
         if let reason = Discarding.fileUnsupportedReason(for: change) { throw HunkDiscardError.unsupported(reason) }
         let url = try fileURL(for: change.path)
         guard await git.blobOID(at: "HEAD", path: change.path, in: worktree) == change.oldOID else {
@@ -526,6 +539,7 @@ public actor WorktreeInspector {
             guard let taken = try await takeSnapshotLocked(force: true) else { throw HunkDiscardError.fileChanged }
             snapshot = taken
         }
+        try await requireWriteGate()
         let permissions = Self.permissions(of: url)
         switch (original, result) {
         case (let original?, let result?):
@@ -544,15 +558,16 @@ public actor WorktreeInspector {
                                resultDigest: result.map(Self.digest))
     }
 
-    /// Puts a discarded change back, after a snapshot. A file still as the discard left it gets
-    /// its earlier bytes back exactly. A hunk's file changed since gets the hunk's lines wherever
-    /// their surroundings still match, as `git apply` places them; a whole file changed since is
-    /// left alone, since putting it back would lose the change.
+    /// Puts a discarded change back, after a snapshot, unless an agent here is mid-turn. A file
+    /// still as the discard left it gets its earlier bytes back exactly. A hunk's file changed
+    /// since gets the hunk's lines wherever their surroundings still match, as `git apply` places
+    /// them; a whole file changed since is left alone, since putting it back would lose the change.
     public func restore(_ discarded: DiscardedChange) async throws -> DiscardRestore {
         try await exclusively { try await restoreLocked(discarded) }
     }
 
     private func restoreLocked(_ discarded: DiscardedChange) async throws -> DiscardRestore {
+        try await requireWriteGate()
         let url = try fileURL(for: discarded.path)
         let exists = (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
         let current = exists ? try Self.contents(of: url) : nil
@@ -560,12 +575,14 @@ public actor WorktreeInspector {
         if untouched {
             let snapshot = try await takeSnapshotLocked(force: true)
             guard let snapshot else { throw HunkDiscardError.fileChanged }
-            switch (discarded.originalBlob, current) {
-            case (let blob?, let current?):
-                try Self.replace(url, expecting: current, with: try await git.blob(blob, in: worktree),
-                                 permissions: discarded.originalPermissions)
-            case (let blob?, nil):
-                try Self.create(url, with: try await git.blob(blob, in: worktree), permissions: discarded.originalPermissions ?? 0o644)
+            var original: Data? = nil
+            if let blob = discarded.originalBlob { original = try await git.blob(blob, in: worktree) }
+            try await requireWriteGate()
+            switch (original, current) {
+            case (let original?, let current?):
+                try Self.replace(url, expecting: current, with: original, permissions: discarded.originalPermissions)
+            case (let original?, nil):
+                try Self.create(url, with: original, permissions: discarded.originalPermissions ?? 0o644)
             case (nil, let current?):
                 try Self.remove(url, expecting: current, trash: false)
             case (nil, nil):
@@ -580,12 +597,23 @@ public actor WorktreeInspector {
             throw HunkDiscardError.restoreDoesNotApply(error.stderr)
         }
         guard let snapshot = try await takeSnapshotLocked(force: true) else { throw HunkDiscardError.fileChanged }
+        try await requireWriteGate()
         do {
             try await git.applyToWorkingTree(patch.restore, reverse: false, checkOnly: false, in: worktree)
         } catch let error as GitError {
             throw HunkDiscardError.restoreDoesNotApply(error.stderr)
         }
         return DiscardRestore(exact: false, snapshot: snapshot)
+    }
+
+    /// Throws the `WriteGate`'s reason while an agent here is mid-turn. Asked first, so a refusal
+    /// leaves no snapshot behind, and again with nothing left to await before the write, since a
+    /// turn may start while the write waits its turn or takes its snapshot.
+    private func requireWriteGate() async throws {
+        guard let agents else {
+            throw HunkDiscardError.refused("Mimamori can't tell which agents are in this worktree, so it won't write to it.")
+        }
+        if let reason = WriteGate(await agents()).refusal { throw HunkDiscardError.refused(reason) }
     }
 
     /// The file's bytes, provided they are exactly the blob the diff was made from.

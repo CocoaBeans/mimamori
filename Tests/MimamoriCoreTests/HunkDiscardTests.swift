@@ -206,10 +206,31 @@ struct HunkPatchTests {
 /// Discards and puts back hunks in a throwaway repository, with the real git binary.
 @Suite("Discarding a hunk (integration)", .serialized)
 struct HunkDiscardIntegrationTests {
+    /// The agents a test says are in the worktree, changed as it goes.
+    actor AgentsHere {
+        var agents: [WriteGate.Agent] = []
+        /// How often the inspector asked.
+        var asked = 0
+        /// From this question on, `agents` are working instead.
+        var startsWorkingAt: Int?
+
+        func set(_ agents: [WriteGate.Agent]) { self.agents = agents }
+        func startWorking(atQuestion number: Int) { startsWorkingAt = number }
+
+        func answer() -> [WriteGate.Agent] {
+            asked += 1
+            if let startsWorkingAt, asked >= startsWorkingAt { return [HunkDiscardIntegrationTests.working] }
+            return agents
+        }
+    }
+
+    static let working = WriteGate.Agent(name: "Claude Code", source: .hooks, activity: .working(tool: "Edit", detail: "notes.txt"))
+
     struct Sandbox {
         let git: GitClient
         let root: URL
         let repo: URL
+        let agents = AgentsHere()
 
         func sh(_ args: [String]) async throws {
             try await git.run(["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"] + args, in: repo)
@@ -224,7 +245,9 @@ struct HunkDiscardIntegrationTests {
         }
 
         func inspector() async throws -> WorktreeInspector {
-            try await WorktreeInspector(git: git, worktree: repo, shadowIndexDirectory: root.appendingPathComponent("index"))
+            let agents = agents
+            return try await WorktreeInspector(git: git, worktree: repo, shadowIndexDirectory: root.appendingPathComponent("index"),
+                                               agents: { await agents.answer() })
         }
 
         func cleanup() {
@@ -520,5 +543,99 @@ struct HunkDiscardIntegrationTests {
             _ = try await inspector.discard(diff.hunks[0], of: change)
         }
         #expect(try box.read("fresh.txt") == "new\n")
+    }
+
+    // MARK: The write gate
+
+    private var midTurnRefusal: HunkDiscardError {
+        .refused(WriteGate([Self.working]).refusal ?? "")
+    }
+
+    @Test func aHunkIsNotDiscardedWhileAnAgentIsMidTurn() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        let inspector = try await box.inspector()
+        let (change, diff) = try await uncommitted("notes.txt", in: inspector)
+        let snapshotsBefore = await inspector.snapshots().count
+
+        await box.agents.set([Self.working])
+        await #expect(throws: midTurnRefusal) {
+            _ = try await inspector.discard(diff.hunks[0], of: change)
+        }
+        #expect(try box.read("notes.txt") == Self.edited)
+        // Refused before anything else, so no snapshot either.
+        #expect(await inspector.snapshots().count == snapshotsBefore)
+
+        await box.agents.set([WriteGate.Agent(name: "Claude Code", source: .hooks, activity: .ready)])
+        _ = try await inspector.discard(diff.hunks[0], of: change)
+        #expect(try box.read("notes.txt") != Self.edited)
+    }
+
+    @Test func aFileIsNotDiscardedWhileAnAgentWaitsOnYou() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        let inspector = try await box.inspector()
+        let (change, _) = try await uncommitted("notes.txt", in: inspector)
+
+        let waiting = WriteGate.Agent(name: "Codex", source: .hooks, activity: .needsPermission(tool: "Bash", detail: nil))
+        await box.agents.set([WriteGate.Agent(name: "Claude Code", source: .hooks, activity: .ready), waiting])
+        await #expect(throws: HunkDiscardError.refused(WriteGate([waiting]).refusal ?? "")) {
+            _ = try await inspector.discardFile(change, trashNewFiles: false)
+        }
+        #expect(try box.read("notes.txt") == Self.edited)
+
+        // Seen only as a process: a caution for the sheet, not a refusal.
+        await box.agents.set([WriteGate.Agent(name: "Codex", source: .process)])
+        _ = try await inspector.discardFile(change, trashNewFiles: false)
+        #expect(try box.read("notes.txt") == Self.committed)
+    }
+
+    @Test func undoWaitsForTheTurnToEnd() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        let inspector = try await box.inspector()
+        let (change, diff) = try await uncommitted("notes.txt", in: inspector)
+        let discarded = try await inspector.discard(diff.hunks[1], of: change)
+        let afterDiscard = try box.read("notes.txt")
+
+        await box.agents.set([Self.working])
+        await #expect(throws: midTurnRefusal) {
+            _ = try await inspector.restore(discarded)
+        }
+        #expect(try box.read("notes.txt") == afterDiscard)
+
+        await box.agents.set([])
+        #expect(try await inspector.restore(discarded).exact)
+        #expect(try box.read("notes.txt") == Self.edited)
+    }
+
+    @Test func aTurnStartingAsTheWriteWaitsStopsIt() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        let inspector = try await box.inspector()
+        let (change, diff) = try await uncommitted("notes.txt", in: inspector)
+
+        // Clear when asked first, working by the time the file would be written.
+        await box.agents.startWorking(atQuestion: 2)
+        await #expect(throws: midTurnRefusal) {
+            _ = try await inspector.discard(diff.hunks[0], of: change)
+        }
+        #expect(await box.agents.asked == 2)
+        #expect(try box.read("notes.txt") == Self.edited)
+    }
+
+    @Test func anInspectorNotToldAboutAgentsWritesNothing() async throws {
+        let box = try await makeSandbox()
+        defer { box.cleanup() }
+        let inspector = try await WorktreeInspector(git: box.git, worktree: box.repo,
+                                                    shadowIndexDirectory: box.root.appendingPathComponent("index"))
+        let (change, diff) = try await uncommitted("notes.txt", in: inspector)
+        await #expect(throws: HunkDiscardError.self) {
+            _ = try await inspector.discard(diff.hunks[0], of: change)
+        }
+        await #expect(throws: HunkDiscardError.self) {
+            _ = try await inspector.discardFile(change, trashNewFiles: false)
+        }
+        #expect(try box.read("notes.txt") == Self.edited)
     }
 }

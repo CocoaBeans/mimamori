@@ -74,6 +74,8 @@ final class WorktreeSession: Identifiable {
     var attributionProvider: (@MainActor (String, Date) -> ChangeAttribution?)?
 
     var settings: AppSettings
+    /// The agents in this worktree now, for the `WriteGate`.
+    let agents: @MainActor @Sendable () -> [WriteGate.Agent]
     let onActivity: @MainActor ([ActivityEntry]) -> Void
     let onSettingsChanged: @MainActor (WorktreeSession) -> Void
 
@@ -99,6 +101,7 @@ final class WorktreeSession: Identifiable {
     private static let discardLimit = 20
 
     init(info: WorktreeInfo, repositoryID: UUID, settings: AppSettings, persisted: PersistedWorktreeSettings,
+         agents: @escaping @MainActor @Sendable () -> [WriteGate.Agent],
          onActivity: @escaping @MainActor ([ActivityEntry]) -> Void,
          onSettingsChanged: @escaping @MainActor (WorktreeSession) -> Void) {
         self.id = info.path
@@ -109,6 +112,7 @@ final class WorktreeSession: Identifiable {
         self.scopePrefixes = persisted.scopePrefixes
         self.reviews = persisted.reviews
         self.notes = persisted.notes
+        self.agents = agents
         self.onActivity = onActivity
         self.onSettingsChanged = onSettingsChanged
     }
@@ -215,11 +219,13 @@ final class WorktreeSession: Identifiable {
             lastError = "The worktree folder no longer exists."
             return
         }
+        let agents = agents
         do {
             let inspector = try await WorktreeInspector(
                 git: git, worktree: URL(fileURLWithPath: id, isDirectory: true),
                 shadowIndexDirectory: Persistence.shadowIndexDirectory,
-                configuration: inspectorConfiguration)
+                configuration: inspectorConfiguration,
+                agents: { await agents() })
             guard !stopped else { return }
             self.inspector = inspector
             let snapshots = await inspector.snapshots()
@@ -639,8 +645,12 @@ final class WorktreeSession: Identifiable {
         return state.baseline.baseline == .head && state.baseline.isAvailable && state.operation == nil
     }
 
+    /// Whether the agents here let Mimamori write now, for the views to show. The inspector asks
+    /// again before each write, and refuses one while an agent is mid-turn.
+    var writeGate: WriteGate { WriteGate(agents()) }
+
     /// Throws away one hunk of `change`, the version of the file its diff was made from, after a
-    /// snapshot. Agents are the caller's to check (`WriteGate`).
+    /// snapshot.
     func discard(_ hunk: DiffHunk, of change: FileChange) async throws {
         let inspector = try discardingInspector()
         defer { requestRefresh(force: true) }
@@ -652,7 +662,7 @@ final class WorktreeSession: Identifiable {
     }
 
     /// Puts all of `change` back as HEAD has it, after a snapshot: a new file goes to the Trash,
-    /// a deleted one comes back. Agents are the caller's to check (`WriteGate`).
+    /// a deleted one comes back.
     func discardFile(_ change: FileChange) async throws {
         let inspector = try discardingInspector()
         defer { requestRefresh(force: true) }
@@ -678,6 +688,8 @@ final class WorktreeSession: Identifiable {
             let what = if case .hunk = latest.scope { "discarded hunk" } else { "discarded file" }
             onActivity([ActivityEntry(worktreePath: id, kind: .discarded, path: latest.path, title: latest.path,
                                       detail: restored.exact ? "\(what) put back" : "\(what) put back where its lines still fit")])
+        } catch HunkDiscardError.refused {
+            // Not a failure: Undo waits for the turn to end, and the bar says so meanwhile.
         } catch {
             restoreError = error.localizedDescription
         }
@@ -822,5 +834,15 @@ final class WorktreeSession: Identifiable {
     func diffSinceReview(for change: FileChange, reviewedBlob: String) async throws -> FileDiff? {
         guard let inspector else { return nil }
         return try await inspector.diffSinceReview(for: change, reviewedBlob: reviewedBlob)
+    }
+}
+
+extension AgentPresence {
+    /// This agent and the others in its worktree, as the `WriteGate` takes them.
+    var writeGateAgents: [WriteGate.Agent] {
+        ([self] + others).map { agent in
+            WriteGate.Agent(name: agent.kind.displayName, source: agent.source == .hooks ? .hooks : .process,
+                            activity: agent.activity)
+        }
     }
 }

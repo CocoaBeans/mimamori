@@ -542,15 +542,16 @@ final class AppModel {
     }
 
     private func startSession(for info: WorktreeInfo, repositoryID: UUID, git: GitClient) {
+        let worktreePath = info.path
         let session = WorktreeSession(
             info: info, repositoryID: repositoryID, settings: settings,
             persisted: persisted.worktreeSettings[info.path] ?? PersistedWorktreeSettings(),
+            agents: { [weak self] in self?.agentHub.presence(for: worktreePath)?.writeGateAgents ?? [] },
             onActivity: { [weak self] entries in self?.record(entries) },
             onSettingsChanged: { [weak self] session in
                 self?.persisted.worktreeSettings[session.id] = session.persistedSettings
                 self?.persistSoon()
             })
-        let worktreePath = info.path
         session.attributionProvider = { [weak self] path, date in
             self?.agentHub.attribution(for: worktreePath, path: path, at: date)
         }

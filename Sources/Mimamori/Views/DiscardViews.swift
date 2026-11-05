@@ -1,49 +1,6 @@
 import SwiftUI
 import MimamoriCore
 
-/// Whether the agents in a worktree let Mimamori write to it. Mid-turn, an agent goes on editing
-/// files as it last read them, so a write then is refused; between turns it only needs telling.
-enum WriteGate: Equatable {
-    case clear
-    /// Allowed, with a word of warning.
-    case caution(String)
-    /// Not while it lasts.
-    case refused(String)
-
-    init(_ presence: AgentPresence?) {
-        guard let presence else {
-            self = .clear
-            return
-        }
-        let all = [presence] + presence.others
-        for agent in all where agent.source == .hooks {
-            let name = agent.kind.displayName
-            switch agent.activity {
-            case .working:
-                self = .refused("\(name) is in the middle of a turn in this worktree. Discard once its turn ends.")
-                return
-            case .needsPermission, .askedQuestion:
-                self = .refused("\(name) is waiting on you in the middle of a turn, and goes on editing once you answer. Discard once its turn ends.")
-                return
-            case .ready, .idle:
-                continue
-            }
-        }
-        if let running = all.first(where: { $0.source == .process || $0.activity == .idle }) {
-            self = .caution("\(running.kind.displayName) is running in this worktree, and Mimamori can't tell whether it's in the middle of a turn. Make sure it isn't editing this file.")
-        } else if let ready = all.first(where: { $0.activity == .ready }) {
-            self = .caution("\(ready.kind.displayName) is between turns here. It won't know about this unless you tell it.")
-        } else {
-            self = .clear
-        }
-    }
-
-    var refusal: String? {
-        if case .refused(let reason) = self { return reason }
-        return nil
-    }
-}
-
 /// A hunk or a whole file you asked to discard, with the version of the file it was shown for.
 struct DiscardRequest: Identifiable {
     enum Scope: Hashable {
@@ -70,7 +27,6 @@ struct DiscardRequest: Identifiable {
 /// Asks before throwing a hunk or a whole file away, showing the lines that go and the ones that
 /// come back.
 struct DiscardSheet: View {
-    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let session: WorktreeSession
     let request: DiscardRequest
@@ -150,10 +106,7 @@ struct DiscardSheet: View {
     }
 
     /// Read here, so the sheet follows the agents while it is open.
-    private var gate: WriteGate {
-        let presence: AgentPresence? = model.agentHub.presence(for: session.id)
-        return WriteGate(presence)
-    }
+    private var gate: WriteGate { session.writeGate }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -331,11 +284,6 @@ struct DiscardSheet: View {
 
     private func confirm() {
         guard !working, failure == nil else { return }
-        // Looked at again now: an agent may have started since the sheet opened.
-        if let refusal = WriteGate(model.agentHub.presence(for: session.id)).refusal {
-            failure = refusal
-            return
-        }
         working = true
         Task {
             do {
@@ -344,6 +292,9 @@ struct DiscardSheet: View {
                 case .file: try await session.discardFile(change)
                 }
                 dismiss()
+            } catch HunkDiscardError.refused {
+                // An agent started a turn since the sheet last drew. Not a failure: the gate's
+                // notice says why, and the button comes back once the turn ends.
             } catch {
                 failure = error.localizedDescription
             }
@@ -359,7 +310,7 @@ struct DiscardUndoBar: View {
 
     var body: some View {
         if let latest = session.discards.first {
-            let gate = WriteGate(model.agentHub.presence(for: session.id))
+            let gate = session.writeGate
             VStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "trash.circle")
@@ -375,6 +326,12 @@ struct DiscardUndoBar: View {
                                     .foregroundStyle(.red)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
+                            } else if let refusal = gate.refusal {
+                                // Two lines at most: a fixed height here grows the window's minimum.
+                                Text(refusal)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                    .help(refusal)
                             } else {
                                 Text(detail(latest))
                                     .foregroundStyle(.secondary)

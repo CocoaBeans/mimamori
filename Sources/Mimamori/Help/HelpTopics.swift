@@ -93,7 +93,7 @@ struct HelpTopic: Identifiable {
             _Off until you turn on Offer discarding hunks and files, in Settings › General › Working tree._
             - In an **Uncommitted** diff, **Discard…** on a hunk's header (or **Discard This Hunk…** in a line number's context menu) puts that hunk's lines back as they are in the last commit.
             - **Discard File…** in the diff's header, or **Discard Changes…** in the file list's context menu, does it for the whole file: a changed file gets the last commit's version and mode back, a new file moves to the Trash, and a deleted file comes back.
-            - Mimamori shows you what goes and asks first. It won't while an agent is in the middle of a turn in that worktree, and warns you when one is between turns, since it won't know.
+            - Mimamori shows you what goes and asks first. It won't discard, or undo a discard, while an agent is in the middle of a turn in that worktree, and warns you when one is between turns, since it won't know.
             - It checks that the file still matches the diff, and takes a snapshot first. **Undo** in the bar above the diff puts it back, and the activity feed records both.
             - Only that file changes: what you staged stays staged, and the index is never touched. Files git changes on the way in or out (line-ending or filter settings) and renamed files are left to you.
             """),
