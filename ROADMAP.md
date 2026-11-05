@@ -92,6 +92,8 @@ state, never on a loop.
 - [ ] An iPhone companion: the agents at work, who needs you, and Allow or Deny from the phone, on
       the same network first, then over cellular
       ([docs/plans/iphone-companion.md](docs/plans/iphone-companion.md)).
+- [ ] Review notes: comment on lines in the diff and send the notes to the agent, which picks
+      them up through its hooks ([docs/plans/review-notes.md](docs/plans/review-notes.md)).
 - [ ] Read an agent's transcript while its hooks are silent, opt-in, and give a turn already under
       way at launch its real start ([docs/plans/transcript-adapter.md](docs/plans/transcript-adapter.md)).
 
