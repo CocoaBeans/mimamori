@@ -51,8 +51,11 @@ struct MenuBarPanel: View {
                 // ImageRenderer cannot draw a scroll view.
                 list
             } else if pinned {
-                ScrollView { list }
-                    .frame(maxHeight: .infinity)
+                // Unpinned, its window stays around too, like the popover's.
+                Group {
+                    if isOpen { ScrollView { list } } else { Color.clear }
+                }
+                .frame(maxHeight: .infinity)
             } else if isOpen {
                 ScrollView {
                     list.onGeometryChange(for: CGFloat.self, of: \.size.height) { listHeight = $0 }

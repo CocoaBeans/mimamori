@@ -7,30 +7,8 @@ struct ContentView: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        @Bindable var model = model
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 170, ideal: 220, max: 340)
-        } content: {
-            if let session = model.selectedSession {
-                ChangeListView(session: session)
-                    .navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 600)
-            } else {
-                WelcomeView()
-                    .navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 600)
-            }
-        } detail: {
-            detailColumn
-                .navigationSplitViewColumnWidth(min: 240, ideal: 420)
-                .diffColumnToolbar(activityOpen: model.showActivity)
-        }
-        .endsBesideInspector()
-        .inspector(isPresented: $model.showActivity) {
-            ActivityFeedView()
-                .inspectorColumnWidth(min: 220, ideal: 260, max: 460)
-        }
-        .toolbar { toolbarItems }
-        .background(ToolbarTooltips(tips: Self.toolbarTips))
+        // What answers links and requests stays outside, so it works the moment the window opens.
+        OpenWindowContent { splitView }
         .onChange(of: model.showActivity) { model.persistUISoon() }
         .onChange(of: model.showCommits) { model.persistUISoon() }
         .onChange(of: model.flaggedOnly) { model.persistUISoon() }
@@ -77,6 +55,33 @@ struct ContentView: View {
             model.summaryWindowRequest = nil
             openWindow.summary(for: worktree)
         }
+    }
+
+    private var splitView: some View {
+        @Bindable var model = model
+        return NavigationSplitView {
+            SidebarView()
+                .navigationSplitViewColumnWidth(min: 170, ideal: 220, max: 340)
+        } content: {
+            if let session = model.selectedSession {
+                ChangeListView(session: session)
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 600)
+            } else {
+                WelcomeView()
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 600)
+            }
+        } detail: {
+            detailColumn
+                .navigationSplitViewColumnWidth(min: 240, ideal: 420)
+                .diffColumnToolbar(activityOpen: model.showActivity)
+        }
+        .endsBesideInspector()
+        .inspector(isPresented: $model.showActivity) {
+            ActivityFeedView()
+                .inspectorColumnWidth(min: 220, ideal: 260, max: 460)
+        }
+        .toolbar { toolbarItems }
+        .background(ToolbarTooltips(tips: Self.toolbarTips))
     }
 
     @ViewBuilder

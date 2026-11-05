@@ -72,6 +72,20 @@ private struct ClockedDashboardRow: View {
 /// A small window listing what every agent is doing; click a row to open its worktree.
 struct AgentsWindowView: View {
     @Environment(AppModel.self) private var model
+
+    var body: some View {
+        OpenWindowContent { AgentsWindowContent() }
+            .frame(minWidth: 360, minHeight: 180)
+            .navigationTitle("Agents")
+            // Remembered, so the window opens again at launch.
+            .onAppear { model.windowChanged(.agents, open: true) }
+            .onDisappear { model.windowChanged(.agents, open: false) }
+    }
+}
+
+/// The Agents window's cards, while the window is open.
+private struct AgentsWindowContent: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     /// Two when the list is wide enough for two cards side by side, otherwise one.
     @State private var columnCount = 1
@@ -124,11 +138,6 @@ struct AgentsWindowView: View {
                 .onGeometryChange(for: Int.self) { $0.size.width >= Self.twoColumnWidth ? 2 : 1 } action: { columnCount = $0 }
             }
         }
-        .frame(minWidth: 360, minHeight: 180)
-        .navigationTitle("Agents")
-        // Remembered, so the window opens again at launch.
-        .onAppear { model.windowChanged(.agents, open: true) }
-        .onDisappear { model.windowChanged(.agents, open: false) }
         .navigationSubtitle(summaryLine(rows))
         .toolbar {
             ToolbarItemGroup {

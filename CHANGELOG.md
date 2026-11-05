@@ -15,6 +15,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
   takes about 60% less CPU
   ([#47](https://github.com/CocoaBeans/mimamori/pull/47)).
 
+### Fixed
+
+- A closed main window, Agents window or pinned overview no longer keeps redrawing while agents
+  work. With three agents busy and only the menu bar showing, Mimamori uses about two thirds less
+  CPU.
+
 ## [1.1.1] - 2026-11-05
 
 ### Added
