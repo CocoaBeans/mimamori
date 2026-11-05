@@ -13,7 +13,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Launch no longer carries anything over from Vigil, the app's name before 1.0. It no longer moves
   a `Vigil` folder in Application Support into Mimamori's, and no longer swaps Claude Code or
   Hermes hooks that post to `vigil.sock` for Mimamori's: those belong to other apps of that name
-  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
+  ([#39](https://github.com/CocoaBeans/mimamori/pull/39)).
 
 ### Fixed
 
