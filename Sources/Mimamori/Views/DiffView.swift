@@ -19,10 +19,14 @@ struct DiffView: View {
     @State private var missingReviewBlob: String?
     /// A line to jump to once the full diff has loaded.
     @State private var pendingJump: Int?
-    /// Where the note being written goes, if one is.
-    @State private var noteDraft: NoteDraft?
+    /// Where the note being written goes, if one is. It lives in the model: closing the main window
+    /// drops its views, and a half-written note outlives that. A commit's diff takes no notes.
+    private var noteDraft: NoteDraft? {
+        get { commit == nil ? model.noteDraft : nil }
+        nonmutating set { if commit == nil { model.noteDraft = newValue } }
+    }
     /// Its words, which only the composer reads as it draws.
-    @State private var noteText = NoteDraftText()
+    private var noteText: NoteDraftText { model.noteDraftText }
     /// Debug builds: the `discard:` flags open their confirmation once per launch.
     @MainActor private static var openedDebugDiscard = false
 
@@ -68,7 +72,7 @@ struct DiffView: View {
                     jump(toNewLine: number)
                 }
                 // MIMAMORI_DEBUG_FLAGS=note-line:<n> or note-line:<n>-<m>: start a note there, as its bubble does.
-                if let flag = model.debugFlags.first(where: { $0.hasPrefix("note-line:") }), noteDraft == nil, let diff {
+                if commit == nil, let flag = model.debugFlags.first(where: { $0.hasPrefix("note-line:") }), noteDraft == nil, let diff {
                     let bounds = flag.dropFirst("note-line:".count).split(separator: "-").compactMap { Int($0) }
                     if let first = bounds.first, let last = bounds.last, first <= last,
                        let hunk = diff.hunks.first(where: { $0.lines.contains { $0.newNumber == first && $0.kind != .deletion } }) {
@@ -208,7 +212,8 @@ struct DiffView: View {
                                 fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID,
                                 flags: AttentionFlag.byLine(change.flags),
                                 currentBranch: commit == nil ? currentSideName : nil,
-                                notes: noteContext, draft: $noteDraft, draftText: noteText, discard: discardAction)
+                                notes: noteContext, draft: Binding(get: { noteDraft }, set: { noteDraft = $0 }),
+                                draftText: noteText, discard: discardAction)
             }
         } else if let errorText {
             ContentUnavailableView("Could Not Load Diff", systemImage: "exclamationmark.triangle",

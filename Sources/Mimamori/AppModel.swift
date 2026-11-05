@@ -64,6 +64,10 @@ final class AppModel {
     var sortOrder: ChangeSortOrder
     var activityScopeAll: Bool
     var filterText = ""
+    /// The review note being written in the main window's diff, and its words. Here rather than in
+    /// the diff view, which closing the window drops.
+    var noteDraft: NoteDraft?
+    let noteDraftText = NoteDraftText()
     var filterFocusToken = 0
     /// Developer switches from MIMAMORI_DEBUG_FLAGS (comma separated), e.g. "popover:sidebar".
     /// Debug builds only: a release build has none, so the switches cannot be set there.
