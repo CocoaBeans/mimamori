@@ -73,11 +73,12 @@ private struct ClockedDashboardRow: View {
 struct AgentsWindowView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
-    /// The list's width: wide enough for two cards side by side, the agents take two columns.
-    @State private var width: CGFloat = 0
+    /// Two when the list is wide enough for two cards side by side, otherwise one.
+    @State private var columnCount = 1
 
-    /// Two cards of about 440 pt each, with the gaps around them.
-    private static let twoColumnWidth: CGFloat = 900
+    /// Two cards of about 440 pt each, with the gaps around them. Nonisolated so the geometry
+    /// transform, a Sendable closure, can read it.
+    nonisolated private static let twoColumnWidth: CGFloat = 900
 
     var body: some View {
         let rows = model.agentRows
@@ -93,8 +94,7 @@ struct AgentsWindowView: View {
                 // A plain grid rather than a List: a table view keeps its scroll offset when a row
                 // sorts to the top, which pushed the agent waiting on you under the title bar.
                 // Each section's heading spans the grid; its cards take one column, or two when wide.
-                let columns = Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top),
-                                    count: width >= Self.twoColumnWidth ? 2 : 1)
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: columnCount)
                 ScrollView {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                         let collapsed = Set(model.settings.agentsWindowCollapsed)
@@ -117,9 +117,11 @@ struct AgentsWindowView: View {
                     }
                     .padding([.horizontal, .bottom], 10)
                     .animation(.default, value: rows.map(\.id))
-                    .animation(.default, value: columns.count)
                 }
-                .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
+                // Only the column count, so a resize redraws the window when it crosses the line,
+                // not every frame. Not animated: the count changes mid-drag, and an animated change
+                // left the cards trailing the window, their names cross-fading, until it caught up.
+                .onGeometryChange(for: Int.self) { $0.size.width >= Self.twoColumnWidth ? 2 : 1 } action: { columnCount = $0 }
             }
         }
         .frame(minWidth: 360, minHeight: 180)

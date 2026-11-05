@@ -379,6 +379,7 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `welcome` | Open the welcome window |
 | `help:<topic>` | Open the Help window on that topic (`getting-started`, `agents`, `shortcuts`, … as in `HelpTopics.swift`); `help` alone opens it on the first |
 | `appearance:light` | Draw every window light, whatever the system's setting (`appearance:dark` for dark), for live captures of both |
+| `resize:<w>/<w>/…` | 8 seconds after launch, drag the window's width through these sizes in points, a frame at a time as a person would, holding 1.5 s at each. It takes the window `MIMAMORI_SCREENSHOT_WINDOW` names; with `MIMAMORI_SCREENSHOT` set, each width is captured just after the drag and once settled, as `<screenshot>.resize-<n>a.png` and `<screenshot>.resize-<n>b.png` |
 | `uninstall` | Open the Uninstall Mimamori window |
 | `uninstall:run` | Run Uninstall with its default choices, keeping the app out of the Trash; its report goes in `<dump>.uninstall.txt`. Point it at a scratch setup (`MIMAMORI_SUPPORT_DIR`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`) |
 | `settings:<pane>` | Open Settings on that pane; with `settings:agents`, `agents:hooks`, `agents:other`, `agents:widgets` or `agents:notifications` opens that part of it |

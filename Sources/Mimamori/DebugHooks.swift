@@ -34,6 +34,8 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=welcome              open the welcome window (uninstall: the Uninstall window)
 ///     MIMAMORI_DEBUG_FLAGS=help:agents          open the Help window on that topic (help alone: the first)
 ///     MIMAMORI_DEBUG_FLAGS=appearance:light     draw every window light (appearance:dark: dark), whatever the system's setting
+///     MIMAMORI_DEBUG_FLAGS=resize:1000/600/1000 drag the window's width through these sizes, holding at each (the window
+///                                               MIMAMORI_SCREENSHOT_WINDOW names; captures as <screenshot>.resize-<n><a|b>.png)
 ///     MIMAMORI_DEBUG_FLAGS=uninstall:run        run Uninstall's default choices, app kept out of the Trash
 ///                                               (report in <dump>.uninstall.txt; use a scratch setup)
 ///
@@ -54,6 +56,11 @@ enum DebugHooks {
         // "appearance:light" or "appearance:dark": draw every window that way, whatever the system's setting.
         if model.debugFlags.contains("appearance:light") { NSApplication.shared.appearance = NSAppearance(named: .aqua) }
         if model.debugFlags.contains("appearance:dark") { NSApplication.shared.appearance = NSAppearance(named: .darkAqua) }
+        if let flag = model.debugFlags.first(where: { $0.hasPrefix("resize:") }) {
+            let widths = flag.dropFirst("resize:".count).split(separator: "/").compactMap { Double($0) }
+            let title = value("MIMAMORI_SCREENSHOT_WINDOW")
+            Task { await dragWindow(through: widths, titled: title, capturingTo: screenshot) }
+        }
         guard screenshot != nil || dump != nil || select != nil || !toReview.isEmpty else { return }
         let interval = Double(value("MIMAMORI_SCREENSHOT_INTERVAL") ?? "") ?? 0
 
@@ -227,6 +234,35 @@ enum DebugHooks {
         window.setContentSize(NSSize(width: parts[0], height: parts[1]))
         window.center()
         return true
+    }
+
+    /// Drags the window's right edge through `widths` (content widths, in points) a frame at a time,
+    /// as a person resizing it would, keeping its height, and holds at each width. With a screenshot
+    /// path, captures the window just after each drag (`<path>.resize-<n>a.png`) and once it has
+    /// settled (`<path>.resize-<n>b.png`).
+    private static func dragWindow(through widths: [Double], titled title: String?, capturingTo path: String?) async {
+        // After launch and MIMAMORI_WINDOW's resize, once the window has its rows.
+        try? await Task.sleep(for: .seconds(8))
+        guard let window = NSApp.windows.first(where: {
+            $0.styleMask.contains(.titled) && $0.isVisible && (title == nil || $0.title == title)
+        }) else { return }
+        for (index, width) in widths.enumerated() {
+            let start = window.contentRect(forFrameRect: window.frame).size
+            // Half a second at 60 frames a second.
+            for step in 1...30 {
+                let fraction = Double(step) / 30
+                window.setContentSize(NSSize(width: start.width + (width - start.width) * fraction, height: start.height))
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            guard let path else {
+                try? await Task.sleep(for: .seconds(1.5))
+                continue
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+            writeMainWindowImage(to: "\(path).resize-\(index + 1)a.png", title: title)
+            try? await Task.sleep(for: .seconds(1.5))
+            writeMainWindowImage(to: "\(path).resize-\(index + 1)b.png", title: title)
+        }
     }
 
     /// Unfolds the main window's sidebar if it is folded. False until the window is there.
