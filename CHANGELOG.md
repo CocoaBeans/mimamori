@@ -8,6 +8,22 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-05
+
+### Added
+
+- A notice at launch when Mimamori couldn't read all of its saved state. It says what it did
+  instead, and **Show in Finder** selects the copy it kept
+  ([#33](https://github.com/CocoaBeans/mimamori/pull/33)).
+
+### Changed
+
+- Connecting Claude Code or Hermes edits their config files more carefully
+  ([#31](https://github.com/CocoaBeans/mimamori/pull/31)).
+  - `settings.json` keeps its layout, a symlinked file stays a symlink, and permissions are kept.
+  - A file Mimamori can't read or parse is left as it is, with the reason.
+  - Backups get unique names, and the first one is kept.
+
 ### Removed
 
 - Launch no longer carries anything over from Vigil, the app's name before 1.0. It no longer moves
@@ -17,6 +33,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- A `state.json` Mimamori can't fully read is no longer replaced by an empty one. It opens what it
+  can, or the state as it was one save earlier, and keeps a copy of the file aside
+  ([#29](https://github.com/CocoaBeans/mimamori/pull/29)).
+- With two subagents at work in one session, one finishing a tool call no longer drops the other's
+  waiting permission request, with its Allow and Deny
+  ([#27](https://github.com/CocoaBeans/mimamori/pull/27)).
 - Undo after a discard is refused while an agent is in the middle of a turn in that worktree, as
   Discard is. Both are checked again just before Mimamori writes, so a turn that starts after you
   confirm stops the write ([#43](https://github.com/CocoaBeans/mimamori/pull/43)).
@@ -86,6 +108,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Markdown.
 - Automatic updates through Sparkle.
 
-[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/CocoaBeans/mimamori/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/CocoaBeans/mimamori/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/CocoaBeans/mimamori/releases/tag/v1.0.0
