@@ -68,8 +68,9 @@ So there are two separate jobs:
   write anyway, on the same rules. "Send me a fresh snapshot" answers once with what's current
   and starts no polling.
 - **What goes over it.**
-  - Mac to phone: a snapshot when one is due, as above.
-  - Phone to Mac: Allow or Deny for a request id, and "send me a fresh snapshot".
+  - Mac to phone: a snapshot when one is due, as above, and an agent's actions when asked.
+  - Phone to Mac: Allow or Deny for a request id, "send me a fresh snapshot", and "send me this
+    agent's actions" while its detail is open.
   - JSON, with a version field so the two apps can be updated at different times.
 - **Pairing.** Settings › Companion shows a QR code holding a random key and the Mac's name. The
   phone scans it, and every connection after that is TLS with that pre-shared key
@@ -165,6 +166,22 @@ The next two are for an App Store build, which can't keep itself running:
    payload encrypted end to end by the paired key so the relay sees only ciphertext. It also
    needs an APNs key of its own; the Mac's App Store Connect key can't send pushes.
 
+## An agent's actions
+
+Tapping an agent's card on the phone opens its list of actions: every step of the turn under way,
+newest first, then the turns before it under their prompts, as the activity feed on the Mac
+shows an agent's runs. Each action shows:
+- the tool and what it acted on (the command, the file);
+- when it ran and for how long;
+- whether it failed, is running, or is waiting on you.
+
+The snapshot carries only the current turn's steps, which a card needs, so it stays small.
+- **On demand.** The list comes from the Mac when the detail opens: "send me this agent's actions",
+  answered with its recent calls across turns.
+- **While open.** It updates while the detail is open, on the snapshot's rules.
+- **Privacy.** With "Show tasks and steps in widgets" off, the list keeps each action's kind and
+  times but not what it acted on, as the cards do.
+
 ## Trust
 
 The README promises that Mimamori talks to nothing but local `git` and a socket only you can
@@ -198,8 +215,9 @@ reach. The companion changes that, so:
 - **On the Mac.** A `CompanionPublisher` beside `WidgetPublisher`, fed from
   `AppModel.publishWidgets()`, owning the listener, the pairings and the connections.
 - **On the phone.** An iOS app target in `Mimamori.xcodeproj`: a paired-Macs screen, the agents
-  list, an agent's detail with its timeline and files, and Allow and Deny. The keep-alive and
-  its `audio` background mode only in the configuration for builds of your own. iOS 18 or later.
+  list, an agent's detail with its list of actions, timeline and files, and Allow and Deny. The
+  keep-alive and its `audio` background mode only in the configuration for builds of your own.
+  iOS 18 or later.
   Later, an iOS widget from the same views.
 - **Signing.** The Mac app needs no provisioning profile, but an iOS app always does: a
   registered bundle ID and automatic signing with the team. An iOS App Group must start with
@@ -222,7 +240,8 @@ reach. The companion changes that, so:
    - how quickly changes arrive.
 2. **Same-network companion.**
    - QR pairing and TLS with the pre-shared key; the paired phones list.
-   - The richer snapshot fields, including the request to answer; an agent's detail on the phone.
+   - The richer snapshot fields, including the request to answer.
+   - Tapping an agent's card opens its detail, with its list of actions (see "An agent's actions").
    - Allow and Deny with Face ID, and the auto-answer countdown.
    - The Settings tab, Help and README text, and Uninstall.
 3. **Staying connected, in builds of your own.** Port the silent-audio keep-alive into its own
