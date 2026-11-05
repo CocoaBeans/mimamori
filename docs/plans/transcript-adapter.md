@@ -1,11 +1,11 @@
 # Plan: reading an agent's transcript while its hooks are silent
 
-> **Proposed.** Nothing is built yet. Reading transcripts is **opt-in and off by default**,
-> because they hold your prompts, the model's replies, command output and file contents. One part
-> needs no transcript and is on for everyone: a turn already under way when Mimamori starts gets
-> its real start time, from Hermes's record of which turns are running and from Claude Code's
-> record of when a session went busy. The survey of what each agent records was made on
-> 2026-11-04, on one Mac (see "What the agents record").
+> **Step 1 built (PR #20); the rest proposed.** Reading transcripts is **opt-in and off by
+> default**, because they hold your prompts, the model's replies, command output and file
+> contents. One part needs no transcript and is on for everyone, and it is step 1: a turn already
+> under way when Mimamori starts gets its real start time, from Hermes's record of which turns are
+> running and from Claude Code's record of when a session went busy. The survey of what each agent
+> records was made on 2026-11-04, on one Mac (see "What the agents record").
 
 ## Goal
 
@@ -31,8 +31,9 @@ over the moment they report.
   (`SessionPlacement`), folds them into a status (`AgentStatusMachine`), credits changes
   (`ChangeAttribution`) and writes the feed, as it does for hooks.
 - **A status that hooks replace.** `AgentStatusMachine.adopt(_:)` takes Claude Code's status from
-  `~/.claude/sessions/<pid>.json` while its hooks are silent, marked `fromSessionFile`, and the
-  session's first hook event takes over. Transcripts follow the same rule.
+  `~/.claude/sessions/<pid>.json`, and since step 1 a Hermes turn's from its lease, while the
+  session's hooks are silent, marked `fromSessionRecord`. The session's first hook event takes
+  over. Transcripts follow the same rule.
 - **Session lookups.** `ClaudeSessionFiles` ties a Claude Code process to its session id, and its
   record holds the session's `cwd`, which names the transcript. `HermesSessions` already opens
   Hermes's `state.db` read-only, with a busy timeout, for each session's directory.
@@ -74,8 +75,8 @@ Surveyed read-only on 2026-11-04: key names, record types, sizes and timestamps,
 
 | Agent | Where, and how to find a session | Live? | Hard parts |
 |---|---|---|---|
-| Claude Code 2.1.317 | `~/.claude/projects/<cwd, every non-alphanumeric character as "-">/<sessionId>.jsonl`; the pid file gives `sessionId`, `cwd`, and `status` with `statusUpdatedAt` (when the session last went busy, idle or waiting) | Yes: each assistant message as it completes, each tool result as it returns | Files up to 661 MB; about 30 record types; the format changes weekly; `relocated` records when the session moves |
-| Hermes 0.22.6 | `~/.hermes/state.db`, table `messages` by `session_id`; `session_turn_leases` for a running turn (`conversation_id` = session id, `acquired_at`, `expires_at`, holder `pid=<pid>:…`) | Yes: a tool call's row is written before the tool runs | Rows are rewritten (`active=0` and re-inserted with the same `message_uid`); no failure flag on results; compression ends a session and continues it in a child (`parent_session_id`); approvals waiting on you are not recorded; WAL |
+| Claude Code 2.1.317 | `~/.claude/projects/<cwd, every non-alphanumeric character as "-">/<sessionId>.jsonl`; the pid file gives `sessionId`, `cwd`, and `status` with `statusUpdatedAt` (when the session last went busy, idle or waiting, and only then: not on each tool call) | Yes: each assistant message as it completes, each tool result as it returns | Files up to 661 MB; about 30 record types; the format changes weekly; `relocated` records when the session moves |
+| Hermes 0.22.6 | `~/.hermes/state.db`, table `messages` by `session_id`; `session_turn_leases` for a running turn (`conversation_id` = session id, `acquired_at` as the turn's prompt arrives, `expires_at` kept about five minutes ahead while it runs, holder `pid=<pid>:turn=…`) | Yes: a tool call's row is written before the tool runs | Rows are rewritten (`active=0` and re-inserted with the same `message_uid`); no failure flag on results; compression ends a session and continues it in a child (`parent_session_id`); approvals waiting on you are not recorded; WAL |
 | OpenCode 1.17.7 | `~/.local/share/opencode/opencode.db`; `session.directory`; the append-only `event` table | Yes: `message.part.updated.1` records pending, running, completed and error | `part` rows are updated in place, so read `event`; approvals waiting on you are not recorded |
 | Aider 0.86.2 | `.aider.chat.history.md` at the repository's root | Prompts only | No tool calls, ids or turn ends: coarse at best |
 
@@ -121,14 +122,18 @@ session's directory.
 - `HermesTranscript`: queries `messages` for one session, `active=1`, after the last timestamp
   seen, and deduplicates by `message_uid`. It follows a compressed session to its child. It reads
   `session_turn_leases` for whether a turn is running and since when.
-- Turn starts from records, on for everyone, no content:
+- Turn starts from records, on for everyone, no content (built in step 1):
   - `HermesTurns`: the running turns from `session_turn_leases`, with each session's directory
-    from `sessions`. `AgentStatusMachine.adopt` grows a case for it beside Claude Code's record:
-    working since `acquired_at`, until the session's first hook event.
+    from `sessions`. A lease past its expiry, or whose holder process is gone or started after
+    the lease (a reused pid), is no turn. `AgentStatusMachine.adopt` has a case for it beside
+    Claude Code's record: working since `acquired_at`, until the session's first hook event. The
+    status goes when the lease does, and counts as live without a process in the worktree, since
+    a gateway's process sits in `~/.hermes`.
   - `AgentStatusMachine.backdateTurn(to:)`: when a turn starts from a tool call because its prompt
     was never heard (Mimamori started mid-turn), the hub moves its start back to Hermes's
-    `acquired_at`, or to Claude Code's `statusUpdatedAt` while the pid file says `busy`. Only
-    ever earlier, never past the previous turn's end.
+    `acquired_at`, or to Claude Code's `statusUpdatedAt` while the pid file says `busy`. A Hermes
+    prompt hook that is the first word from a session counts as unheard too, since it fires
+    before every model call. Only ever earlier, never past the previous turn's end.
 - `OpenCodeTranscript`: reads `event` after the last rowid seen, for sessions whose `directory` is
   in a watched worktree.
 - `TranscriptPolicy`, pure functions:
@@ -136,8 +141,9 @@ session's directory.
     its agent, whether its hooks are installed, and when a hook event from it last arrived;
   - `offersTranscripts(...)`: whether a process-only row offers the switch. It does only while the
     switch is off, a reader exists for the agent, and you haven't dismissed the offer.
-- `AgentStatus.fromSessionFile` becomes `source: .hooks | .sessionRecord | .transcript`, so the UI
-  can label where a status comes from.
+- `AgentStatus.fromSessionRecord` (step 1's name for `fromSessionFile`, covering Claude Code's
+  session file and Hermes's lease) becomes `source: .hooks | .sessionRecord | .transcript`, so the
+  UI can label where a status comes from.
 - `AgentStatusMachine` ignores a `PreToolUse` whose call id it already holds, so a turn read back
   from the transcript and then reported by hooks keeps each step once.
 
@@ -154,7 +160,8 @@ session's directory.
     session once a hook event arrives from it;
   - on launch, with the switch on, reads each busy session's turn so far once, even where hooks
     work;
-  - with the switch off or on, backdates a turn joined midway from the records above.
+  - with the switch off or on, backdates a turn joined midway from the records above (built in
+    step 1: on each scan, and right after each hook event).
 - Views:
   - the switch and its text in Settings › Agents › Hooks, and, once you've dismissed the offer, a
     **Suggest it again** button beside it;
@@ -171,11 +178,12 @@ session's directory.
 
 ## Steps
 
-1. **Turn starts at launch, for everyone** (about 250–350 lines with tests). `HermesTurns`, the
-   adopt case and `backdateTurn(to:)`. No setting, and no transcript content. It starts with a
-   short spike: whether Claude Code moves `statusUpdatedAt` on each tool call or only when the
-   status changes, and so whether a busy session's value is its turn's start or a later moment
-   (after a permission prompt, at worst).
+1. **Turn starts at launch, for everyone.** Done in PR #20. `HermesTurns`, the adopt case and
+   `backdateTurn(to:)`. No setting, and no transcript content. The spike: Claude Code moves
+   `statusUpdatedAt` only when the status changes, not on each tool call; a busy session kept it
+   through 14 minutes and dozens of calls. So a busy session's value is its turn's start, or the
+   end of its last permission wait, which moves the turn back only partway. Hermes takes its
+   lease 0.1 s after the turn's prompt is stored.
 2. **The frame and Claude Code** (about 900–1,300 lines with tests, the setting included).
    `TranscriptReader`, `TranscriptPolicy`, the status source, deduplication by call id,
    `ClaudeTranscript`, the `AgentHub` wiring, the switch, the hint, the labels, Diagnostics, README
@@ -198,9 +206,9 @@ session's directory.
 - `HermesTranscript`: rewritten rows (`active=0`, the same `message_uid` re-inserted); failure
   inferred from JSON and from text that isn't JSON; a compressed session continued in its child;
   a WAL database opened read-only.
-- `HermesTurns`: a lease present, expired and gone; a session with no directory recorded.
-- `backdateTurn(to:)`: moves only a turn that began without a prompt, only earlier, and never
-  before the previous turn ended.
+- `HermesTurns` (step 1): a lease present, expired and gone; a session with no directory recorded.
+- `backdateTurn(to:)` (step 1): moves only a turn that began without a prompt, only earlier, and
+  never before the previous turn ended.
 - `OpenCodeTranscript`: a tool part going pending, running, completed and error.
 - `TranscriptPolicy`: the switch off means no reader for anyone; a session with hooks reporting
   isn't read; a session falls back to its transcript after its hooks go quiet. A process-only row
@@ -208,7 +216,8 @@ session's directory.
 - `AgentStatusMachine`: a step read from the transcript and then reported by its hook shows once;
   hooks take over a status read from a transcript.
 - By hand, in a scratch setup: a Claude Code session started before the hooks were installed, and
-  Mimamori launched mid-turn, with the switch off and on.
+  Mimamori launched mid-turn, with the switch off and on. (Step 1's launch mid-turn, with no
+  switch yet, was checked this way with Claude Code and Hermes.)
 
 ## Risks
 
