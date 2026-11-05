@@ -19,7 +19,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 ## What it does
 
-![Mimamori watching a worktree while agents work: the sidebar with two repositories under their app icons and an agent in each worktree, the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars and note counts, and a diff with two review notes on Claude Code's new lines and Discard on each hunk, beside the activity feed](docs/mimamori-main.png)
+![Mimamori watching a worktree while agents work: the sidebar with two repositories under their app icons and an agent in each of three worktrees, the toolbar pill saying Codex needs you, Claude Code's banner with its task, steps and files, the change list with diff bars and a note count, and a diff with two review notes on Claude Code's new lines, one not sent yet and one copied as a prompt, with Discard on each hunk, beside the activity feed](docs/mimamori-main.png)
 
 - **Watches live.** FSEvents on the worktree and the git directory drive refreshes a few hundred milliseconds after files settle. Recently touched files glow and say "12s ago", so you can see where the agent is working. Each file shows an icon for its kind and a five-block diff bar: the more lines changed, the more blocks light (green for added, red for removed), so the big edits stand out in any list. Bursts that only touch ignored paths (build output, `node_modules`) are discarded without a refresh.
 - **Compares against the right baseline.** Agents commit as they go, so a plain working-tree diff goes blank after each commit. Switch between:
