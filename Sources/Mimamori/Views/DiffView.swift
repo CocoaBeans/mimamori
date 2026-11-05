@@ -802,6 +802,11 @@ struct DiffContentView: View {
                                minHeight: horizontal ? geometry.size.height : nil,
                                alignment: .topLeading)
                     }
+                    // Sized outright, so the HStack doesn't ask it how wide it could be. Each
+                    // asking measured the rows again at widths they never show at, and wrapped
+                    // rows measured that way upset the lazy stack's estimates; once, after a
+                    // Reviewed click, its layout never settled again.
+                    .frame(width: max(0, width), height: geometry.size.height)
                     .onScrollGeometryChange(for: ClosedRange<Double>.self) { scroll in
                         let height = max(scroll.contentSize.height, 1)
                         let top = min(1, max(0, scroll.visibleRect.minY / height))
