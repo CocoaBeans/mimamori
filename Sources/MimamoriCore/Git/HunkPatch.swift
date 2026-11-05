@@ -63,12 +63,16 @@ public struct HunkPatch: Sendable, Hashable {
         }
 
         let header = Self.header(path: path)
-        let discard = header + Self.range(oldStart: hunk.oldStart, oldCount: hunk.oldCount,
-                                          newStart: hunk.newStart, newCount: hunk.newCount) + body
+        var discard = Data(header)
+        discard.append(contentsOf: Self.range(oldStart: hunk.oldStart, oldCount: hunk.oldCount,
+                                              newStart: hunk.newStart, newCount: hunk.newCount))
+        discard.append(contentsOf: body)
         let restoreStarts = Self.restoreStarts(of: hunk)
-        let restore = header + Self.range(oldStart: restoreStarts.old, oldCount: hunk.oldCount,
-                                          newStart: restoreStarts.new, newCount: hunk.newCount) + body
-        return HunkPatch(discard: Data(discard), restore: Data(restore))
+        var restore = Data(header)
+        restore.append(contentsOf: Self.range(oldStart: restoreStarts.old, oldCount: hunk.oldCount,
+                                              newStart: restoreStarts.new, newCount: hunk.newCount))
+        restore.append(contentsOf: body)
+        return HunkPatch(discard: discard, restore: restore)
     }
 
     /// The file without `hunk`: the working tree's lines, with the hunk's replaced by the
@@ -135,9 +139,19 @@ public struct HunkPatch: Sendable, Hashable {
     private static func header(path: String) -> [UInt8] {
         let old = quoted("a/" + path)
         let new = quoted("b/" + path)
-        return Array("diff --git ".utf8) + old + [space] + new + [newline]
-            + Array("--- ".utf8) + old + [newline]
-            + Array("+++ ".utf8) + new + [newline]
+        // Appended a piece at a time: one long sum of arrays is more than some compilers will type-check.
+        var header: [UInt8] = Array("diff --git ".utf8)
+        header.append(contentsOf: old)
+        header.append(space)
+        header.append(contentsOf: new)
+        header.append(newline)
+        header.append(contentsOf: Array("--- ".utf8))
+        header.append(contentsOf: old)
+        header.append(newline)
+        header.append(contentsOf: Array("+++ ".utf8))
+        header.append(contentsOf: new)
+        header.append(newline)
+        return header
     }
 
     private static func range(oldStart: Int, oldCount: Int, newStart: Int, newCount: Int) -> [UInt8] {

@@ -145,42 +145,22 @@ struct DiscardSheet: View {
 
     private var numberWidth: CGFloat {
         let largest = shown.hunks.map { max($0.oldStart + $0.oldCount, $0.newStart + $0.newCount) }.max() ?? 999
-        return CGFloat(max(3, String(largest).count)) * fontSize * 0.62 + 10
+        let digits = max(3, String(largest).count)
+        return CGFloat(digits) * fontSize * 0.62 + 10
+    }
+
+    /// Read here, so the sheet follows the agents while it is open.
+    private var gate: WriteGate {
+        let presence: AgentPresence? = model.agentHub.presence(for: session.id)
+        return WriteGate(presence)
     }
 
     var body: some View {
-        let gate = WriteGate(model.agentHub.presence(for: session.id))
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "arrow.uturn.backward.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.orange)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(message)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            heading
             preview
             notices(gate)
-            HStack {
-                Spacer()
-                if working {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                Button(failure == nil ? "Cancel" : "Close") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                    .help(failure == nil ? "Keep the change" : "Close; the file is as it was")
-                if failure == nil {
-                    Button(confirmTitle, role: .destructive) { confirm() }
-                        .disabled(working || gate.refusal != nil)
-                        .help(gate.refusal ?? "Put it back as it is in the last commit, after a snapshot")
-                }
-            }
+            buttons(gate)
         }
         .padding(20)
         .frame(width: 620)
@@ -191,6 +171,40 @@ struct DiscardSheet: View {
             guard request.confirmsItself else { return }
             try? await Task.sleep(for: .seconds(2))
             confirm()
+        }
+    }
+
+    private var heading: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "arrow.uturn.backward.circle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(message)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func buttons(_ gate: WriteGate) -> some View {
+        HStack {
+            Spacer()
+            if working {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Button(failure == nil ? "Cancel" : "Close") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+                .help(failure == nil ? "Keep the change" : "Close; the file is as it was")
+            if failure == nil {
+                Button(confirmTitle, role: .destructive) { confirm() }
+                    .disabled(working || gate.refusal != nil)
+                    .help(gate.refusal ?? "Put it back as it is in the last commit, after a snapshot")
+            }
         }
     }
 
@@ -252,23 +266,10 @@ struct DiscardSheet: View {
     private var lines: some View {
         let shown = shown
         let several = shown.hunks.count > 1 || request.scope == .file
+        let width = numberWidth
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(shown.hunks) { hunk in
-                if several {
-                    Text(hunk.header)
-                        .font(.system(size: max(9, fontSize - 1), design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.secondary.opacity(0.05))
-                }
-                ForEach(hunk.lines) { line in
-                    DiffLineRow(line: line, wrap: true, fontSize: fontSize, numberWidth: numberWidth,
-                                syntax: request.decorations.syntax[line.id], emphasis: request.decorations.emphasis[line.id],
-                                isTarget: false)
-                }
+                hunkLines(hunk, withHeader: several, numberWidth: width)
             }
             if shown.hiddenLines > 0 {
                 Text("and \(shown.hiddenLines) more lines")
@@ -279,6 +280,25 @@ struct DiscardSheet: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func hunkLines(_ hunk: DiffHunk, withHeader: Bool, numberWidth: CGFloat) -> some View {
+        if withHeader {
+            Text(hunk.header)
+                .font(.system(size: max(9, fontSize - 1), design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.05))
+        }
+        ForEach(hunk.lines) { line in
+            DiffLineRow(line: line, wrap: true, fontSize: fontSize, numberWidth: numberWidth,
+                        syntax: request.decorations.syntax[line.id], emphasis: request.decorations.emphasis[line.id],
+                        isTarget: false)
+        }
     }
 
     @ViewBuilder
