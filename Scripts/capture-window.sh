@@ -6,7 +6,7 @@
 # allow WindowCapture in System Settings › Privacy & Security › Screen & System Audio Recording,
 # then run the command again.
 #
-# Usage: Scripts/capture-window.sh list
+# Usage: Scripts/capture-window.sh list [--all]
 #        Scripts/capture-window.sh shot --app com.kevinross.Mimamori --out docs/shot.png
 #        Scripts/capture-window.sh record --pid 1234 --out demo.mov --until /tmp/stop --seconds 60
 #
@@ -64,6 +64,6 @@ fi
 
 log=$(mktemp -t window-capture)
 trap 'rm -f "$log"' EXIT
-open -W -n -a "$PWD/$APP" --env WINDOW_CAPTURE_CWD="$PWD" --stdout "$log" --stderr "$log" --args "$@"
+open -g -W -n -a "$PWD/$APP" --env WINDOW_CAPTURE_CWD="$PWD" --stdout "$log" --stderr "$log" --args "$@"
 cat "$log"
 ! grep -q '^error:' "$log"

@@ -3,13 +3,15 @@
 // image, which flattens those. It is an app of its own so that it, and not the terminal or editor
 // that starts it, holds the Screen Recording permission. Run it through Scripts/capture-window.sh.
 //
-//   list                                        windows on screen: id, app, pid, size, title
+//   list [--all]                                windows on screen: id, app, pid, size, title
+//                                               (--all: menus, popovers and the like too, with their layer)
 //   shot   <window> --out <file.png> [--no-shadow]
 //   record <window> --out <file.mov> [--seconds <n>] [--until <file>] [--fps <n>] [--no-shadow]
 //
 // <window> is any of --app <bundle id or name>, --pid <pid>, --title <text>, --window <id>;
-// the largest window that matches is taken. A recording stops after --seconds (default 60) or
-// once the --until file exists, whichever comes first.
+// the largest window that matches is taken. A window named by --window is taken whatever its
+// layer, such as a menu-bar popover. A recording stops after --seconds (default 60) or once the
+// --until file exists, whichever comes first.
 
 import AppKit
 import AVFoundation
@@ -31,6 +33,7 @@ struct Options {
     var seconds: Double = 60
     var until: URL?
     var fps: Int32 = 30
+    var allLayers = false
 
     init(_ arguments: [String]) throws {
         // `open` starts apps in /, so relative paths are taken from where the script was run.
@@ -53,6 +56,7 @@ struct Options {
             case "--seconds": seconds = Double(try value()) ?? seconds
             case "--until": until = url(try value())
             case "--fps": fps = Int32(try value()) ?? fps
+            case "--all": allLayers = true
             default: throw Failure("unknown option \(flag)")
             }
         }
@@ -69,17 +73,20 @@ struct Options {
 }
 
 /// Apps' windows: on screen, from the normal layer up to floating and utility windows (SwiftUI's
-/// floating level is 19; the Dock is 20 and the menu bar above), and more than a sliver.
-func windows() async throws -> [SCWindow] {
+/// floating level is 19; the Dock is 20 and the menu bar above), and more than a sliver. With
+/// `allLayers`, every layer, for a popover or menu.
+func windows(allLayers: Bool = false) async throws -> [SCWindow] {
     let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-    return content.windows.filter { (0...19).contains($0.windowLayer) && $0.frame.width >= 60 && $0.frame.height >= 60 }
+    return content.windows.filter {
+        (allLayers || (0...19).contains($0.windowLayer)) && $0.frame.width >= 60 && $0.frame.height >= 60
+    }
 }
 
 func window(for options: Options) async throws -> SCWindow {
     guard options.app != nil || options.pid != nil || options.title != nil || options.windowID != nil else {
         throw Failure("say which window: --app, --pid, --title or --window (see `list`)")
     }
-    let candidates = try await windows().filter(options.matches)
+    let candidates = try await windows(allLayers: options.allLayers || options.windowID != nil).filter(options.matches)
     guard let window = candidates.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else {
         throw Failure("no window on screen matches; `list` shows them")
     }
@@ -201,10 +208,13 @@ func record(_ options: Options) async throws {
 func run() async throws {
     let options = try Options(Array(CommandLine.arguments.dropFirst()))
     switch options.command {
-    case "list": for window in try await windows() { print(describe(window)) }
+    case "list":
+        for window in try await windows(allLayers: options.allLayers) {
+            print(describe(window) + (options.allLayers ? "\tlayer \(window.windowLayer)" : ""))
+        }
     case "shot": try await shot(options)
     case "record": try await record(options)
-    default: throw Failure("usage: list | shot <window> --out <file.png> | record <window> --out <file.mov>")
+    default: throw Failure("usage: list [--all] | shot <window> --out <file.png> | record <window> --out <file.mov>")
     }
 }
 
