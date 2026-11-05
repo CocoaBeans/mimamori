@@ -1,9 +1,8 @@
 # Plan: an iPhone companion
 
-> **Proposed.** Nothing is built yet. A build of your own that keeps itself running with silent
-> audio needs only the same-network design plus Tailscale; CloudKit and a relay are for an App
-> Store build. Which builds to make, and whether the live view or "needs you" notifications
-> matter more, shape the order of the work (see "To decide first").
+> **Approved, not started.** Builds of your own come first: same network, then the silent-audio
+> keep-alive with "needs you" notifications, then Tailscale. CloudKit and a relay wait for an App
+> Store build. The Mac side stays on macOS 15 with `NWListener` (see "Decided").
 
 ## Goal
 
@@ -33,10 +32,20 @@ Most of the hard work is done, for the desktop widgets:
   whichever is answered first counts. The phone's Allow and Deny would go through the same
   `answerPermission` call. Other agents don't hand Mimamori their permission prompts, so for them
   the phone can only say "needs you".
+- **Answering by itself.** With auto-answer on, Mimamori answers a request after a wait
+  (`PermissionRequest.autoAnswer`). The phone shows the same countdown, and an answer from the
+  phone settles the request the way the Mac's buttons do, which stops the countdown.
 
-What the snapshot lacks is what the Agents window adds to the widget: the turn timeline strip
-(`TurnTimeline`), the files touched this turn with their diff bars, and how much is left to
-review. These become optional fields, so older widgets keep decoding it.
+What the snapshot lacks:
+- **The request to answer.** It has one entry per worktree and a status line, but Allow and Deny
+  need the request's id, the tool and its detail (the exact command or file), and any auto-answer
+  due. Those live in `AgentHub.pendingPermissions`, on the Mac only. They become an optional
+  pending-request field on the agent, sent to the phone only. Not to the widget, which can't
+  answer anyway, and only while "Answer permission requests in Mimamori" is on.
+- **What the Agents window adds to the widget:** the turn timeline strip (`TurnTimeline`), the
+  files touched this turn with their diff bars, and how much is left to review.
+
+All of these are optional fields, so older widgets keep decoding the snapshot.
 
 ## The constraint: an iPhone app in your pocket
 
@@ -51,9 +60,13 @@ So there are two separate jobs:
 ## On the same network
 
 - **Finding the Mac.** Mimamori advertises `_mimamori._tcp` with Bonjour and listens on a port of
-  its own. The phone browses for it, so there is no address to type. Network.framework does both:
-  `NWListener` and `NWBrowser` on macOS 15, or the newer `NetworkListener` and
-  `NetworkConnection` on macOS and iOS 26, which can send `Codable` values directly.
+  its own. The phone browses for it, so there is no address to type. Network.framework does both,
+  with `NWListener` on the Mac and `NWBrowser` and `NWConnection` on the phone. The newer
+  `NetworkListener` and `NetworkConnection` need macOS and iOS 26, and CI's Xcode 16.4 build
+  can't compile them, so they wait until the oldest Xcode CI builds with is 26.
+- **Not adding to the Mac's energy use.** The connection carries what `WidgetPublisher` would
+  write anyway, on the same rules. "Send me a fresh snapshot" answers once with what's current
+  and starts no polling.
 - **What goes over it.**
   - Mac to phone: a snapshot when one is due, as above.
   - Phone to Mac: Allow or Deny for a request id, and "send me a fresh snapshot".
@@ -111,6 +124,9 @@ Porting it needs:
   (guideline 2.5.4). So the audio mode and the keep-alive are built only in a configuration of
   their own, for running from Xcode or for TestFlight's internal testers, who need no beta
   review. An App Store build leaves both out and uses the pushes below.
+- **TestFlight builds expire after 90 days**, so a build of your own installed from TestFlight
+  needs a fresh upload at least that often. One installed from Xcode lasts as long as its
+  provisioning profile.
 - **Battery.** Silence still keeps the audio hardware awake, and the connection keeps the radio
   busy. Measure it during the spike. If it hurts, stop the audio when no agent is working and
   nothing has needed you for a while.
@@ -173,46 +189,62 @@ reach. The companion changes that, so:
   client, and `HookSocketServer`). Rather than gate them, move what the phone needs into a target
   that builds for both: the snapshot model, `AgentKind`'s names and symbols, `RepositoryColor`,
   and the companion's wire messages. MimamoriCore depends on it, so nothing else moves.
+  - It exists twice, like MimamoriCore: a target in `Package.swift`, which adds iOS to its
+    platforms, and a framework target in `Mimamori.xcodeproj` that builds for macOS and iOS. The
+    project's MimamoriCore framework is macOS-only (`SDKROOT = macosx`).
+  - Its tests run with `swift test` on the Mac, like the rest.
 - **WidgetUI on iOS.** A platform image typealias in `RepositoryTag.swift`, and repository icons
   sent once per repository as PNG data rather than in every snapshot.
 - **On the Mac.** A `CompanionPublisher` beside `WidgetPublisher`, fed from
   `AppModel.publishWidgets()`, owning the listener, the pairings and the connections.
 - **On the phone.** An iOS app target in `Mimamori.xcodeproj`: a paired-Macs screen, the agents
   list, an agent's detail with its timeline and files, and Allow and Deny. The keep-alive and
-  its `audio` background mode only in the configuration for builds of your own. Later, an iOS
-  widget from the same views.
+  its `audio` background mode only in the configuration for builds of your own. iOS 18 or later.
+  Later, an iOS widget from the same views.
+- **Signing.** The Mac app needs no provisioning profile, but an iOS app always does: a
+  registered bundle ID and automatic signing with the team. An iOS App Group must start with
+  `group.`, so a later iOS widget can't reuse `AgentWidgetSnapshot.appGroup`, the Mac's
+  team-prefixed one.
+- **CI.** `ci.yml` builds the iOS target for `generic/platform=iOS` without signing, on both
+  Xcodes.
+- **Alongside the 1.2.0 work.** The project, `Package.swift` and CI belong to the T lane, and
+  `AppModel` to the P lane, of the maintainability fixes. The companion keeps to files of its own
+  plus one call from `AppModel.publishWidgets()`, and lands its project and package changes
+  while the T lane has nothing open.
 
 ## Steps
 
 1. **Spike, about an afternoon.** The Mac advertises over Bonjour and streams unencrypted snapshot
    JSON; a bare iPhone app lists agents with the widget's views. This settles:
-   - the shared target, and WidgetUI building for iOS;
+   - the shared target in both the package and the project, and WidgetUI building for iOS;
+   - the iOS target building in CI on both Xcodes, and signing on a phone;
    - the local network prompts on both ends;
    - how quickly changes arrive.
 2. **Same-network companion.**
    - QR pairing and TLS with the pre-shared key; the paired phones list.
-   - The richer snapshot fields; an agent's detail on the phone.
-   - Allow and Deny with Face ID.
+   - The richer snapshot fields, including the request to answer; an agent's detail on the phone.
+   - Allow and Deny with Face ID, and the auto-answer countdown.
    - The Settings tab, Help and README text, and Uninstall.
-3. **Cellular through Tailscale.** "Connect to a host", reconnecting when the network changes, and
-   a clear "can't reach your Mac" state.
-4. **Staying connected, in builds of your own.** Port the silent-audio keep-alive into its own
+3. **Staying connected, in builds of your own.** Port the silent-audio keep-alive into its own
    build configuration, then local notifications with Allow and Deny, then the Live Activity.
    Measure the battery cost over an afternoon of agents.
+4. **Cellular through Tailscale.** "Connect to a host", reconnecting when the network changes, and
+   a clear "can't reach your Mac" state.
 5. **For an App Store build: notifications through CloudKit.** The container and provisioning
    profile, the records and subscription, and notification actions for Allow and Deny.
 6. **Later, if wanted.** The relay for an App Store build's Live Activity, and a Watch app.
 
-## To decide first
+## Decided
 
-- **Which builds.** A build of your own (from Xcode, or TestFlight's internal testers) can keep
-  itself running and needs steps 1–4 only. An App Store build can't, and needs step 5 for
-  notifications. The App Store accepts companion apps that need a Mac app, but wants a privacy
-  policy page (the website can host it) and review of each update. The same code serves both,
-  with the keep-alive in its own build configuration.
-- **Live view or notifications first.** The live view is steps 1–3. If "needs you" notifications
-  matter more, the keep-alive and local notifications (step 4) can come straight after pairing.
-- **Minimum macOS for the companion.** macOS 15 with `NWListener`, or 26 for the newer API.
+On 2026-11-05:
+- **Builds of your own first.** From Xcode, or TestFlight's internal testers: steps 1–4. An App
+  Store build (step 5) can come later from the same code, with the keep-alive left out. It needs a
+  privacy policy page (the website can host it) and review of each update.
+- **Notifications before cellular.** Who needs you while the phone is in your pocket matters more
+  than the live view away from home. So the keep-alive and local notifications come straight after
+  pairing, and Tailscale after them.
+- **macOS 15 with `NWListener`** on the Mac side, so the companion needs nothing newer than
+  Mimamori does, and builds with both of CI's Xcodes.
 
 ## References
 
