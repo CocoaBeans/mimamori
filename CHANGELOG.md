@@ -16,7 +16,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   ([#47](https://github.com/CocoaBeans/mimamori/pull/47)).
 - Cards in the Agents window move to their new place in a brief ease-out rather than a long spring.
   An agent changes place at every turn, and with three agents at work the window and the main
-  window together use about a fifth less CPU.
+  window together use about a fifth less CPU
+  ([#48](https://github.com/CocoaBeans/mimamori/pull/48)).
 
 ### Fixed
 
