@@ -96,5 +96,8 @@ state, never on a loop.
       them up through its hooks ([docs/plans/review-notes.md](docs/plans/review-notes.md)).
 - [ ] Read an agent's transcript while its hooks are silent, opt-in, and give a turn already under
       way at launch its real start ([docs/plans/transcript-adapter.md](docs/plans/transcript-adapter.md)).
+- [ ] A history of agent sessions per worktree: what each was asked, what it changed, its notes
+      and pull request, with a command to resume it or a prompt to hand it on
+      ([docs/plans/session-history.md](docs/plans/session-history.md)).
 
 - Paid "supporter" build or team features, if there is demand after release.
