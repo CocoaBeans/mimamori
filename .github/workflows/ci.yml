@@ -102,6 +102,14 @@ jobs:
       - name: Build app (Xcode project, ad hoc signed)
         run: MIMAMORI_SIGN=adhoc Scripts/make-app.sh release
 
+      # The iPhone companion, unsigned: an iOS app always needs a provisioning profile, which CI
+      # doesn't have.
+      - name: Build iPhone companion (unsigned)
+        run: |
+          xcodebuild -project Mimamori.xcodeproj -scheme MimamoriCompanion -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/companion" \
+            CODE_SIGNING_ALLOWED=NO -quiet build
+
       # Only the app built with the release Xcode is kept.
       - name: Zip app
         if: matrix.upload

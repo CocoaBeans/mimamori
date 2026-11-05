@@ -10,6 +10,8 @@ enum Log {
     /// Placing agents' events in worktrees.
     static let agents = Logger(subsystem: subsystem, category: "agents")
     static let widgets = Logger(subsystem: subsystem, category: "widgets")
+    /// The iPhone companion's listener and connections.
+    static let companion = Logger(subsystem: subsystem, category: "companion")
     /// Saving and loading Mimamori's own state.
     static let state = Logger(subsystem: subsystem, category: "state")
 }

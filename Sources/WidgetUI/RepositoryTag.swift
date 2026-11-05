@@ -1,5 +1,5 @@
 import SwiftUI
-import MimamoriCore
+import MimamoriShared
 
 extension RepositoryColor {
     /// The system color it names, which adapts to light and dark.
@@ -24,22 +24,38 @@ extension RepositoryColor {
     var muted: Color { color.mix(with: .gray, by: 0.45) }
 }
 
+#if os(macOS)
+typealias PlatformImage = NSImage
+#else
+typealias PlatformImage = UIImage
+#endif
+
+extension Image {
+    init(platformImage: PlatformImage) {
+        #if os(macOS)
+        self.init(nsImage: platformImage)
+        #else
+        self.init(uiImage: platformImage)
+        #endif
+    }
+}
+
 extension EnvironmentValues {
     /// Inside Mimamori, each worktree's repository icon, by worktree path. The widgets have none
     /// and show the repository's color alone.
-    @Entry var repositoryIcons: [String: NSImage] = [:]
+    @Entry var repositoryIcons: [String: PlatformImage] = [:]
 }
 
 /// The repository on an agent's row: its icon or a dot of its color, then its name, on a plain tag.
 struct RepositoryTag: View {
     let name: String
     let color: RepositoryColor?
-    var icon: NSImage?
+    var icon: PlatformImage?
 
     var body: some View {
         HStack(spacing: 3) {
             if let icon {
-                Image(nsImage: icon)
+                Image(platformImage: icon)
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)

@@ -374,6 +374,7 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `discard:<n>` or `discard:file` | Ask to discard hunk n, or the whole file, of the selected file, as their buttons do (with discarding on in Settings); add `:confirm` to go ahead 2 s later |
 | `discard-undo` | Press Undo once, 3 s after a discard |
 | `about` | Open the About window |
+| `companion` | Advertise Mimamori over Bonjour and stream the agents to the iPhone companion, unencrypted and unpaired, as step 1 of [its plan](docs/plans/iphone-companion.md) does. macOS asks for local network access the first time |
 | `permission:allow` | Answer a waiting permission request once it has waited 5 s, as Allow does (`permission:deny` for Deny) |
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
 | `sidebar:show` | Unfold the main window's sidebar at its usual width; the window remembers it folded across launches |

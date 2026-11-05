@@ -27,6 +27,8 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=discard:2            ask to discard hunk 2 of the selected file (discard:file: the whole
 ///                                               file; add :confirm to go ahead 2 s later); discard-undo presses Undo once
 ///     MIMAMORI_DEBUG_FLAGS=about                open the About window
+///     MIMAMORI_DEBUG_FLAGS=companion            advertise over Bonjour and stream the agents to the iPhone companion,
+///                                               unencrypted and unpaired (docs/plans/iphone-companion.md, step 1)
 ///     MIMAMORI_DEBUG_FLAGS=permission:allow     answer a permission request once it has waited 5 s (or permission:deny)
 ///     MIMAMORI_DEBUG_FLAGS=hook-test            send a test event through the hook command once (result in the dump,
 ///                                               Copy Diagnostics' report in <dump>.diagnostics.txt)

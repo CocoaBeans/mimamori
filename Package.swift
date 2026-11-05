@@ -3,15 +3,20 @@ import PackageDescription
 
 let package = Package(
     name: "Mimamori",
-    platforms: [.macOS(.v15)],
+    // iOS only for MimamoriShared, which the iPhone companion (built from Mimamori.xcodeproj) uses.
+    platforms: [.macOS(.v15), .iOS(.v18)],
     products: [
         .executable(name: "Mimamori", targets: ["Mimamori"]),
         .library(name: "MimamoriCore", targets: ["MimamoriCore"]),
     ],
     targets: [
+        // What the Mac and the iPhone companion share: the agents snapshot, repository colors and
+        // the companion's messages. Foundation only, so it builds for both.
+        .target(name: "MimamoriShared"),
+
         // Everything that knows about git, the file system and change analysis.
         // No SwiftUI in here, so it can be tested quickly from the command line.
-        .target(name: "MimamoriCore"),
+        .target(name: "MimamoriCore", dependencies: ["MimamoriShared"]),
 
         // The macOS app: SwiftUI shell over MimamoriCore. Mimamori.xcodeproj builds the shipped,
         // signed app from the same sources; this target is for `swift run` and the debug hooks.

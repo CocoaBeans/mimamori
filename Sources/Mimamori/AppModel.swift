@@ -115,6 +115,10 @@ final class AppModel {
     /// Repositories offered since launch, so each is offered once.
     @ObservationIgnored var offeredRepositories: Set<String> = []
     @ObservationIgnored private let widgets = WidgetPublisher()
+    #if DEBUG
+    /// The iPhone companion, with MIMAMORI_DEBUG_FLAGS=companion.
+    @ObservationIgnored private var companion: CompanionPublisher?
+    #endif
     @ObservationIgnored private var quitObserver: NSObjectProtocol?
 
     init() {
@@ -164,6 +168,10 @@ final class AppModel {
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
         }
         #if DEBUG
+        if debugFlags.contains("companion") {
+            companion = CompanionPublisher()
+            companion?.start()
+        }
         DebugHooks.start(model: self)
         #endif
         // Review marks and other edits are saved after a short delay; do not lose them on quit.
@@ -725,7 +733,11 @@ final class AppModel {
 
     /// Hands the widgets the agents as the Agents window lists them.
     func publishWidgets() {
-        widgets.update(widgetAgents())
+        let agents = widgetAgents()
+        widgets.update(agents)
+        #if DEBUG
+        companion?.update(agents)
+        #endif
     }
 
     /// The agents as the widgets draw them. `details` adds each one's task and latest steps;

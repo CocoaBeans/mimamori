@@ -12,6 +12,9 @@
 		7A1C00000000000000000103 /* MimamoriCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000002 /* MimamoriCore.framework */; };
 		7A1C00000000000000000104 /* MimamoriWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000003 /* MimamoriWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7A1C00000000000000000105 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1C00000000000000000D01 /* Sparkle */; };
+		7A1C00000000000000000106 /* MimamoriShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000004 /* MimamoriShared.framework */; };
+		7A1C00000000000000000107 /* MimamoriShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000004 /* MimamoriShared.framework */; };
+		7A1C00000000000000000108 /* MimamoriShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1C00000000000000000004 /* MimamoriShared.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +38,34 @@
 			proxyType = 1;
 			remoteGlobalIDString = 7A1C00000000000000000603;
 			remoteInfo = MimamoriWidgets;
+		};
+		7A1C00000000000000000204 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A1C00000000000000000901 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A1C00000000000000000604;
+			remoteInfo = MimamoriShared;
+		};
+		7A1C00000000000000000205 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A1C00000000000000000901 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A1C00000000000000000604;
+			remoteInfo = MimamoriShared;
+		};
+		7A1C00000000000000000206 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A1C00000000000000000901 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A1C00000000000000000604;
+			remoteInfo = MimamoriShared;
+		};
+		7A1C00000000000000000207 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A1C00000000000000000901 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A1C00000000000000000604;
+			remoteInfo = MimamoriShared;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -62,6 +93,9 @@
 		7A1C00000000000000000014 /* Mimamori.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mimamori.entitlements; sourceTree = "<group>"; };
 		7A1C00000000000000000015 /* MimamoriWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MimamoriWidgets.entitlements; sourceTree = "<group>"; };
 		7A1C00000000000000000016 /* MimamoriWidgets-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MimamoriWidgets-Info.plist"; sourceTree = "<group>"; };
+		7A1C00000000000000000004 /* MimamoriShared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MimamoriShared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1C00000000000000000005 /* MimamoriCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MimamoriCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1C00000000000000000017 /* MimamoriCompanion-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MimamoriCompanion-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,6 +119,16 @@
 			path = Sources/WidgetUI;
 			sourceTree = "<group>";
 		};
+		7A1C00000000000000000305 /* MimamoriShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Sources/MimamoriShared;
+			sourceTree = "<group>";
+		};
+		7A1C00000000000000000306 /* MimamoriCompanion */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Sources/MimamoriCompanion;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +137,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7A1C00000000000000000101 /* MimamoriCore.framework in Frameworks */,
+				7A1C00000000000000000106 /* MimamoriShared.framework in Frameworks */,
 				7A1C00000000000000000105 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -109,6 +154,22 @@
 			buildActionMask = 2147483647;
 			files = (
 				7A1C00000000000000000103 /* MimamoriCore.framework in Frameworks */,
+				7A1C00000000000000000107 /* MimamoriShared.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1C00000000000000000404 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1C00000000000000000406 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A1C00000000000000000108 /* MimamoriShared.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -122,6 +183,8 @@
 				7A1C00000000000000000302 /* MimamoriCore */,
 				7A1C00000000000000000303 /* MimamoriWidgets */,
 				7A1C00000000000000000304 /* WidgetUI */,
+				7A1C00000000000000000305 /* MimamoriShared */,
+				7A1C00000000000000000306 /* MimamoriCompanion */,
 				7A1C00000000000000000502 /* Resources */,
 				7A1C00000000000000000013 /* Package.swift */,
 				7A1C00000000000000000503 /* Products */,
@@ -134,6 +197,7 @@
 				7A1C00000000000000000011 /* AppIcon.icns */,
 				7A1C00000000000000000012 /* Info.plist */,
 				7A1C00000000000000000014 /* Mimamori.entitlements */,
+				7A1C00000000000000000017 /* MimamoriCompanion-Info.plist */,
 				7A1C00000000000000000016 /* MimamoriWidgets-Info.plist */,
 				7A1C00000000000000000015 /* MimamoriWidgets.entitlements */,
 			);
@@ -146,6 +210,8 @@
 				7A1C00000000000000000001 /* Mimamori.app */,
 				7A1C00000000000000000002 /* MimamoriCore.framework */,
 				7A1C00000000000000000003 /* MimamoriWidgets.appex */,
+				7A1C00000000000000000004 /* MimamoriShared.framework */,
+				7A1C00000000000000000005 /* MimamoriCompanion.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -167,6 +233,7 @@
 			dependencies = (
 				7A1C00000000000000000B01 /* PBXTargetDependency */,
 				7A1C00000000000000000B03 /* PBXTargetDependency */,
+				7A1C00000000000000000B05 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7A1C00000000000000000301 /* Mimamori */,
@@ -191,6 +258,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				7A1C00000000000000000B04 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7A1C00000000000000000302 /* MimamoriCore */,
@@ -214,6 +282,7 @@
 			);
 			dependencies = (
 				7A1C00000000000000000B02 /* PBXTargetDependency */,
+				7A1C00000000000000000B06 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7A1C00000000000000000303 /* MimamoriWidgets */,
@@ -225,6 +294,52 @@
 			productName = MimamoriWidgets;
 			productReference = 7A1C00000000000000000003 /* MimamoriWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		7A1C00000000000000000604 /* MimamoriShared */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A1C00000000000000000A05 /* Build configuration list for PBXNativeTarget "MimamoriShared" */;
+			buildPhases = (
+				7A1C00000000000000000704 /* Sources */,
+				7A1C00000000000000000404 /* Frameworks */,
+				7A1C00000000000000000804 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7A1C00000000000000000305 /* MimamoriShared */,
+			);
+			name = MimamoriShared;
+			packageProductDependencies = (
+			);
+			productName = MimamoriShared;
+			productReference = 7A1C00000000000000000004 /* MimamoriShared.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+		7A1C00000000000000000605 /* MimamoriCompanion */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A1C00000000000000000A06 /* Build configuration list for PBXNativeTarget "MimamoriCompanion" */;
+			buildPhases = (
+				7A1C00000000000000000705 /* Sources */,
+				7A1C00000000000000000406 /* Frameworks */,
+				7A1C00000000000000000805 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7A1C00000000000000000B07 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7A1C00000000000000000306 /* MimamoriCompanion */,
+				7A1C00000000000000000304 /* WidgetUI */,
+			);
+			name = MimamoriCompanion;
+			packageProductDependencies = (
+			);
+			productName = MimamoriCompanion;
+			productReference = 7A1C00000000000000000005 /* MimamoriCompanion.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -243,6 +358,12 @@
 						CreatedOnToolsVersion = 26.5;
 					};
 					7A1C00000000000000000603 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					7A1C00000000000000000604 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					7A1C00000000000000000605 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -267,6 +388,8 @@
 				7A1C00000000000000000601 /* Mimamori */,
 				7A1C00000000000000000602 /* MimamoriCore */,
 				7A1C00000000000000000603 /* MimamoriWidgets */,
+				7A1C00000000000000000604 /* MimamoriShared */,
+				7A1C00000000000000000605 /* MimamoriCompanion */,
 			);
 		};
 /* End PBXProject section */
@@ -288,6 +411,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7A1C00000000000000000803 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1C00000000000000000804 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1C00000000000000000805 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -318,6 +455,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A1C00000000000000000704 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1C00000000000000000705 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -335,6 +486,26 @@
 			isa = PBXTargetDependency;
 			target = 7A1C00000000000000000603 /* MimamoriWidgets */;
 			targetProxy = 7A1C00000000000000000203 /* PBXContainerItemProxy */;
+		};
+		7A1C00000000000000000B04 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A1C00000000000000000604 /* MimamoriShared */;
+			targetProxy = 7A1C00000000000000000204 /* PBXContainerItemProxy */;
+		};
+		7A1C00000000000000000B05 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A1C00000000000000000604 /* MimamoriShared */;
+			targetProxy = 7A1C00000000000000000205 /* PBXContainerItemProxy */;
+		};
+		7A1C00000000000000000B06 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A1C00000000000000000604 /* MimamoriShared */;
+			targetProxy = 7A1C00000000000000000206 /* PBXContainerItemProxy */;
+		};
+		7A1C00000000000000000B07 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A1C00000000000000000604 /* MimamoriShared */;
+			targetProxy = 7A1C00000000000000000207 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -484,6 +655,88 @@
 			};
 			name = Release;
 		};
+		7A1C00000000000000000C41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACH_O_TYPE = staticlib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Shared;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7A1C00000000000000000C42 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACH_O_TYPE = staticlib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Shared;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		7A1C00000000000000000C51 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Resources/MimamoriCompanion-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Mimamori;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Mimamori finds the Macs running Mimamori on your network, to show their agents.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Companion;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		7A1C00000000000000000C52 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Resources/MimamoriCompanion-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Mimamori;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Mimamori finds the Macs running Mimamori on your network, to show their agents.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Companion;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -519,6 +772,24 @@
 			buildConfigurations = (
 				7A1C00000000000000000C31 /* Debug */,
 				7A1C00000000000000000C32 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A1C00000000000000000A05 /* Build configuration list for PBXNativeTarget "MimamoriShared" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A1C00000000000000000C41 /* Debug */,
+				7A1C00000000000000000C42 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A1C00000000000000000A06 /* Build configuration list for PBXNativeTarget "MimamoriCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A1C00000000000000000C51 /* Debug */,
+				7A1C00000000000000000C52 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

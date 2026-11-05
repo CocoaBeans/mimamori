@@ -32,6 +32,8 @@ ID, if you like), and keep them out of your pull request:
 
 - **Keep `MimamoriCore` free of UI.** Git, file watching, diffing, rules and agent events live there,
   where `swift test` exercises them quickly. Views live in `Sources/Mimamori` and `Sources/WidgetUI`.
+- **Keep `MimamoriShared` to Foundation.** It holds what the Mac and the iPhone companion
+  (`Sources/MimamoriCompanion`) both use, and builds for macOS and iOS. `MimamoriCore` re-exports it.
 - **Add a test** when you touch a parser, a rule, the agent status machine or anything else in
   `MimamoriCore`. The tests use Swift Testing; some run real `git` in temporary repositories.
 - **Run `swift test`** before opening a pull request, and build the app once

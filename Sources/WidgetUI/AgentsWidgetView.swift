@@ -1,5 +1,5 @@
 import SwiftUI
-import MimamoriCore
+import MimamoriShared
 import WidgetKit
 
 // The Agents widget's views. Compiled into the widget extension and into the app, which draws

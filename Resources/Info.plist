@@ -56,6 +56,12 @@
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_mimamori._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Mimamori shows your agents on your iPhone, which finds this Mac on the local network.</string>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>Mimamori watches the repositories you add and reads their files to show what changed. One of them is on your Desktop.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
