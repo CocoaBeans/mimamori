@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mimamori · keeps watch over your worktrees</title>
-<meta name="description" content="A lightweight mac app that keeps watch over git worktrees while coding agents work. Free, open source and read-only.">
+<meta name="description" content="A lightweight mac app that keeps watch over git worktrees while coding agents work. Free, open source and read-only by default.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0e1124" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f6efe1" media="(prefers-color-scheme: light)">
@@ -322,10 +322,10 @@
 
   <section id="privacy">
     <div class="wrap">
-      <h2>Read-only, and private</h2>
+      <h2>Read-only by default, and private</h2>
       <p class="lede">Mimamori can watch any repository while another tool is busy in it, because it never gets in the way.</p>
       <ul class="checks">
-        <li><strong>Never touches your work.</strong> It never stages, commits, checks out or takes the repository's <code>index.lock</code>. Your code, branches and index stay as they are.</li>
+        <li><strong>Leaves your work alone.</strong> It never stages, commits, checks out or takes the repository's <code>index.lock</code>. Your branches and index stay as they are, and so does your code, unless you turn on discarding a hunk or a file.</li>
         <li><strong>Talks to nothing but your local git.</strong> No account and no telemetry. Agents reach it through a socket only your own processes can use.</li>
         <li><strong>Automatic updates.</strong> Official release builds ask GitHub for the list of releases when you check for updates, or once a day if you agree. Nothing about you or your Mac goes with it.</li>
         <li><strong>Open source.</strong> MIT licensed, so you can read every line or build it yourself.</li>

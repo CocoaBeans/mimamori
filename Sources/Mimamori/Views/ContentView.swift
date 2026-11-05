@@ -83,6 +83,7 @@ struct ContentView: View {
         if let session = model.selectedSession {
             VStack(spacing: 0) {
                 AgentBannerSlot(worktree: session.id)
+                DiscardUndoBar(session: session)
                 if model.showCommits {
                     commitDetail(session)
                 } else if let path = session.selectedPath, let change = session.change(for: path) {
@@ -92,6 +93,12 @@ struct ContentView: View {
                                            description: Text("Pick a changed file to read its diff."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            }
+            // Asked for from the diff or the file list; here, so a discarded file leaving the list
+            // doesn't take the sheet with it.
+            .sheet(item: Binding(get: { session.discardRequest }, set: { session.discardRequest = $0 })) { request in
+                DiscardSheet(session: session, request: request, fontSize: model.settings.diffFontSize)
+                    .environment(model)
             }
         } else {
             Color.clear

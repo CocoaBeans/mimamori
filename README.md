@@ -9,7 +9,7 @@
 
 A lightweight mac app that keeps watch over git worktrees while coding agents work. It sits beside Claude Code, Codex, Aider, Cursor or whatever you run, and answers two questions at a glance: **what is it doing right now**, and **should I be worried**.
 
-Mimamori is strictly read-only. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
+Mimamori is read-only unless you turn on its one escape hatch, discarding a hunk or a file. It never stages, commits, checks out, or takes the repository's `index.lock`, so it can watch any repository while another tool is busy in it.
 
 ![Mimamori as three agents start work in a web shop's worktrees: Claude Code's edits appear in the change list and the diff, the activity feed fills, the sidebar shows each repository under its own icon with each worktree's agent, and the toolbar pill turns to Codex needs you](docs/mimamori-demo.gif)
 
@@ -52,12 +52,16 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - A note quotes its lines and follows them as the file changes. When they are gone it moves above the diff, marked as changed, with the lines it was written on.
   - The header's bubble menu copies this file's notes, or every unsent note in the worktree, as one prompt to paste where you talk to the agent: a block per note with its file, lines, code and your words. Copied notes say when; edit one and it counts as unsent again.
   - The file list and the sidebar count notes not sent yet. Resolve a note once the agent has dealt with it; resolved notes fold to a line and are forgotten after a week. Notes are saved with the worktree's review marks.
+- **Throws a change away, if you let it.** Off until you turn it on in Settings › General › Working tree. In an *Uncommitted* diff, **Discard…** on a hunk's header (or **Discard This Hunk…** in a line number's context menu) puts that hunk's lines back as they are in HEAD. **Discard File…** in the diff's header (or **Discard Changes…** in the file list's context menu) does it for the whole file: a changed file gets HEAD's bytes and mode back, a new file moves to the Trash, and a deleted file comes back.
+  - A confirmation shows what goes. It is refused while an agent is in the middle of a turn in that worktree, and warns when one is between turns, or is seen only as a running process.
+  - Mimamori checks that the file on disk is byte for byte the version the diff was made from and that HEAD still has the other side, and for a hunk that `git apply --check -R` takes it out cleanly. Then it records a snapshot, even with automatic snapshots off, and writes that one file.
+  - **Undo** in a bar above the diff puts it back, the activity feed records both, and the snapshot stays as a last resort. Staged changes stay staged, and the index is never touched. Renamed files, and files git's line-ending or filter settings change on the way in or out, are left to you.
 - **Writes up a session.** ⇧⌘E (or the document button by the filter) opens a Markdown summary of a worktree's session in a window of its own, one per worktree, to move and resize beside your work.
   - It covers what changed, what needs attention and why, what you have reviewed, the commits since the baseline, and what the agent did, with diffs if you want them.
   - It gathers itself again a couple of seconds after the worktree changes. With diffs included, it says it is out of date and waits for Refresh instead, since every diff is read again.
   - Preview it, then copy it into a pull request description or save it as a handoff note.
 - **Records snapshots.** When the tree changes, Mimamori writes a commit object of the whole working tree (untracked files included) under `refs/monitor/<worktree-id>/`. Branches, the index and the working tree are untouched. Snapshots keep the Start marker alive across restarts and let you compare against any earlier moment.
-- **Keeps an activity feed.** Created, modified, deleted and reverted files, commits, branch switches, new flags and agent work, newest first, for one worktree or all of them. Click an entry to jump to the file. The feed is saved to disk and kept for a week by default (Settings › General), so it and session summaries survive a restart. It lists the newest 400 entries, with **Show Earlier Activity** for the rest, so a week of history costs nothing while agents work. Its filter menu shows agents only (their events and the changes traced to them) or hides agents' own events.
+- **Keeps an activity feed.** Created, modified, deleted and reverted files, discards, commits, branch switches, new flags and agent work, newest first, for one worktree or all of them. Click an entry to jump to the file. The feed is saved to disk and kept for a week by default (Settings › General), so it and session summaries survive a restart. It lists the newest 400 entries, with **Show Earlier Activity** for the rest, so a week of history costs nothing while agents work. Its filter menu shows agents only (their events and the changes traced to them) or hides agents' own events.
 - **Knows where the agents are.**
   - Mimamori scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in.
   - With hooks connected (one reversible click for Claude Code and Hermes, a setup to paste for Codex, Gemini CLI, Cursor or any agent that can run a command), it knows exactly what each agent is doing: when a turn starts and ends, each tool call, and when it needs your permission or asks you a question. A finished turn reads as ready for your next prompt and does not count as needing you.
@@ -122,6 +126,7 @@ This creates a throwaway repository, prints its path, and then edits, adds, dele
 - **MimamoriCore** (`Sources/MimamoriCore`) is a UI-free library: a typed git client, parsers for `status --porcelain=v2`, `diff --raw`, `--numstat` and unified patches, an FSEvents wrapper, the attention heuristics, an intraline diff, the activity differ, and the `WorktreeInspector` actor. The SwiftUI app in `Sources/Mimamori` is a thin shell over it.
 - **Shadow index.** Each worktree gets a private git index file in `~/Library/Application Support/Mimamori/index/`. Every refresh runs `git add -A` against that file (with `GIT_INDEX_FILE`), which mirrors the working tree, honours ignore rules, and never touches the repository's own index. `git diff --cached <baseline>` against the shadow index then yields a complete, rename-aware diff that includes untracked files. Untracked files above a size limit are skipped and listed in the header.
 - **No lock contention.** Every git invocation runs with `--no-optional-locks`, so `git status` from Mimamori never writes the repository index and never races an agent for `index.lock`.
+- **Discarding** is the one write to a working tree, and only on your word. A hunk's patch is built from the two blobs its diff compared, not from the diff's text, so carriage returns, a missing final newline and text that is not UTF-8 come through intact, and the parsed hunk must match the blobs line for line. Mimamori splices the hunk's lines into the file itself rather than letting `git apply` write it, since git's line-ending and filter settings could rewrite the whole file; a file those settings change is refused instead. `git apply --check -R` against the working tree (never the index, with `apply.whitespace` and `apply.ignoreWhitespace` pinned) has the last word before the write. A whole file gets HEAD's blob as git would write it. Undo writes the earlier bytes back when the file is as the discard left it, and otherwise uses `git apply` to fit a hunk back where its surroundings still match.
 - **Snapshots** are `commit-tree` objects (parent: current HEAD) referenced from `refs/monitor/<id>/snapshots/<unix-ms>`, plus `refs/monitor/<id>/start` for the Start marker. They show up in `git log --all`, never in `git branch`, and are not pushed by a normal `git push`. Remove them from Settings, or by hand:
 
   ```bash
@@ -277,6 +282,7 @@ Mimamori talks to nothing but your local `git`, and a Unix-domain socket that on
 
 - `~/Library/Application Support/Mimamori/`: settings, the list of watched repositories, review marks, the shadow index files, and `activity.jsonl`, the activity feed (one JSON entry per line, kept for the number of days you choose).
 - `refs/monitor/…` inside watched repositories, for snapshots (see above).
+- Your working tree only when you discard a hunk or a file, which is off until you turn it on: that one file, after a snapshot. A new file you discard goes to the Trash. Never the index.
 - `~/.claude/settings.json`, only when you connect Claude Code (Install Hooks, or Connect in the welcome window) or a newer Mimamori adds events to hooks you installed, with a backup beside it. For Hermes, `~/.hermes/agent-hooks/mimamori.sh` and a marked block in `~/.hermes/config.yaml`, likewise backed up. Mimamori keeps its newest five backups of each file; Settings › Agents › Hooks shows them.
 - In release builds, Sparkle's settings (when it last checked, and whether to check by itself) in Mimamori's preferences, and a downloaded update in `~/Library/Caches/com.kevinross.Mimamori/` until it is installed.
 
@@ -364,6 +370,8 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `sidebar` | Render the sidebar rows that have agents or changes |
 | `diff-line:<n>` | Scroll the selected file's diff to new-file line n |
 | `note-line:<n>` or `note-line:<n>-<m>` | Start a note on new-file lines n to m of the selected file, as their bubbles do |
+| `discard:<n>` or `discard:file` | Ask to discard hunk n, or the whole file, of the selected file, as their buttons do (with discarding on in Settings); add `:confirm` to go ahead 2 s later |
+| `discard-undo` | Press Undo once, 3 s after a discard |
 | `about` | Open the About window |
 | `permission:allow` | Answer a waiting permission request once it has waited 5 s, as Allow does (`permission:deny` for Deny) |
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
@@ -391,7 +399,6 @@ Example: `open --env MIMAMORI_SCREENSHOT=/tmp/mimamori.png build/Mimamori.app`
 
 - A read-only transcript adapter for agents without hooks installed.
 - A timeline scrubber across snapshots.
-- A gated "discard this hunk" escape hatch.
 
 ## Contributing
 

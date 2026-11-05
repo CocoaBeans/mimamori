@@ -45,6 +45,15 @@ final class WorktreeSession: Identifiable {
     private(set) var reviews: ReviewLedger
     private(set) var notes: ReviewNotes
     var selectedPath: String?
+    /// Hunks and files thrown away here, newest first, each with what it takes to put it back. Kept in
+    /// memory only; the snapshot taken before each one stays across restarts.
+    private(set) var discards: [DiscardedChange] = []
+    /// Why putting the latest one back failed.
+    private(set) var restoreError: String?
+    /// A discard or a restore is writing to the working tree; refreshes wait for it.
+    private(set) var isWriting = false
+    /// The discard waiting for your word, from the diff or the file list.
+    var discardRequest: DiscardRequest?
 
     /// The branch's commits, read when the Commits list first shows and kept current after.
     private(set) var history: CommitHistory?
@@ -82,6 +91,11 @@ final class WorktreeSession: Identifiable {
     private var pollTask: Task<Void, Never>?
     private var lastSnapshotAt: Date?
     private var stopped = false
+    /// Files Mimamori itself just wrote, by when: the file event that follows already has an entry.
+    @ObservationIgnored private var ownWrites: [String: Date] = [:]
+    /// A file put back by Undo, to select once it is listed again, as it was before its discard.
+    @ObservationIgnored private var reselectPath: String?
+    private static let discardLimit = 20
 
     init(info: WorktreeInfo, repositoryID: UUID, settings: AppSettings, persisted: PersistedWorktreeSettings,
          onActivity: @escaping @MainActor ([ActivityEntry]) -> Void,
@@ -231,6 +245,8 @@ final class WorktreeSession: Identifiable {
         if previous.backstopPollSeconds != settings.backstopPollSeconds {
             startSafetyPolling()
         }
+        // Off means Mimamori writes nothing, Undo included.
+        if previous.allowsDiscardingChanges, !settings.allowsDiscardingChanges { forgetDiscards() }
     }
 
     func setBaseline(_ baseline: Baseline) {
@@ -388,10 +404,11 @@ final class WorktreeSession: Identifiable {
     }
 
     private func runRefreshLoop() async {
-        guard !isRefreshing else { return }
+        // A write under way asks for a refresh once it is done.
+        guard !isRefreshing, !isWriting else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        while needsRefresh, !stopped {
+        while needsRefresh, !stopped, !isWriting {
             needsRefresh = false
             firstPendingAt = nil
             let paths = pendingPaths
@@ -472,8 +489,16 @@ final class WorktreeSession: Identifiable {
 
         let now = Date()
         var events = incoming
+        if !ownWrites.isEmpty { ownWrites = ownWrites.filter { now.timeIntervalSince($0.value) < 10 } }
+        var ownEvents = Set<Int>()
         for index in events.indices {
             guard let path = events[index].path else { continue }
+            // A discard in Mimamori has its own entry, and no agent made it.
+            if events[index].kind.isFileChange, ownWrites.removeValue(forKey: path) != nil {
+                lastChanged[path] = now
+                ownEvents.insert(index)
+                continue
+            }
             switch events[index].kind {
             case .created, .modified, .deleted, .renamed:
                 lastChanged[path] = now
@@ -490,6 +515,7 @@ final class WorktreeSession: Identifiable {
             default: break
             }
         }
+        if !ownEvents.isEmpty { events = events.indices.filter { !ownEvents.contains($0) }.map { events[$0] } }
         let kept = attributions.filter { byPath[$0.key] != nil }
         if kept.count != attributions.count { attributions = kept }
         // An unavailable baseline lists nothing, which says nothing about what is still changed.
@@ -506,6 +532,10 @@ final class WorktreeSession: Identifiable {
         }
         if let selectedPath, byPath[selectedPath] == nil {
             self.selectedPath = nil
+        }
+        if let reselectPath, byPath[reselectPath] != nil {
+            if selectedPath == nil { selectedPath = reselectPath }
+            self.reselectPath = nil
         }
         if !events.isEmpty {
             lastActivityDate = now
@@ -579,6 +609,96 @@ final class WorktreeSession: Identifiable {
         snapshots = []
         if case .snapshot = baseline { setBaseline(.head) }
         if baseline == .start { setBaseline(.head) }
+    }
+
+    // MARK: Discarding changes
+
+    /// Whether this worktree offers Discard for hunks and files: when it is on in Settings, for
+    /// uncommitted work compared with HEAD, and not in the middle of a merge, rebase or the like.
+    var offersDiscarding: Bool {
+        guard settings.allowsDiscardingChanges, baseline == .head, let state else { return false }
+        return state.baseline.baseline == .head && state.baseline.isAvailable && state.operation == nil
+    }
+
+    /// Throws away one hunk of `change`, the version of the file its diff was made from, after a
+    /// snapshot. Agents are the caller's to check (`WriteGate`).
+    func discard(_ hunk: DiffHunk, of change: FileChange) async throws {
+        let inspector = try discardingInspector()
+        defer { requestRefresh(force: true) }
+        let discarded = try await writing { try await inspector.discard(hunk, of: change) }
+        // Where the hunk's first changed line was, not its context.
+        let first = hunk.lines.first { $0.kind == .addition || $0.kind == .deletion }
+        let line = first?.newNumber ?? first?.oldNumber ?? hunk.newStart
+        recordDiscard(discarded, detail: "hunk at line \(line) discarded · snapshot taken first")
+    }
+
+    /// Puts all of `change` back as HEAD has it, after a snapshot: a new file goes to the Trash,
+    /// a deleted one comes back. Agents are the caller's to check (`WriteGate`).
+    func discardFile(_ change: FileChange) async throws {
+        let inspector = try discardingInspector()
+        defer { requestRefresh(force: true) }
+        let discarded = try await writing { try await inspector.discardFile(change) }
+        let detail = switch change.kind {
+        case .added: "new file moved to the Trash · snapshot taken first"
+        case .deleted: "deleted file brought back · snapshot taken first"
+        default: "all changes discarded · snapshot taken first"
+        }
+        recordDiscard(discarded, detail: detail)
+    }
+
+    /// Puts the latest discard back, after a snapshot.
+    func restoreLatestDiscard() async {
+        guard let latest = discards.first, let inspector, !isWriting else { return }
+        defer { requestRefresh(force: true) }
+        do {
+            let restored = try await writing { try await inspector.restore(latest) }
+            recordWrite(of: latest.path, snapshot: restored.snapshot)
+            discards.removeAll { $0.id == latest.id }
+            reselectPath = latest.path
+            restoreError = nil
+            let what = if case .hunk = latest.scope { "discarded hunk" } else { "discarded file" }
+            onActivity([ActivityEntry(worktreePath: id, kind: .discarded, path: latest.path, title: latest.path,
+                                      detail: restored.exact ? "\(what) put back" : "\(what) put back where its lines still fit")])
+        } catch {
+            restoreError = error.localizedDescription
+        }
+    }
+
+    private func discardingInspector() throws -> WorktreeInspector {
+        guard offersDiscarding, let inspector else {
+            throw HunkDiscardError.unsupported("Changes can be discarded only from Uncommitted, with discarding on in Settings.")
+        }
+        guard !isWriting else { throw HunkDiscardError.unsupported("Another discard or Undo is under way. Try again in a moment.") }
+        return inspector
+    }
+
+    private func recordDiscard(_ discarded: DiscardedChange, detail: String) {
+        recordWrite(of: discarded.path, snapshot: discarded.snapshot)
+        discards.insert(discarded, at: 0)
+        if discards.count > Self.discardLimit { discards.removeLast(discards.count - Self.discardLimit) }
+        restoreError = nil
+        onActivity([ActivityEntry(worktreePath: id, kind: .discarded, path: discarded.path, title: discarded.path,
+                                  detail: detail)])
+    }
+
+    /// Forgets the discards, so there is nothing to undo; their snapshots stay.
+    func forgetDiscards() {
+        discards = []
+        restoreError = nil
+    }
+
+    /// Runs a write to the working tree once any refresh under way is done, holding the next off.
+    private func writing<T>(_ operation: () async throws -> T) async throws -> T {
+        isWriting = true
+        defer { isWriting = false }
+        while isRefreshing { try? await Task.sleep(for: .milliseconds(25)) }
+        return try await operation()
+    }
+
+    private func recordWrite(of path: String, snapshot: SnapshotRecord) {
+        ownWrites[path] = Date()
+        snapshots.insert(snapshot, at: 0)
+        lastSnapshotAt = snapshot.date
     }
 
     // MARK: Diffs

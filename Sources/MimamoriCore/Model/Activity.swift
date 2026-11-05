@@ -4,6 +4,8 @@ public enum ActivityKind: String, Codable, Sendable, Hashable {
     case created, modified, deleted, renamed, reverted
     case committed, headMoved, branchChanged
     case started, snapshot, flagged, watching
+    /// A hunk thrown away in Mimamori, or put back.
+    case discarded
     case agentSession, agentTurn, agentTool, agentAttention
 
     public var systemImage: String {
@@ -20,10 +22,19 @@ public enum ActivityKind: String, Codable, Sendable, Hashable {
         case .snapshot: "camera"
         case .flagged: "exclamationmark.triangle"
         case .watching: "eye"
+        case .discarded: "trash.circle"
         case .agentSession: "sparkles"
         case .agentTurn: "checkmark.bubble"
         case .agentTool: "wrench.and.screwdriver"
         case .agentAttention: "hand.raised"
+        }
+    }
+
+    /// A file created, changed, deleted, renamed or put back as HEAD has it.
+    public var isFileChange: Bool {
+        switch self {
+        case .created, .modified, .deleted, .renamed, .reverted: true
+        default: false
         }
     }
 

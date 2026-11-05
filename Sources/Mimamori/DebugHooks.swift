@@ -24,6 +24,8 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=sidebar              render the sidebar rows with agents or changes, light and dark
 ///     MIMAMORI_DEBUG_FLAGS=diff-line:120        scroll the selected file's diff to new-file line 120
 ///     MIMAMORI_DEBUG_FLAGS=note-line:12-14      start a note on new-file lines 12 to 14 of the selected file
+///     MIMAMORI_DEBUG_FLAGS=discard:2            ask to discard hunk 2 of the selected file (discard:file: the whole
+///                                               file; add :confirm to go ahead 2 s later); discard-undo presses Undo once
 ///     MIMAMORI_DEBUG_FLAGS=about                open the About window
 ///     MIMAMORI_DEBUG_FLAGS=permission:allow     answer a permission request once it has waited 5 s (or permission:deny)
 ///     MIMAMORI_DEBUG_FLAGS=hook-test            send a test event through the hook command once (result in the dump,

@@ -20,6 +20,8 @@ struct AppSettings: Codable, Hashable, Sendable {
     var diffFontSize: Double = 12
     var syntaxHighlighting: Bool = true
     var diffLayout: DiffLayout = .unified
+    /// Offer Discard Hunk in uncommitted diffs: the one thing that has Mimamori write to a working tree.
+    var allowsDiscardingChanges: Bool = false
     var summaryOptions = SessionSummaryOptions()
     /// How long the activity feed is kept on disk.
     var activityRetentionDays: Int = 7
@@ -76,6 +78,7 @@ struct AppSettings: Codable, Hashable, Sendable {
         diffFontSize = try c.decodeIfPresent(Double.self, forKey: .diffFontSize) ?? defaults.diffFontSize
         syntaxHighlighting = try c.decodeIfPresent(Bool.self, forKey: .syntaxHighlighting) ?? defaults.syntaxHighlighting
         diffLayout = try c.decodeIfPresent(DiffLayout.self, forKey: .diffLayout) ?? defaults.diffLayout
+        allowsDiscardingChanges = try c.decodeIfPresent(Bool.self, forKey: .allowsDiscardingChanges) ?? defaults.allowsDiscardingChanges
         summaryOptions = try c.decodeIfPresent(SessionSummaryOptions.self, forKey: .summaryOptions) ?? defaults.summaryOptions
         activityRetentionDays = try c.decodeIfPresent(Int.self, forKey: .activityRetentionDays) ?? defaults.activityRetentionDays
         inspector = try c.decodeIfPresent(InspectorConfiguration.self, forKey: .inspector) ?? defaults.inspector

@@ -409,6 +409,216 @@ public actor WorktreeInspector {
         lastSnapshotTree = nil
     }
 
+    // MARK: Discarding changes
+
+    /// Throws away one hunk of an uncommitted change, putting its lines back as HEAD has them.
+    /// `change` is the change the hunk's diff was made from. Nothing is written unless the file on
+    /// disk is still that version byte for byte, HEAD still has the other, and git agrees the hunk
+    /// comes out cleanly. Then a snapshot is recorded, and Mimamori writes that one file: the same
+    /// bytes with only the hunk's lines swapped, never the index.
+    public func discard(_ hunk: DiffHunk, of change: FileChange) async throws -> DiscardedChange {
+        if let reason = Discarding.hunkUnsupportedReason(for: change) { throw HunkDiscardError.unsupported(reason) }
+        guard let oldOID = change.oldOID, let newOID = change.newOID else {
+            throw HunkDiscardError.unsupported("This kind of change can't be discarded a hunk at a time.")
+        }
+        let url = try fileURL(for: change.path)
+        let original = try await currentContents(of: url, path: change.path, expecting: newOID)
+        guard await git.blobOID(at: "HEAD", path: change.oldPath ?? change.path, in: worktree) == oldOID else {
+            throw HunkDiscardError.headMoved
+        }
+        let oldBlob = try await git.blob(oldOID, in: worktree)
+        let patch = try HunkPatch.build(path: change.path, hunk: hunk, old: oldBlob, new: original)
+        let result = try HunkPatch.discarding(hunk, old: oldBlob, new: original)
+        do {
+            try await git.applyToWorkingTree(patch.discard, reverse: true, checkOnly: true, in: worktree)
+        } catch let error as GitError {
+            throw HunkDiscardError.doesNotApply(error.stderr)
+        }
+        let snapshot = try await snapshotHolding(change.path, blob: newOID)
+        let permissions = Self.permissions(of: url)
+        try Self.replace(url, expecting: original, with: result, permissions: permissions)
+        return DiscardedChange(path: change.path, date: snapshot.date, scope: .hunk(header: hunk.header, patch: patch),
+                               additions: hunk.additions, deletions: hunk.deletions, snapshot: snapshot,
+                               originalBlob: newOID, originalPermissions: permissions, resultDigest: Self.digest(result))
+    }
+
+    /// Puts a whole uncommitted file back as HEAD has it: a changed file gets HEAD's bytes and
+    /// mode, a new file goes (to the Trash, unless `trashNewFiles` is off), a deleted file is
+    /// written again. Nothing is written unless the file is still the version the diff was made
+    /// from and HEAD still has the other; then a snapshot is recorded first, holding the file.
+    public func discardFile(_ change: FileChange, trashNewFiles: Bool = true) async throws -> DiscardedChange {
+        if let reason = Discarding.fileUnsupportedReason(for: change) { throw HunkDiscardError.unsupported(reason) }
+        let url = try fileURL(for: change.path)
+        guard await git.blobOID(at: "HEAD", path: change.path, in: worktree) == change.oldOID else {
+            throw HunkDiscardError.headMoved
+        }
+        var original: Data? = nil
+        if let newOID = change.newOID {
+            original = try await currentContents(of: url, path: change.path, expecting: newOID)
+        } else if (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil {
+            // Deleted when the diff was made, and something is there now.
+            throw HunkDiscardError.fileChanged
+        }
+        var result: Data? = nil
+        if let oldOID = change.oldOID {
+            let blob = try await git.blob(oldOID, in: worktree)
+            // Written as is, so it must be what git itself would write.
+            guard try await git.filteredBlob(oldOID, path: change.path, in: worktree) == blob else {
+                throw HunkDiscardError.converted
+            }
+            result = blob
+        }
+        let snapshot: SnapshotRecord
+        if let newOID = change.newOID {
+            snapshot = try await snapshotHolding(change.path, blob: newOID)
+        } else {
+            guard let taken = try await takeSnapshot(force: true) else { throw HunkDiscardError.fileChanged }
+            snapshot = taken
+        }
+        let permissions = Self.permissions(of: url)
+        switch (original, result) {
+        case (let original?, let result?):
+            try Self.replace(url, expecting: original, with: result,
+                             permissions: Self.permissions(permissions ?? 0o644, mode: change.oldMode))
+        case (let original?, nil):
+            try Self.remove(url, expecting: original, trash: trashNewFiles)
+        case (nil, let result?):
+            try Self.create(url, with: result, permissions: Self.permissions(0o644, mode: change.oldMode))
+        case (nil, nil):
+            throw HunkDiscardError.unsupported("This kind of change can't be discarded.")
+        }
+        return DiscardedChange(path: change.path, date: snapshot.date, scope: .file(change.kind),
+                               additions: change.additions ?? 0, deletions: change.deletions ?? 0, snapshot: snapshot,
+                               originalBlob: change.newOID, originalPermissions: permissions,
+                               resultDigest: result.map(Self.digest))
+    }
+
+    /// Puts a discarded change back, after a snapshot. A file still as the discard left it gets
+    /// its earlier bytes back exactly. A hunk's file changed since gets the hunk's lines wherever
+    /// their surroundings still match, as `git apply` places them; a whole file changed since is
+    /// left alone, since putting it back would lose the change.
+    public func restore(_ discarded: DiscardedChange) async throws -> DiscardRestore {
+        let url = try fileURL(for: discarded.path)
+        let exists = (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
+        let current = exists ? try Self.contents(of: url) : nil
+        let untouched = current.map(Self.digest) == discarded.resultDigest
+        if untouched {
+            let snapshot = try await takeSnapshot(force: true)
+            guard let snapshot else { throw HunkDiscardError.fileChanged }
+            switch (discarded.originalBlob, current) {
+            case (let blob?, let current?):
+                try Self.replace(url, expecting: current, with: try await git.blob(blob, in: worktree),
+                                 permissions: discarded.originalPermissions)
+            case (let blob?, nil):
+                try Self.create(url, with: try await git.blob(blob, in: worktree), permissions: discarded.originalPermissions ?? 0o644)
+            case (nil, let current?):
+                try Self.remove(url, expecting: current, trash: false)
+            case (nil, nil):
+                break
+            }
+            return DiscardRestore(exact: true, snapshot: snapshot)
+        }
+        guard case .hunk(_, let patch) = discarded.scope, current != nil else { throw HunkDiscardError.restoreBlocked }
+        do {
+            try await git.applyToWorkingTree(patch.restore, reverse: false, checkOnly: true, in: worktree)
+        } catch let error as GitError {
+            throw HunkDiscardError.restoreDoesNotApply(error.stderr)
+        }
+        guard let snapshot = try await takeSnapshot(force: true) else { throw HunkDiscardError.fileChanged }
+        do {
+            try await git.applyToWorkingTree(patch.restore, reverse: false, checkOnly: false, in: worktree)
+        } catch let error as GitError {
+            throw HunkDiscardError.restoreDoesNotApply(error.stderr)
+        }
+        return DiscardRestore(exact: false, snapshot: snapshot)
+    }
+
+    /// The file's bytes, provided they are exactly the blob the diff was made from.
+    private func currentContents(of url: URL, path: String, expecting blob: String) async throws -> Data {
+        let contents = try Self.contents(of: url)
+        guard contents == (try await git.blob(blob, in: worktree)) else {
+            // The same blob once git's filters have had their way, or another version altogether.
+            let hashed = try? await git.hashObject(path: path, in: worktree)
+            throw hashed == blob ? HunkDiscardError.converted : HunkDiscardError.fileChanged
+        }
+        return contents
+    }
+
+    /// A snapshot taken now, checked to hold `path` as `blob`, so the discard can always be undone.
+    private func snapshotHolding(_ path: String, blob: String) async throws -> SnapshotRecord {
+        guard let snapshot = try await takeSnapshot(force: true),
+              await git.blobOID(at: snapshot.commitOID, path: path, in: worktree) == blob else {
+            throw HunkDiscardError.notInSnapshot
+        }
+        return snapshot
+    }
+
+    /// A repository-relative path as a file URL, refused when it leads out of the worktree. The
+    /// file need not exist: its nearest folder that does is where links are followed from.
+    private func fileURL(for path: String) throws -> URL {
+        let components = path.split(separator: "/").map(String.init)
+        guard !components.isEmpty, !components.contains(".."), !components.contains(".") else { throw HunkDiscardError.notAFile }
+        let url = worktree.appendingPathComponent(path)
+        var existing = url
+        var rest: [String] = []
+        while (try? FileManager.default.attributesOfItem(atPath: existing.path)) == nil, existing.path != "/" {
+            rest.insert(existing.lastPathComponent, at: 0)
+            existing.deleteLastPathComponent()
+        }
+        var resolved = existing.resolvingSymlinksInPath().standardizedFileURL
+        for component in rest { resolved.appendPathComponent(component) }
+        let root = worktree.resolvingSymlinksInPath().standardizedFileURL.path
+        guard resolved.path.hasPrefix(root.hasSuffix("/") ? root : root + "/") else { throw HunkDiscardError.notAFile }
+        return url
+    }
+
+    /// A plain file's bytes; anything else (a link, a folder, nothing) is refused.
+    private static func contents(of url: URL) throws -> Data {
+        guard let type = try? FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType,
+              type == .typeRegular, let data = try? Data(contentsOf: url) else { throw HunkDiscardError.notAFile }
+        return data
+    }
+
+    private static func permissions(of url: URL) -> Int? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.posixPermissions] as? Int
+    }
+
+    /// `permissions` with the executable bits a git mode asks for.
+    private static func permissions(_ permissions: Int, mode: String) -> Int {
+        switch mode {
+        case "100755": permissions | ((permissions & 0o444) >> 2)
+        case "100644": permissions & ~0o111
+        default: permissions
+        }
+    }
+
+    /// Writes `data` over the file in one step, with `permissions`, provided it still holds
+    /// `expected`: a write since the checks wins over the discard.
+    private static func replace(_ url: URL, expecting expected: Data, with data: Data, permissions: Int?) throws {
+        guard try contents(of: url) == expected else { throw HunkDiscardError.fileChanged }
+        try data.write(to: url, options: .atomic)
+        if let permissions { try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path) }
+    }
+
+    /// Writes a file where there is none, making its folders as needed.
+    private static func create(_ url: URL, with data: Data, permissions: Int) throws {
+        guard (try? FileManager.default.attributesOfItem(atPath: url.path)) == nil else { throw HunkDiscardError.fileChanged }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .withoutOverwriting)
+        try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
+    }
+
+    /// Removes the file, to the Trash when `trash`, provided it still holds `expected`.
+    private static func remove(_ url: URL, expecting expected: Data, trash: Bool) throws {
+        guard try contents(of: url) == expected else { throw HunkDiscardError.fileChanged }
+        if trash, (try? FileManager.default.trashItem(at: url, resultingItemURL: nil)) != nil { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    private static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     // MARK: Internals
 
     /// Brings the shadow index up to the working tree, leaving out untracked files over the size

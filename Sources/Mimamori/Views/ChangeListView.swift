@@ -103,7 +103,9 @@ struct ChangeListView: View {
                                   now: model.now, worktreePath: session.id,
                                   attribution: session.attributions[row.change.path],
                                   review: review, notes: session.notes.unsentCount(for: row.change.path),
-                                  onToggleReviewed: { session.setReviewed(!review.isReviewed, paths: [row.change.path]) })
+                                  onToggleReviewed: { session.setReviewed(!review.isReviewed, paths: [row.change.path]) },
+                                  onDiscard: session.offersDiscarding && Discarding.fileUnsupportedReason(for: row.change) == nil
+                                      ? { session.discardRequest = DiscardRequest(change: row.change, scope: .file) } : nil)
                             .equatable()
                             .tag(row.change.path)
                             .listRowBackground(rowBackground(recency: row.recency, selected: session.selectedPath == row.change.path))
@@ -336,6 +338,7 @@ extension ChangeRow: @preconcurrency Equatable {
         a.change == b.change && a.recency == b.recency && a.lastChanged == b.lastChanged && a.now == b.now
             && a.worktreePath == b.worktreePath && a.attribution == b.attribution && a.review == b.review
             && a.notes == b.notes && (a.onToggleReviewed == nil) == (b.onToggleReviewed == nil)
+            && (a.onDiscard == nil) == (b.onDiscard == nil)
     }
 }
 
@@ -350,6 +353,8 @@ struct ChangeRow: View {
     /// Notes on the file not yet handed to the agent.
     var notes = 0
     var onToggleReviewed: (() -> Void)? = nil
+    /// Asks to discard all of the file's changes; nil where that isn't offered.
+    var onDiscard: (() -> Void)? = nil
 
     private var visibleFlags: [AttentionFlag] {
         change.flags.filter { $0.severity >= .warning }.sorted { $0.severity > $1.severity }
@@ -463,6 +468,10 @@ struct ChangeRow: View {
             Button("Open") { Workspace.open(path: change.path, in: worktreePath) }
             Button("Reveal in Finder") { Workspace.reveal(path: change.path, in: worktreePath) }
             Button("Copy Path") { Workspace.copy(change.path) }
+            if let onDiscard {
+                Divider()
+                Button(change.kind == .deleted ? "Bring Back Deleted File…" : "Discard Changes…", action: onDiscard)
+            }
         }
     }
 }

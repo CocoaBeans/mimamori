@@ -441,6 +441,46 @@ public struct GitClient: Sendable {
         return bytes
     }
 
+    // MARK: Discarding a hunk
+
+    /// The blob id the file at `path` would get if it were added, with the same filters `git add`
+    /// uses. Nothing is written.
+    public func hashObject(path: String, in worktree: URL) async throws -> String {
+        try await run(["hash-object", "--", path], in: worktree, options: .shown).stdoutText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The blob at `path` in `revision`; nil when there is none.
+    public func blobOID(at revision: String, path: String, in worktree: URL) async -> String? {
+        guard let result = try? await run(["rev-parse", "--verify", "-q", "\(revision):\(path)"], in: worktree,
+                                          options: Options(allowedExitCodes: [0, 1, 128])),
+              result.status == 0 else { return nil }
+        let oid = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return oid.isEmpty ? nil : oid
+    }
+
+    /// A blob's bytes, as stored.
+    public func blob(_ oid: String, in worktree: URL) async throws -> Data {
+        try await run(["cat-file", "blob", oid], in: worktree, options: .shown).stdout
+    }
+
+    /// A blob's bytes as git would write them at `path`, through its filters and line-ending settings.
+    public func filteredBlob(_ oid: String, path: String, in worktree: URL) async throws -> Data {
+        try await run(["cat-file", "--filters", "--path=\(path)", oid], in: worktree, options: .shown).stdout
+    }
+
+    /// Applies `patch` to the working tree alone. Without `--index` or `--cached`, git apply
+    /// neither reads nor locks the index. Whitespace handling is pinned, so a configured
+    /// `apply.whitespace=fix` can't rewrite the lines and `apply.ignoreWhitespace` can't loosen the
+    /// match. It applies every hunk or none, and `checkOnly` writes nothing at all.
+    public func applyToWorkingTree(_ patch: Data, reverse: Bool, checkOnly: Bool, in worktree: URL) async throws {
+        var arguments = ["-c", "apply.ignoreWhitespace=no", "apply", "--whitespace=nowarn"]
+        if reverse { arguments.append("-R") }
+        if checkOnly { arguments.append("--check") }
+        arguments.append("-")
+        try await run(arguments, in: worktree, options: Options(stdin: patch, qualityOfService: .userInitiated))
+    }
+
     // MARK: Working tree queries
 
     /// Untracked, not-ignored files (individual paths).

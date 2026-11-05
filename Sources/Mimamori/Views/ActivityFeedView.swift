@@ -319,7 +319,8 @@ struct ActivityRow: View {
         case .reverted: return .secondary
         case .committed: return .purple
         case .headMoved, .branchChanged: return .indigo
-        case .started, .snapshot: return .accentColor
+        // What you did in Mimamori itself.
+        case .started, .snapshot, .discarded: return .accentColor
         case .flagged: return .orange
         case .watching: return .secondary
         case .agentSession: return .accentColor

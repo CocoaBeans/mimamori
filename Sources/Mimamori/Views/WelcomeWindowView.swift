@@ -32,7 +32,7 @@ struct WelcomeWindowView: View {
                 }
             }
             step(1, "Watch a repository") {
-                Text("Mimamori reads the files and runs git in the repositories you add, and follows every worktree in them. It never changes your code, branches or index. It does save snapshots of the working tree, as commits under refs/monitor/ in the repository, so you can compare against earlier moments.")
+                Text("Mimamori reads the files and runs git in the repositories you add, and follows every worktree in them. It never changes your branches or index, and changes your code only if you turn on discarding in Settings. It does save snapshots of the working tree, as commits under refs/monitor/ in the repository, so you can compare against earlier moments.")
                 HStack(spacing: 10) {
                     Button("Add Repository…") { model.promptForRepository() }
                     if !model.repositories.isEmpty {

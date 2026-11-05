@@ -39,7 +39,7 @@ struct HelpTopic: Identifiable {
             summary: "Watch your first repository and find your way around.",
             actions: [.addRepository, .welcome],
             markdown: """
-            Mimamori keeps watch over your git worktrees while coding agents work in them. It shows what changed, what deserves a look, and what each agent is doing right now. It never changes your code, your branches or your index.
+            Mimamori keeps watch over your git worktrees while coding agents work in them. It shows what changed, what deserves a look, and what each agent is doing right now. It never changes your branches or your index, and changes your code only when you discard something, which is off until you turn it on.
 
             ## Watch a repository
             - Choose **File › Add Repository…** (⌘O), drop a folder on the sidebar or on Mimamori's Dock icon, or run `open -a Mimamori <folder>` in Terminal.
@@ -88,6 +88,14 @@ struct HelpTopic: Identifiable {
             - The bubble menu in the diff's header adds a note on the whole file, and copies notes as one prompt to paste where you talk to the agent.
             - A note follows its lines as the file changes. When they're gone, it moves above the diff with the lines it was written on.
             - Resolve a note once the agent has dealt with it. The file list and the sidebar count the notes not sent yet.
+
+            ## Throw a change away
+            _Off until you turn on Offer discarding hunks and files, in Settings › General › Working tree._
+            - In an **Uncommitted** diff, **Discard…** on a hunk's header (or **Discard This Hunk…** in a line number's context menu) puts that hunk's lines back as they are in the last commit.
+            - **Discard File…** in the diff's header, or **Discard Changes…** in the file list's context menu, does it for the whole file: a changed file gets the last commit's version and mode back, a new file moves to the Trash, and a deleted file comes back.
+            - Mimamori shows you what goes and asks first. It won't while an agent is in the middle of a turn in that worktree, and warns you when one is between turns, since it won't know.
+            - It checks that the file still matches the diff, and takes a snapshot first. **Undo** in the bar above the diff puts it back, and the activity feed records both.
+            - Only that file changes: what you staged stays staged, and the index is never touched. Files git changes on the way in or out (line-ending or filter settings) and renamed files are left to you.
             """),
 
         HelpTopic(
@@ -182,7 +190,7 @@ struct HelpTopic: Identifiable {
             actions: [],
             markdown: """
             ## The activity feed
-            The feed lists, newest first, files created, changed, deleted and reverted, commits, branch switches, new flags and agent steps, for the selected worktree or for all of them.
+            The feed lists, newest first, files created, changed, deleted and reverted, discards, commits, branch switches, new flags and agent steps, for the selected worktree or for all of them.
             - Click an entry to go to its file or commit.
             - Its filter menu shows only agents' work, or hides agents' own events.
             - It keeps a week of activity by default (Settings › General), across restarts. It lists the newest 400 entries, and **Show Earlier Activity** at the bottom loads more.
@@ -198,7 +206,7 @@ struct HelpTopic: Identifiable {
             summary: "Earlier moments of a worktree, to compare against.",
             actions: [.settings(.snapshots, "Snapshot Settings…")],
             markdown: """
-            When a worktree changes, Mimamori records a snapshot: a commit object of the whole working tree, new files included, under `refs/monitor/` in the repository. It's never a branch, and your index and files are untouched.
+            When a worktree changes, Mimamori records a snapshot: a commit object of the whole working tree, new files included, under `refs/monitor/` in the repository. It's never a branch, and your index and files are untouched. Discarding a hunk or a file takes one first, so you can get back what it threw away.
 
             Snapshots let you compare against any earlier moment (**Since Snapshot**, in the menu above the file list), and they keep the start marker across restarts. **Monitor › Take Snapshot Now** records one whenever you like.
 
@@ -255,6 +263,7 @@ struct HelpTopic: Identifiable {
             ## What it writes
             - Its settings, the repositories you watch, your review marks and the activity feed, in `~/Library/Application Support/Mimamori/`.
             - Snapshots, inside each repository under `refs/monitor/`.
+            - Your files only when you discard a hunk or a file, which is off until you turn it on: that one file, after a snapshot, and never the index.
             - The hooks you choose to install, in Claude Code's or Hermes's settings, after a backup of the file. It keeps the newest five backups.
 
             ## Removing Mimamori

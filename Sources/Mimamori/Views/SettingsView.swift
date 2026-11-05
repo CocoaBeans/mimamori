@@ -71,6 +71,14 @@ struct GeneralSettingsView: View {
                         value: settings.diffFontSize, in: 9...20, step: 1)
             }
             Section {
+                Toggle("Offer discarding hunks and files", isOn: settings.allowsDiscardingChanges)
+                    .help("Let an Uncommitted diff throw a hunk or a whole file away, putting it back as it is in the last commit")
+            } header: {
+                Text("Working tree")
+            } footer: {
+                Text("Off, Mimamori never writes to your working tree. On, an Uncommitted diff has Discard… on each hunk and Discard File… in its header, and the file list's context menu has Discard Changes…. Each shows what goes and asks first, won't while an agent is in the middle of a turn there, checks that the file still matches the diff, and takes a snapshot first, even with automatic snapshots off, so Undo can put it back. Only that file changes, and a new file goes to the Trash; the index is never touched.")
+            }
+            Section {
                 Stepper("Keep activity for \(settings.wrappedValue.activityRetentionDays) day\(settings.wrappedValue.activityRetentionDays == 1 ? "" : "s")",
                         value: settings.activityRetentionDays, in: 1...90)
             } header: {
