@@ -5,11 +5,16 @@
 // small sizes keep fewer, bolder lines of code and leave out the lantern's ribs and character and
 // the diff's + and −.
 //
-// Usage: swift Scripts/make-icon.swift [Resources/AppIcon.icns]
+// The iPhone companion gets the same drawing edge to edge, opaque, as one 1024-pixel PNG: iOS
+// rounds the corners itself, with nearly the Mac's radius.
+//
+// Usage: swift Scripts/make-icon.swift [Resources/AppIcon.icns] [<iOS app icon PNG>]
 
 import AppKit
 
 let outputPath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Resources/AppIcon.icns"
+let iOSOutputPath = CommandLine.arguments.count > 2 ? CommandLine.arguments[2]
+    : "Sources/MimamoriCompanion/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
 
 func color(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> NSColor {
     NSColor(srgbRed: r, green: g, blue: b, alpha: a)
@@ -51,7 +56,8 @@ enum Change {
                                         : NSColor(srgbRed: 1, green: 0.38, blue: 0.38, alpha: 1) }
 }
 
-func render(canvas: CGFloat) -> NSBitmapImageRep {
+/// `fullBleed`: the shape fills the canvas, square and without a shadow, for iOS to mask.
+func render(canvas: CGFloat, fullBleed: Bool = false) -> NSBitmapImageRep {
     let pixels = Int(canvas)
     guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -70,9 +76,9 @@ func render(canvas: CGFloat) -> NSBitmapImageRep {
 
     // The macOS icon grid: the shape occupies 824 of a 1024 canvas with ~185pt corners.
     // (macOS 26 masks it to its own shape and adds the glass rim.)
-    let inset = canvas * (100.0 / 1024.0)
+    let inset = fullBleed ? 0 : canvas * (100.0 / 1024.0)
     let rect = CGRect(x: inset, y: inset, width: canvas - 2 * inset, height: canvas - 2 * inset)
-    let radius = rect.width * (185.4 / 824.0)
+    let radius = fullBleed ? 0 : rect.width * (185.4 / 824.0)
     let shape = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
     // Everything below is laid out on the 824-point shape.
     let k = rect.width / 824
@@ -82,8 +88,10 @@ func render(canvas: CGFloat) -> NSBitmapImageRep {
 
     // Drop shadow under the shape.
     cg.saveGState()
-    cg.setShadow(offset: CGSize(width: 0, height: -canvas * 0.012), blur: canvas * 0.035,
-                 color: NSColor.black.withAlphaComponent(0.4).cgColor)
+    if !fullBleed {
+        cg.setShadow(offset: CGSize(width: 0, height: -canvas * 0.012), blur: canvas * 0.035,
+                     color: NSColor.black.withAlphaComponent(0.4).cgColor)
+    }
     color(0.04, 0.05, 0.11).setFill()
     shape.fill()
     cg.restoreGState()
@@ -231,3 +239,20 @@ try iconutil.run()
 iconutil.waitUntilExit()
 guard iconutil.terminationStatus == 0 else { fatalError("iconutil failed with status \(iconutil.terminationStatus)") }
 print("Wrote \(output.path)")
+
+// The iPhone companion's icon. App icons may not be transparent, so it is drawn again into a
+// bitmap without an alpha channel.
+let full = render(canvas: 1024, fullBleed: true)
+guard let fullImage = full.cgImage,
+      let opaque = CGContext(data: nil, width: 1024, height: 1024, bitsPerComponent: 8, bytesPerRow: 0,
+                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+else { fatalError("Could not draw the iOS icon") }
+opaque.draw(fullImage, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
+guard let iOSImage = opaque.makeImage(),
+      let iOSData = NSBitmapImageRep(cgImage: iOSImage).representation(using: .png, properties: [:]) else {
+    fatalError("PNG encoding failed")
+}
+let iOSOutput = URL(fileURLWithPath: iOSOutputPath)
+try FileManager.default.createDirectory(at: iOSOutput.deletingLastPathComponent(), withIntermediateDirectories: true)
+try iOSData.write(to: iOSOutput)
+print("Wrote \(iOSOutput.path)")

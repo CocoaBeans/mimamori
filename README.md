@@ -320,7 +320,7 @@ swift build                     # the same app as a Swift package, for `swift ru
 
 ### App icon
 
-The icon, a paper lantern (chōchin) with 見 ("to watch", the first character of 見守り) painted on it, lighting the code behind it, where a diff's hunk shows a line taken out and two put in, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes keep fewer, bolder lines and leave out the character. After changing the drawing, regenerate it and rebuild:
+The icon, a paper lantern (chōchin) with 見 ("to watch", the first character of 見守り) painted on it, lighting the code behind it, where a diff's hunk shows a line taken out and two put in, is drawn from shapes by `Scripts/make-icon.swift`, which writes every size into `Resources/AppIcon.icns`. Small sizes keep fewer, bolder lines and leave out the character. The same script draws the iPhone companion's icon edge to edge, opaque, into its asset catalog, for iOS to round the corners. After changing the drawing, regenerate both and rebuild:
 
 ```bash
 swift Scripts/make-icon.swift
