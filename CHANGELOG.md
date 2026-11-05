@@ -13,7 +13,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Put an agent to sleep between turns: Mimamori stops its process and keeps its session, and
   **Wake** opens a terminal in the worktree that resumes it. For Claude Code and Codex, off until
   you turn it on in Settings › General
-  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
+  ([#53](https://github.com/CocoaBeans/mimamori/pull/53)).
 
 ### Changed
 
