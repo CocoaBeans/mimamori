@@ -43,7 +43,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Before CodeQL starts tracing, which makes every tool slow to launch.
       - name: Toolchain

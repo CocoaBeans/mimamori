@@ -31,7 +31,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The workflows themselves, read without a build.
       - uses: github/codeql-action/init@v4
