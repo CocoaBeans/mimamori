@@ -8,6 +8,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Fixed
+
+- Resizing the Agents window across the width where it switches between one and two columns no
+  longer leaves the cards trailing the window's edge, their names cross-fading, until they catch up
+  ([#37](https://github.com/CocoaBeans/mimamori/pull/37)).
+
 ## [1.1.0] - 2026-11-04
 
 ### Added
