@@ -23,15 +23,38 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request cancels the run still going for the one before it.
+# A new push to a pull request cancels the run still going for the one before it. A run for main
+# is left to finish; one waiting behind it gives way to a newer push.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
-    name: Build and test (macOS)
-    runs-on: macos-15
+    name: Build and test (Xcode ${{ matrix.xcode }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      # One Xcode failing shouldn't stop the other from reporting.
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest Xcode the README and CONTRIBUTING promise (Swift 6.1). It compiles the
+          # older side of the `#if compiler(>=6.2)` blocks.
+          - xcode: '16.4'
+            runner: macos-15
+          # The Xcode releases are built with (Swift 6.3), so the macOS 26 code that ships is
+          # compiled too. macos-15 carries Xcode 26 only up to 26.3.
+          - xcode: '26.5'
+            runner: macos-26
+            upload: true
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+      # Slow type-checks are warned about, not failed, so they show up before one becomes an
+      # "unable to type-check in reasonable time" error on another compiler.
+      TYPE_CHECK_WARNINGS: >-
+        -Xswiftc -Xfrontend -Xswiftc -warn-long-expression-type-checking=200
+        -Xswiftc -Xfrontend -Xswiftc -warn-long-function-bodies=300
     steps:
       - uses: actions/checkout@v5
 
@@ -40,22 +63,54 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # The package still builds the app, for `swift run` and the debug hooks.
+      # The package still builds the app, for `swift run` and the debug hooks. Its log is kept for
+      # the next step.
       - name: Build (Swift package)
-        run: swift build
+        shell: bash
+        run: swift build $TYPE_CHECK_WARNINGS 2>&1 | tee "$RUNNER_TEMP/swift-build.log"
 
+      # The compiler prints each warning more than once. Each is listed once in the job's summary,
+      # and as an annotation (GitHub shows ten for a step).
+      - name: Report slow type-checks
+        if: ${{ !cancelled() }}
+        run: |
+          grep -E '^/.+\.swift:[0-9]+:[0-9]+: warning: .+ took [0-9]+ms to type-check' \
+            "$RUNNER_TEMP/swift-build.log" | sed "s|^$GITHUB_WORKSPACE/||" | sort -u \
+            > "$RUNNER_TEMP/slow-type-checks.txt" || true
+          [[ -s "$RUNNER_TEMP/slow-type-checks.txt" ]] || exit 0
+          {
+            echo '### Slow type-checks'
+            echo
+            echo 'Expressions over 200 ms and function bodies over 300 ms. Warnings only, for now.'
+            echo
+            sed -E 's/^(.+:[0-9]+:[0-9]+): warning: (.*)$/- `\1` \2/' "$RUNNER_TEMP/slow-type-checks.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
+          sed -E 's/^(.+):([0-9]+):([0-9]+): warning: (.*)$/::warning file=\1,line=\2,col=\3,title=Slow type-check::\4/' \
+            "$RUNNER_TEMP/slow-type-checks.txt"
+
+      # The same flags as the build, so the tests reuse what it compiled.
       - name: Test
-        run: swift test
+        run: swift test $TYPE_CHECK_WARNINGS
+
+      # Swift that neither the package nor the Xcode project compiles. WindowCapture gets the
+      # flags Scripts/capture-window.sh builds it with; make-icon.swift is run as a script.
+      - name: Type-check tools and scripts
+        run: |
+          swiftc -typecheck -swift-version 5 -target "$(uname -m)-apple-macos15.0" Tools/WindowCapture/main.swift
+          swiftc -typecheck Scripts/make-icon.swift
 
       - name: Build app (Xcode project, ad hoc signed)
         run: MIMAMORI_SIGN=adhoc Scripts/make-app.sh release
 
+      # Only the app built with the release Xcode is kept.
       - name: Zip app
+        if: matrix.upload
         run: ditto -c -k --keepParent build/Mimamori.app build/Mimamori-unsigned.zip
 
       # Convenience only: artifact storage on private repositories is quota-limited,
       # so a failed upload must not fail the build.
       - name: Upload app (ad-hoc signed, not notarized)
+        if: matrix.upload
         uses: actions/upload-artifact@v5
         continue-on-error: true
         with:
