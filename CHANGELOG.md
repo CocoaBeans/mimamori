@@ -10,6 +10,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- Removing a repository while Mimamori is looking for its worktrees no longer can crash Mimamori,
+  give another repository its worktrees, or leave it watched until you quit
+  ([#40](https://github.com/CocoaBeans/mimamori/pull/40)).
 - Resizing the Agents window across the width where it switches between one and two columns no
   longer leaves the cards trailing the window's edge, their names cross-fading, until they catch up
   ([#37](https://github.com/CocoaBeans/mimamori/pull/37)).

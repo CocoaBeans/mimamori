@@ -86,7 +86,9 @@ final class AppModel {
     @ObservationIgnored private var tickingFast = true
     @ObservationIgnored private var visibilityObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
-    private var repositoryWatchers: [UUID: FSEventsWatcher] = [:]
+    /// Each repository's watch on its git folder, for worktrees coming and going.
+    @ObservationIgnored private let repositoryWatchers = WatchRegistry<UUID, FSEventsWatcher> { $0.stop() }
+    @ObservationIgnored private var worktreeListings = WorktreeListings()
     private var rediscoverTasks: [UUID: Task<Void, Never>] = [:]
     let notifier = Notifier()
     /// Whether the Agents window is open; saved, so it opens again at launch. Windows that close
@@ -164,6 +166,7 @@ final class AppModel {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.isQuitting = true
+                self?.stopWatchingRepositories()
                 if self?.isUninstalling == true {
                     // Whatever was written since, gone again on the way out.
                     Uninstaller.removeData()
@@ -447,6 +450,7 @@ final class AppModel {
             let url = RepositoryIconFinder.icon(in: URL(fileURLWithPath: rootPath))
             return (url, url.flatMap(RepositoryColor.dominant(in:)))
         }.value
+        guard repositories.contains(where: { $0.id == id }) else { return }
         repositoryIcons[id] = url.flatMap(RepositoryIconImage.load).map { FoundRepositoryIcon(image: $0, color: color) }
         publishWidgets()
     }
@@ -485,8 +489,10 @@ final class AppModel {
             sessions.removeValue(forKey: worktree.path)
             persisted.worktreeSettings.removeValue(forKey: worktree.path)
         }
-        repositoryWatchers[id]?.stop()
-        repositoryWatchers.removeValue(forKey: id)
+        repositoryWatchers.stop(id)
+        rediscoverTasks.removeValue(forKey: id)?.cancel()
+        worktreeListings.remove(id)
+        repositoryIcons[id] = nil
         // Its history goes too, on disk as well as in the feed.
         flushActivity()
         let removedPaths = Set(repo.worktrees.map(\.path))
@@ -507,43 +513,49 @@ final class AppModel {
     }
 
     func rediscoverWorktrees(for id: UUID) async {
-        guard let git, let index = repositories.firstIndex(where: { $0.id == id }) else { return }
-        let rootPath = repositories[index].rootPath
+        guard let git, let rootPath = repositories.first(where: { $0.id == id })?.rootPath else { return }
+        let ticket = worktreeListings.begin()
+        let list: [WorktreeInfo]
         do {
-            let list = try await git.worktrees(in: URL(fileURLWithPath: rootPath, isDirectory: true))
+            list = try await git.worktrees(in: URL(fileURLWithPath: rootPath, isDirectory: true))
                 .filter { !$0.isBare && !$0.isPrunable && FileManager.default.fileExists(atPath: $0.path) }
-            repositories[index].worktrees = list
-            repositories[index].error = nil
-            let known = Set(list.map(\.path)).subtracting(hiddenWorktrees)
-            // Stop sessions whose worktrees vanished or were hidden.
-            for (path, session) in sessions where session.repositoryID == id && !known.contains(path) {
-                session.stop()
-                sessions.removeValue(forKey: path)
-            }
-            for info in list where !hiddenWorktrees.contains(info.path) {
-                if let session = sessions[info.path] {
-                    session.updateInfo(info)
-                } else {
-                    let session = WorktreeSession(
-                        info: info, repositoryID: id, settings: settings,
-                        persisted: persisted.worktreeSettings[info.path] ?? PersistedWorktreeSettings(),
-                        onActivity: { [weak self] entries in self?.record(entries) },
-                        onSettingsChanged: { [weak self] session in
-                            self?.persisted.worktreeSettings[session.id] = session.persistedSettings
-                            self?.persistSoon()
-                        })
-                    let worktreePath = info.path
-                    session.attributionProvider = { [weak self] path, date in
-                        self?.agentHub.attribution(for: worktreePath, path: path, at: date)
-                    }
-                    sessions[info.path] = session
-                    Task { await session.start(git: git) }
-                }
-            }
-            agentHub.setWatchedWorktrees(Array(sessions.keys))
         } catch {
+            guard worktreeListings.accepts(ticket, for: id),
+                  let index = repositories.firstIndex(where: { $0.id == id }) else { return }
             repositories[index].error = error.localizedDescription
+            return
         }
+        // While git listed, the repository may have been removed or listed again: look it up anew.
+        guard worktreeListings.accepts(ticket, for: id),
+              let index = repositories.firstIndex(where: { $0.id == id }) else { return }
+        repositories[index].worktrees = list
+        repositories[index].error = nil
+        let plan = WorktreeReconciliation(listed: list, hidden: hiddenWorktrees,
+                                          sessions: sessions.mapValues { $0.repositoryID }, repository: id)
+        for path in plan.stop {
+            sessions[path]?.stop()
+            sessions.removeValue(forKey: path)
+        }
+        for info in plan.update { sessions[info.path]?.updateInfo(info) }
+        for info in plan.create { startSession(for: info, repositoryID: id, git: git) }
+        agentHub.setWatchedWorktrees(Array(sessions.keys))
+    }
+
+    private func startSession(for info: WorktreeInfo, repositoryID: UUID, git: GitClient) {
+        let session = WorktreeSession(
+            info: info, repositoryID: repositoryID, settings: settings,
+            persisted: persisted.worktreeSettings[info.path] ?? PersistedWorktreeSettings(),
+            onActivity: { [weak self] entries in self?.record(entries) },
+            onSettingsChanged: { [weak self] session in
+                self?.persisted.worktreeSettings[session.id] = session.persistedSettings
+                self?.persistSoon()
+            })
+        let worktreePath = info.path
+        session.attributionProvider = { [weak self] path, date in
+            self?.agentHub.attribution(for: worktreePath, path: path, at: date)
+        }
+        sessions[info.path] = session
+        Task { await session.start(git: git) }
     }
 
     /// The watched worktree that contains `cwd`, longest match first.
@@ -576,10 +588,13 @@ final class AppModel {
         }
     }
 
+    /// Watches the repository's common git folder for worktrees coming and going. Removing the
+    /// repository stops the watch, or cancels it while it is still starting.
     private func startRepositoryWatcher(id: UUID, rootPath: String) {
-        guard let git else { return }
-        Task {
-            guard let layout = try? await git.layout(of: URL(fileURLWithPath: rootPath, isDirectory: true)) else { return }
+        // Loading awaits rediscovery first, and the repository may have been removed meanwhile.
+        guard let git, repositories.contains(where: { $0.id == id }) else { return }
+        repositoryWatchers.start(id) { [weak self] in
+            guard let layout = try? await git.layout(of: URL(fileURLWithPath: rootPath, isDirectory: true)) else { return nil }
             let common = layout.commonDir.standardizedFileURL.path
             let watcher = FSEventsWatcher(paths: [common], exclusions: [common + "/objects", common + "/refs/monitor"], latency: 0.5) { [weak self] events in
                 let relevant = events.contains { event in
@@ -588,14 +603,20 @@ final class AppModel {
                 guard relevant else { return }
                 Task { @MainActor [weak self] in self?.scheduleRediscovery(for: id) }
             }
-            if (try? watcher.start()) != nil {
-                repositoryWatchers[id]?.stop()
-                repositoryWatchers[id] = watcher
-            }
+            return (try? watcher.start()) != nil ? watcher : nil
         }
     }
 
+    /// Mimamori is quitting: no watch or pending rediscovery starts anything more.
+    private func stopWatchingRepositories() {
+        repositoryWatchers.stopAll()
+        for task in rediscoverTasks.values { task.cancel() }
+        rediscoverTasks = [:]
+    }
+
     private func scheduleRediscovery(for id: UUID) {
+        // An event from a watch just stopped can still arrive.
+        guard !isQuitting, repositories.contains(where: { $0.id == id }) else { return }
         rediscoverTasks[id]?.cancel()
         rediscoverTasks[id] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
