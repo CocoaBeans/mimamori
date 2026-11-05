@@ -90,7 +90,7 @@ state, never on a loop.
 - [ ] An iPhone companion: the agents at work, who needs you, and Allow or Deny from the phone, on
       the same network first, then over cellular
       ([docs/plans/iphone-companion.md](docs/plans/iphone-companion.md)).
-- [ ] Read an agent's transcript while its hooks are silent, opt-in, and show a Hermes turn as
-      working from launch ([docs/plans/transcript-adapter.md](docs/plans/transcript-adapter.md)).
+- [ ] Read an agent's transcript while its hooks are silent, opt-in, and give a turn already under
+      way at launch its real start ([docs/plans/transcript-adapter.md](docs/plans/transcript-adapter.md)).
 
 - Paid "supporter" build or team features, if there is demand after release.

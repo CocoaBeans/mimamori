@@ -2,8 +2,9 @@
 
 > **Proposed.** Nothing is built yet. Reading transcripts is **opt-in and off by default**,
 > because they hold your prompts, the model's replies, command output and file contents. One part
-> needs no transcript and is on for everyone: a Hermes turn shows as working from launch, using
-> Hermes's record of which turns are running. The survey of what each agent records was made on
+> needs no transcript and is on for everyone: a turn already under way when Mimamori starts gets
+> its real start time, from Hermes's record of which turns are running and from Claude Code's
+> record of when a session went busy. The survey of what each agent records was made on
 > 2026-11-04, on one Mac (see "What the agents record").
 
 ## Goal
@@ -45,7 +46,9 @@ over the moment they report.
 ## What you will see
 
 - **Off (the default).** Nothing changes, except the process-only hint: "No hook events from this
-  session. Mimamori can read its transcript instead: Settings › Agents › Hooks."
+  session. Mimamori can read its transcript instead." Its link opens Settings › Agents › Hooks at
+  the switch. This is where you meet the feature: on a row it would help, at the moment it would
+  help (see "Decided").
 - **The setting.** Settings › Agents › Hooks gains a section, **When hooks are silent**, with one
   switch: **Read an agent's transcript while its hooks are silent**. Under it: which agents
   Mimamori can read, what it reads (the prompt, each tool's name and input, whether it failed, when
@@ -53,10 +56,15 @@ over the moment they report.
 - **On.** A silent session's row shows the task, steps and changed files, like a hooked one, with
   a small "from its transcript" note. For Hermes and OpenCode, the note also says a permission
   request may not show, since those agents don't record approvals they are waiting on.
-- **Launch.** With the switch on, a session already mid-turn shows its whole turn so far: its
-  prompt, its real start time and its earlier steps, then carries on from its hooks.
-- **Hermes at launch, for everyone.** With the switch off, a Hermes session mid-turn shows as
-  working, with its real start time, from launch. It shows no steps until its hooks report.
+- **Launch, switch on.** A session already mid-turn shows its whole turn so far, even when its
+  hooks work: its prompt, its real start time and its earlier steps, with the edits it made before
+  launch credited to it. Then it carries on from its hooks. Hooks alone can't give that turn back:
+  Claude Code's prompt is gone until its next turn, and the steps and edits before launch are
+  gone for good.
+- **Launch, for everyone.** With the switch off, a turn already under way still starts at its
+  real time rather than at Mimamori's launch, so "working for" and the turn's summary are right.
+  A Hermes session mid-turn also shows as working from launch, before its first hook. Neither
+  shows earlier steps.
 
 ## What the agents record
 
@@ -64,7 +72,7 @@ Surveyed read-only on 2026-11-04: key names, record types, sizes and timestamps,
 
 | Agent | Where, and how to find a session | Live? | Hard parts |
 |---|---|---|---|
-| Claude Code 2.1.317 | `~/.claude/projects/<cwd, every non-alphanumeric character as "-">/<sessionId>.jsonl`; the pid file gives `sessionId` and `cwd` | Yes: each assistant message as it completes, each tool result as it returns | Files up to 661 MB; about 30 record types; the format changes weekly; `relocated` records when the session moves |
+| Claude Code 2.1.317 | `~/.claude/projects/<cwd, every non-alphanumeric character as "-">/<sessionId>.jsonl`; the pid file gives `sessionId`, `cwd`, and `status` with `statusUpdatedAt` (when the session last went busy, idle or waiting) | Yes: each assistant message as it completes, each tool result as it returns | Files up to 661 MB; about 30 record types; the format changes weekly; `relocated` records when the session moves |
 | Hermes 0.22.6 | `~/.hermes/state.db`, table `messages` by `session_id`; `session_turn_leases` for a running turn (`conversation_id` = session id, `acquired_at`, `expires_at`, holder `pid=<pid>:…`) | Yes: a tool call's row is written before the tool runs | Rows are rewritten (`active=0` and re-inserted with the same `message_uid`); no failure flag on results; compression ends a session and continues it in a child (`parent_session_id`); approvals waiting on you are not recorded; WAL |
 | OpenCode 1.17.7 | `~/.local/share/opencode/opencode.db`; `session.directory`; the append-only `event` table | Yes: `message.part.updated.1` records pending, running, completed and error | `part` rows are updated in place, so read `event`; approvals waiting on you are not recorded |
 | Aider 0.86.2 | `.aider.chat.history.md` at the repository's root | Prompts only | No tool calls, ids or turn ends: coarse at best |
@@ -111,9 +119,14 @@ session's directory.
 - `HermesTranscript`: queries `messages` for one session, `active=1`, after the last timestamp
   seen, and deduplicates by `message_uid`. It follows a compressed session to its child. It reads
   `session_turn_leases` for whether a turn is running and since when.
-- `HermesTurns` (on for everyone, no content): the running turns from `session_turn_leases`, with
-  each session's directory from `sessions`. `AgentStatusMachine.adopt` grows a case for it beside
-  Claude Code's record: working since `acquired_at`, until the session's first hook event.
+- Turn starts from records, on for everyone, no content:
+  - `HermesTurns`: the running turns from `session_turn_leases`, with each session's directory
+    from `sessions`. `AgentStatusMachine.adopt` grows a case for it beside Claude Code's record:
+    working since `acquired_at`, until the session's first hook event.
+  - `AgentStatusMachine.backdateTurn(to:)`: when a turn starts from a tool call because its prompt
+    was never heard (Mimamori started mid-turn), the hub moves its start back to Hermes's
+    `acquired_at`, or to Claude Code's `statusUpdatedAt` while the pid file says `busy`. Only
+    ever earlier, never past the previous turn's end.
 - `OpenCodeTranscript`: reads `event` after the last rowid seen, for sessions whose `directory` is
   in a watched worktree.
 - `TranscriptPolicy.shouldRead(...)`, a pure function: whether to read a session, given the
@@ -135,9 +148,11 @@ session's directory.
   - feeds the events through `handle(_:)` marked as read from a transcript, and stops reading a
     session once a hook event arrives from it;
   - on launch, with the switch on, reads each busy session's turn so far once, even where hooks
-    work.
-- Views: the switch and its text in Settings › Agents › Hooks; the process-only hint; the
-  "from its transcript" note and, for Hermes and OpenCode, the line about permissions.
+    work;
+  - with the switch off or on, backdates a turn joined midway from the records above.
+- Views: the switch and its text in Settings › Agents › Hooks; the process-only hint, with its
+  link to the switch; the "from its transcript" note and, for Hermes and OpenCode, the line about
+  permissions. The welcome window is unchanged.
 - `Diagnostics`: whether the switch is on, and which sessions are read from transcripts (agent,
   worktree, time of the last record read, records skipped). No content.
 - README: the privacy section says Mimamori reads agents' transcripts on your Mac only while the
@@ -147,8 +162,11 @@ session's directory.
 
 ## Steps
 
-1. **Hermes turns at launch, for everyone** (about 200–300 lines with tests). `HermesTurns`, the
-   adopt case, the "working since" status. No setting, and no transcript content.
+1. **Turn starts at launch, for everyone** (about 250–350 lines with tests). `HermesTurns`, the
+   adopt case and `backdateTurn(to:)`. No setting, and no transcript content. It starts with a
+   short spike: whether Claude Code moves `statusUpdatedAt` on each tool call or only when the
+   status changes, and so whether a busy session's value is its turn's start or a later moment
+   (after a permission prompt, at worst).
 2. **The frame and Claude Code** (about 900–1,300 lines with tests, the setting included).
    `TranscriptReader`, `TranscriptPolicy`, the status source, deduplication by call id,
    `ClaudeTranscript`, the `AgentHub` wiring, the switch, the hint, the labels, Diagnostics, README
@@ -172,6 +190,8 @@ session's directory.
   inferred from JSON and from text that isn't JSON; a compressed session continued in its child;
   a WAL database opened read-only.
 - `HermesTurns`: a lease present, expired and gone; a session with no directory recorded.
+- `backdateTurn(to:)`: moves only a turn that began without a prompt, only earlier, and never
+  before the previous turn ended.
 - `OpenCodeTranscript`: a tool part going pending, running, completed and error.
 - `TranscriptPolicy`: the switch off means no reader for anyone; a session with hooks reporting
   isn't read; a session falls back to its transcript after its hooks go quiet.
@@ -198,11 +218,24 @@ session's directory.
   only in watched worktrees, keeps what it read in memory as it does hook events, and writes none
   of it to disk.
 
+## Decided
+
+- **One switch for every agent.** Split it later only if people ask.
+- **Reading back the turn at launch.** With the switch on, always, even when hooks work: it is the
+  only way to get back the prompt, steps and edits of a turn Mimamori started in the middle of.
+  The reader needs the same read-back anyway when it first picks up a silent session, so this is
+  a policy, not more code. With the switch off, never.
+- **A turn's real start from records, for everyone.** Hermes's lease and Claude Code's pid file
+  say when a turn began without exposing any content, so that part needs no switch.
+- **Not in the welcome window.** Its second step already explains hooks, connects Claude Code and
+  Hermes with a line on what each changes, points to Other Agents and says how to remove them,
+  in a 580-point-wide window. The switch needs as much again: what it reads, what it never does,
+  and why you might want it. It is also a fallback for when hooks are missing, and the welcome
+  window is where you install them. The moment the switch helps is when a row shows only a
+  process, so the offer goes there, with its link to Settings, where there is room to explain.
+
 ## To decide first
 
-- **One switch, or one per agent?** One to start with; split it if people ask.
-- **Reading back the turn at launch** when hooks work and the switch is on? Recommended: it is the
-  only way to see a turn's beginning after Mimamori starts mid-turn.
-- **The hint while off.** Show it on every silent row, or let you dismiss it for good?
-- **The welcome window.** Offer the switch there, beside installing hooks, or leave it to
-  Settings?
+- **The hint while off.** Show it on every silent row, or let you dismiss it for good? Since the
+  hint is now where you meet the feature, dismissing it should probably take one click and be
+  undone from Settings.
