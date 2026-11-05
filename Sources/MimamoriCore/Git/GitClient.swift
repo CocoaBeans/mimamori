@@ -17,9 +17,13 @@ public struct GitError: Error, LocalizedError, Sendable {
 /// repository's own index and never competes with an agent for `index.lock`.
 public struct GitClient: Sendable {
     public let executable: URL
+    /// What runs when `executable` can't be launched: the Xcode shim it was found through, which
+    /// knows where git went when the developer folder moves (an Xcode update or switch).
+    public let fallback: URL?
 
-    public init(executable: URL) {
+    public init(executable: URL, fallback: URL? = nil) {
         self.executable = executable
+        self.fallback = fallback
     }
 
     public struct Options: Sendable {
@@ -68,11 +72,27 @@ public struct GitClient: Sendable {
                     executable: URL(fileURLWithPath: "/usr/bin/xcode-select"),
                     arguments: ["-p"], timeout: .seconds(10))
                 guard let check, check.status == 0 else { continue }
+                if let direct = await gitBehindShim() {
+                    let client = GitClient(executable: direct, fallback: URL(fileURLWithPath: candidate))
+                    if (try? await client.version()) != nil { return client }
+                }
             }
             let client = GitClient(executable: URL(fileURLWithPath: candidate))
             if (try? await client.version()) != nil { return client }
         }
         return nil
+    }
+
+    /// The git that `/usr/bin/git` runs. The shim asks xcrun which one on every call, which costs
+    /// more than many of the small commands Mimamori runs (about 12 ms of CPU each, against 8 ms
+    /// for `git status` itself), so it is asked once.
+    static func gitBehindShim() async -> URL? {
+        guard let found = try? await ProcessRunner.run(
+            executable: URL(fileURLWithPath: "/usr/bin/xcrun"), arguments: ["--find", "git"], timeout: .seconds(10)),
+              found.status == 0 else { return nil }
+        let path = found.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard path.hasPrefix("/"), path != "/usr/bin/git", FileManager.default.isExecutableFile(atPath: path) else { return nil }
+        return URL(fileURLWithPath: path)
     }
 
     // MARK: Running
@@ -105,15 +125,24 @@ public struct GitClient: Sendable {
             "-c", "diff.mnemonicPrefix=false",
             "-c", "diff.external=",
         ]
-        let result = try await ProcessRunner.run(
-            executable: executable,
-            arguments: globalArguments + arguments,
-            currentDirectory: directory,
-            environment: env,
-            stdin: options.stdin,
-            timeout: options.timeout,
-            qualityOfService: options.qualityOfService
-        )
+        func launch(_ executable: URL) async throws -> ProcessResult {
+            try await ProcessRunner.run(
+                executable: executable,
+                arguments: globalArguments + arguments,
+                currentDirectory: directory,
+                environment: env,
+                stdin: options.stdin,
+                timeout: options.timeout,
+                qualityOfService: options.qualityOfService
+            )
+        }
+        let result: ProcessResult
+        do {
+            result = try await launch(executable)
+        } catch ProcessError.launchFailed(let reason, let command) {
+            guard let fallback else { throw ProcessError.launchFailed(reason: reason, command: command) }
+            result = try await launch(fallback)
+        }
         guard options.allowedExitCodes.contains(result.status) else {
             throw GitError(command: arguments.joined(separator: " "), status: result.status, stderr: result.stderrText)
         }

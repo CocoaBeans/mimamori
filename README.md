@@ -82,7 +82,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 ## Requirements
 
 - macOS 15 or later, on Apple silicon or Intel (developed on macOS 26).
-- A `git` binary. Homebrew or MacPorts git is preferred; the Xcode shim at `/usr/bin/git` works when the Command Line Tools are installed. A custom path can be set in Settings.
+- A `git` binary. Homebrew or MacPorts git is preferred; the Xcode shim at `/usr/bin/git` works when the Command Line Tools or Xcode are installed, and Mimamori then runs the git it points to directly. A custom path can be set in Settings.
 - Xcode 16 or later (Swift 6) to build from source.
 
 ## Install
