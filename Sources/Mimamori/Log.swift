@@ -9,8 +9,6 @@ enum Log {
     static let hooks = Logger(subsystem: subsystem, category: "hooks")
     /// Placing agents' events in worktrees.
     static let agents = Logger(subsystem: subsystem, category: "agents")
-    /// Moving settings and hooks over from the app's former name.
-    static let migration = Logger(subsystem: subsystem, category: "migration")
     static let widgets = Logger(subsystem: subsystem, category: "widgets")
     /// Saving and loading Mimamori's own state.
     static let state = Logger(subsystem: subsystem, category: "state")

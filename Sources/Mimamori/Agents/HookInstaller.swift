@@ -12,15 +12,6 @@ enum HookInstaller {
         !Persistence.isScratch || AgentConfigLocations.current.claudeConfigFromEnvironment
     }
 
-    /// Replaces the hooks the app installed under its former name, which post to its old socket, with
-    /// Mimamori's. Returns the backup, if written.
-    @discardableResult
-    static func migrateFormerHooks(socketPath: String) throws -> URL? {
-        guard mayUpdateOnLaunch else { return nil }
-        guard ClaudeHooksConfig.hasFormerHooks(in: try load()) else { return nil }
-        return try edit { install(into: $0, socketPath: socketPath) }
-    }
-
     /// The settings as a JSON object: empty when there is no file. Throws when the file cannot be
     /// read, or holds no JSON object.
     static func load() throws -> [String: Any] {

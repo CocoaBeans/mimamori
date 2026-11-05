@@ -256,7 +256,7 @@ When an agent doesn't show up, or shows up without saying what it is doing, open
   - *Rejected*: the hook posted to the wrong address (anything but `/event`) or sent something Mimamori could not read as an event. The row lists the JSON's top-level keys, never their values, so you can compare it with the setup in **Other Agents**.
   - *Nothing from an agent at all*: its hooks are not running. Agents read their hooks when a session starts, so start a new session after installing them; Hermes also needs `hermes --accept-hooks` once.
 
-Mimamori also writes to the macOS log, under the subsystem `com.kevinross.Mimamori` in the categories `hooks`, `agents`, `migration`, `widgets` and `state`:
+Mimamori also writes to the macOS log, under the subsystem `com.kevinross.Mimamori` in the categories `hooks`, `agents`, `widgets` and `state`:
 
 ```bash
 log stream --predicate 'subsystem == "com.kevinross.Mimamori"' --level info

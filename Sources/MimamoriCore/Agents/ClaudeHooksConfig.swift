@@ -58,24 +58,12 @@ public enum ClaudeHooksConfig {
         return result
     }
 
-    /// True for a hook command this app installed, under its current name or its former one.
+    /// True for a hook command Mimamori installed.
     static func isOurs(_ command: String?) -> Bool {
-        guard let command else { return false }
-        return command.contains(marker) || command.contains(FormerName.claudeHookMarker)
+        command?.contains(marker) ?? false
     }
 
-    /// True when the settings still have hooks the app installed under its former name.
-    public static func hasFormerHooks(in settings: [String: Any]) -> Bool {
-        guard let hooks = settings["hooks"] as? [String: Any] else { return false }
-        return hooks.values.contains { value in
-            (value as? [[String: Any]] ?? []).contains { entry in
-                (entry["hooks"] as? [[String: Any]] ?? []).contains { ($0["command"] as? String)?.contains(FormerName.claudeHookMarker) ?? false }
-            }
-        }
-    }
-
-    /// Returns a copy of `settings` without any Mimamori hook commands, including those it
-    /// installed under its former name.
+    /// Returns a copy of `settings` without any Mimamori hook commands.
     public static func uninstall(from settings: [String: Any]) -> [String: Any] {
         var result = settings
         guard var hooks = result["hooks"] as? [String: Any] else { return result }

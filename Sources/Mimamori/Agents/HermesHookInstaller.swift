@@ -21,30 +21,6 @@ enum HermesHookInstaller {
 
     static var isHermesPresent: Bool { FileManager.default.fileExists(atPath: hermesHome.path) }
 
-    /// Replaces the hooks the app installed under its former name (its block and its script) with Mimamori's.
-    /// Hermes approves a hook by its command, so the new one needs approving once; Settings ›
-    /// Agents › Hooks says so. Not from a scratch run unless it was pointed at a scratch Hermes.
-    /// Returns the config's backup, if written.
-    @discardableResult
-    static func migrateFormerHooks(socketPath: String) throws -> URL? {
-        guard !Persistence.isScratch || AgentConfigLocations.current.hermesHomeFromEnvironment,
-              isHermesPresent else { return nil }
-        let yaml = try editor.readText()
-        guard HermesHooksConfig.hasFormerHooks(in: yaml) else { return nil }
-        let formerScript = hermesHome.appendingPathComponent(FormerName.hermesScriptRelativePath)
-        guard yaml.contains(FormerName.hermesBeginMarker) else {
-            // Merged by hand into a hooks: key of its own, which is not ours to edit: keep the old
-            // script, and point it at the new socket.
-            try HermesHooksConfig.script(socketPath: socketPath).write(to: formerScript, atomically: true, encoding: .utf8)
-            return nil
-        }
-        guard HermesHooksConfig.install(into: yaml, scriptPath: scriptPathForConfig) != nil else { return nil }
-        try writeScript(socketPath: socketPath)
-        let backup = try edit { HermesHooksConfig.install(into: $0, scriptPath: scriptPathForConfig) ?? $0 }
-        try? FileManager.default.removeItem(at: formerScript)
-        return backup
-    }
-
     enum State: Equatable {
         case notPresent          // no Hermes home
         case notInstalled

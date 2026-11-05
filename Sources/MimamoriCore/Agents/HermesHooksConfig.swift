@@ -60,16 +60,8 @@ public enum HermesHooksConfig {
     }
 
     private static func isInsideMimamoriBlock(_ yaml: String, line: String) -> Bool {
-        [(beginMarker, endMarker), (FormerName.hermesBeginMarker, FormerName.hermesEndMarker)].contains { begin, end in
-            guard let begin = yaml.range(of: begin), let end = yaml.range(of: end) else { return false }
-            return yaml[begin.upperBound..<end.lowerBound].contains(line)
-        }
-    }
-
-    /// True when the config still has the hooks the app installed under its former name: its block, or its
-    /// script merged by hand.
-    public static func hasFormerHooks(in yaml: String) -> Bool {
-        yaml.contains(FormerName.hermesBeginMarker) || yaml.contains(FormerName.hermesScriptRelativePath)
+        guard let begin = yaml.range(of: beginMarker), let end = yaml.range(of: endMarker) else { return false }
+        return yaml[begin.upperBound..<end.lowerBound].contains(line)
     }
 
     public static func isInstalled(in yaml: String) -> Bool {
@@ -85,14 +77,8 @@ public enum HermesHooksConfig {
         return trimmed + block(scriptPath: scriptPath)
     }
 
-    /// Returns the config without Mimamori's delimited block, or the one it added under its former name
-    /// (unchanged when neither is there).
+    /// Returns the config without Mimamori's delimited block (unchanged when it isn't there).
     public static func uninstall(from yaml: String) -> String {
-        removeBlock(from: removeBlock(from: yaml, begin: beginMarker, end: endMarker),
-                    begin: FormerName.hermesBeginMarker, end: FormerName.hermesEndMarker)
-    }
-
-    private static func removeBlock(from yaml: String, begin beginMarker: String, end endMarker: String) -> String {
         guard let begin = yaml.range(of: beginMarker), let end = yaml.range(of: endMarker) else { return yaml }
         var result = yaml
         var removal = begin.lowerBound..<end.upperBound

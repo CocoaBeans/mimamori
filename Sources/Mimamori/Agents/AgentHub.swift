@@ -189,21 +189,6 @@ final class AgentHub {
     func start(settings: AppSettings) {
         self.settings = settings
         startServer()
-        // Hooks the app installed under its former name post to its old socket: point them at this one.
-        do {
-            if let backup = try HookInstaller.migrateFormerHooks(socketPath: socketPath) {
-                Log.migration.notice("Moved Claude Code's hooks over from \(FormerName.supportFolder, privacy: .public); previous settings saved to \(backup.path)")
-            }
-        } catch {
-            Log.migration.error("Could not move Claude Code's hooks over from \(FormerName.supportFolder, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
-        do {
-            if let backup = try HermesHookInstaller.migrateFormerHooks(socketPath: socketPath) {
-                Log.migration.notice("Moved Hermes's hooks over from \(FormerName.supportFolder, privacy: .public); previous config saved to \(backup.path)")
-            }
-        } catch {
-            Log.migration.error("Could not move Hermes's hooks over from \(FormerName.supportFolder, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
         do {
             if let backup = try HookInstaller.updateIfOutdated(socketPath: socketPath) {
                 Log.hooks.notice("Added newer Claude Code hook events; previous settings saved to \(backup.path)")

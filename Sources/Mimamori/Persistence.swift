@@ -10,17 +10,7 @@ enum Persistence {
         }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
-        let folder = base.appendingPathComponent("Mimamori", isDirectory: true)
-        // The first launch under the new name brings the old folder's repositories, reviews,
-        // settings and activity log across, before anything reads them.
-        do {
-            if try SupportFolderMigration.migrate(from: base.appendingPathComponent(FormerName.supportFolder, isDirectory: true), to: folder) {
-                Log.migration.notice("Moved the settings folder over from \(FormerName.supportFolder, privacy: .public)")
-            }
-        } catch {
-            Log.migration.error("Could not move the settings folder over from \(FormerName.supportFolder, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
-        return folder
+        return base.appendingPathComponent("Mimamori", isDirectory: true)
     }()
 
     /// A scripted run in a throwaway folder (MIMAMORI_SUPPORT_DIR), which must leave your real setup alone.
