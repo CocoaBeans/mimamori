@@ -448,7 +448,7 @@ struct HookSocketServerTests {
         #expect(server.checkPath() == .deferring)
         #expect(!server.isListening)
         // It quits without removing its file, which now refuses connections.
-        close(other)
+        try await Self.quit(other, at: path)
         #expect(FileManager.default.fileExists(atPath: path))
         #expect(server.checkPath() == .listening)
         #expect(states.all == [.deferring, .listening])
@@ -472,7 +472,7 @@ struct HookSocketServerTests {
     @Test func aStaleSocketFileIsReplaced() async throws {
         let path = Self.socketPath()
         // A copy that crashed left its socket file behind.
-        close(try Self.listen(at: path))
+        try await Self.quit(try Self.listen(at: path), at: path)
         let server = HookSocketServer(path: path) { _ in }
         try server.start()
         defer { server.stop() }
@@ -497,6 +497,15 @@ struct HookSocketServerTests {
         }
         try #require(bound == 0 && Darwin.listen(fd, 4) == 0)
         return fd
+    }
+
+    /// Closes a socket from `listen(at:)`, as a copy that quits does, and waits until it refuses
+    /// connections. Tests running alongside launch processes, and a process being launched holds
+    /// a copy of every open socket until it starts, so a closed one can still answer for a moment.
+    /// A copy that really quit is another process, gone with its sockets.
+    private static func quit(_ fd: Int32, at path: String) async throws {
+        close(fd)
+        for _ in 0..<200 where HookSocketServer.answers(at: path) { try await Task.sleep(for: .milliseconds(10)) }
     }
 
     /// Posts a Hermes event the way Mimamori's hook script does; returns the HTTP status.
