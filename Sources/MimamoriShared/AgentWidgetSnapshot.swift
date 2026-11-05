@@ -59,13 +59,15 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         public var others: Int
         /// "Codex and Cursor Agent both edited PLAN.md", when two of them collide.
         public var collision: String?
+        /// What the Agents window's card adds, for the iPhone companion; nil in the widgets' snapshot.
+        public var card: Card?
 
         public var id: String { worktreePath }
 
         public init(worktreePath: String, repository: String, repositoryColor: RepositoryColor? = nil, worktree: String,
                     agent: String, symbol: String? = nil,
                     state: State, status: String, since: Date, task: String? = nil, steps: [Step] = [], others: Int = 0,
-                    collision: String? = nil) {
+                    collision: String? = nil, card: Card? = nil) {
             self.worktreePath = worktreePath
             self.repository = repository
             self.repositoryColor = repositoryColor
@@ -79,10 +81,106 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
             self.steps = steps
             self.others = others
             self.collision = collision
+            self.card = card
         }
 
         /// Opens Mimamori on this agent's worktree.
         public var link: URL { AgentWidgetSnapshot.link(to: worktreePath) }
+    }
+
+    /// An agent's card as the Agents window draws it: the turn's steps along its time, the files
+    /// it touched and what's left to review. Times are absolute, so it changes only when the agent
+    /// does, and the phone draws the timeline up to its own now.
+    public struct Card: Codable, Sendable, Hashable {
+        /// Hooks report the agent's steps; seen from its process only, there are none.
+        public var reportsSteps: Bool
+        /// A turn is under way (working, or waiting on you): its timeline runs to now.
+        public var turnUnderway: Bool
+        public var turnStartedAt: Date?
+        /// The turn's tool calls, oldest first, paths relative to the worktree. Without their
+        /// targets when tasks and steps are kept on the Mac.
+        public var calls: [AgentToolCall]
+        /// How many calls the turn has made, more than `calls` holds once the oldest are dropped.
+        public var callsThisTurn: Int
+        /// The call waiting for your permission.
+        public var waitingCallID: String?
+        /// The last call, for an agent between turns.
+        public var lastCall: AgentToolCall?
+        /// Changed files it touched this turn, most recent first; empty when tasks and steps are
+        /// kept on the Mac.
+        public var files: [File]
+        public var changes: Changes
+        /// The other agents in the worktree.
+        public var others: [Other]
+
+        public init(reportsSteps: Bool, turnUnderway: Bool, turnStartedAt: Date? = nil, calls: [AgentToolCall] = [],
+                    callsThisTurn: Int = 0, waitingCallID: String? = nil, lastCall: AgentToolCall? = nil,
+                    files: [File] = [], changes: Changes = Changes(), others: [Other] = []) {
+            self.reportsSteps = reportsSteps
+            self.turnUnderway = turnUnderway
+            self.turnStartedAt = turnStartedAt
+            self.calls = calls
+            self.callsThisTurn = callsThisTurn
+            self.waitingCallID = waitingCallID
+            self.lastCall = lastCall
+            self.files = files
+            self.changes = changes
+            self.others = others
+        }
+
+        public struct File: Codable, Sendable, Hashable, Identifiable {
+            /// Relative to the worktree.
+            public var path: String
+            /// Nil for a binary file.
+            public var additions: Int?
+            public var deletions: Int?
+            /// A rule flagged it: a secret, a lockfile, a migration.
+            public var flagged: Bool
+
+            public var id: String { path }
+            public var name: String { path.split(separator: "/").last.map(String.init) ?? path }
+
+            public init(path: String, additions: Int? = nil, deletions: Int? = nil, flagged: Bool = false) {
+                self.path = path
+                self.additions = additions
+                self.deletions = deletions
+                self.flagged = flagged
+            }
+        }
+
+        /// The worktree's uncommitted changes: "9 changed · 4 to review".
+        public struct Changes: Codable, Sendable, Hashable {
+            public var files: Int
+            public var toReview: Int
+            public var flagged: Int
+            public var additions: Int
+            public var deletions: Int
+
+            public init(files: Int = 0, toReview: Int = 0, flagged: Int = 0, additions: Int = 0, deletions: Int = 0) {
+                self.files = files
+                self.toReview = toReview
+                self.flagged = flagged
+                self.additions = additions
+                self.deletions = deletions
+            }
+        }
+
+        /// Another agent in the same worktree, in one line.
+        public struct Other: Codable, Sendable, Hashable {
+            public var agent: String
+            public var symbol: String?
+            public var state: State
+            public var status: String
+            public var since: Date
+
+            public init(agent: String, symbol: String? = nil, state: State, status: String, since: Date) {
+                self.agent = agent
+                self.symbol = symbol
+                self.state = state
+                self.status = status
+                self.since = since
+            }
+        }
     }
 
     public var writtenAt: Date

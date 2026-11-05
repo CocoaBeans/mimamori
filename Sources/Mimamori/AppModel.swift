@@ -736,7 +736,7 @@ final class AppModel {
         let agents = widgetAgents()
         widgets.update(agents)
         #if DEBUG
-        companion?.update(agents)
+        companion?.update(companionAgents())
         #endif
     }
 

@@ -18,47 +18,77 @@ struct MimamoriCompanionApp: App {
     }
 }
 
-/// The agents on the connected Mac, the most pressing first, drawn as the widget's rows.
+/// The agents on the connected Mac in the Agents window's groups, as its cards: detailed, or
+/// compact, as the toolbar's switch says.
 struct AgentsScreen: View {
     let model: CompanionModel
+    @AppStorage("showsDetails") private var detailed = true
+    @AppStorage("collapsedGroups") private var collapsedGroups = ""
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     StatusRow(model: model)
-                }
-                if let snapshot = model.snapshot, model.connectedMac != nil {
-                    Section {
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    if let snapshot = model.snapshot, model.connectedMac != nil {
                         if snapshot.agents.isEmpty {
                             Text("No agents at work.")
                                 .foregroundStyle(.secondary)
+                                .padding(.top, 8)
                         }
-                        ForEach(snapshot.agents) { agent in
-                            AgentRowView(agent: agent, detailed: true)
-                                .accessibilityElement(children: .combine)
-                                .accessibilityLabel("\(agent.worktree), \(agent.agent), \(agent.status)")
+                        // Steps' ages and the timeline's end move with the clock.
+                        TimelineView(.periodic(from: .now, by: 5)) { context in
+                            LazyVStack(alignment: .leading, spacing: 8) {
+                                ForEach(AgentGroup.group(snapshot.agents), id: \.group) { entry in
+                                    let collapsed = isCollapsed(entry.group)
+                                    AgentGroupHeader(group: entry.group, agents: entry.agents, collapsed: collapsed) {
+                                        toggle(entry.group)
+                                    }
+                                    .padding(.top, 6)
+                                    if !collapsed {
+                                        ForEach(entry.agents) { agent in
+                                            AgentCardView(agent: agent, detailed: detailed, now: context.date)
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    } header: {
-                        Text(summary(of: snapshot))
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+                .animation(.easeOut(duration: 0.2), value: model.snapshot?.agents.map(\.id))
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Agents")
             .refreshable { model.refresh() }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Toggle(isOn: $detailed) {
+                        Label("Details", systemImage: "rectangle.grid.1x2")
+                    }
+                    .help(detailed ? "Showing each agent's task, steps and files. Tap for one line per agent." : "Show each agent's task, recent steps and files")
+                    .accessibilityLabel("Details")
                     MacPicker(model: model)
                 }
             }
         }
     }
 
-    private func summary(of snapshot: AgentWidgetSnapshot) -> String {
-        var parts: [String] = []
-        if snapshot.needingYou > 0 { parts.append("\(snapshot.needingYou) need you") }
-        if snapshot.working > 0 { parts.append("\(snapshot.working) working") }
-        return parts.isEmpty ? "\(snapshot.agents.count) agents" : parts.joined(separator: " · ")
+    private func isCollapsed(_ group: AgentGroup) -> Bool {
+        collapsedGroups.split(separator: ",").contains(Substring(String(group.rawValue)))
+    }
+
+    /// Folds a group to its header, or opens it; remembered across launches.
+    private func toggle(_ group: AgentGroup) {
+        var keys = Set(collapsedGroups.split(separator: ",").map(String.init))
+        let key = String(group.rawValue)
+        if keys.contains(key) { keys.remove(key) } else { keys.insert(key) }
+        withAnimation(.easeOut(duration: 0.2)) { collapsedGroups = keys.sorted().joined(separator: ",") }
     }
 }
 

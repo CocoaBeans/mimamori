@@ -151,4 +151,51 @@ final class CompanionPublisher {
         Log.companion.info("Companion disconnected: \(String(describing: connection.endpoint), privacy: .public)")
     }
 }
+
+// MARK: Cards
+
+extension AppModel {
+    /// The agents as the widgets draw them, each with its Agents window card.
+    func companionAgents() -> [AgentWidgetSnapshot.Agent] {
+        let details = settings.showTasksInWidgets
+        return agentRows.map { row in
+            var agent = widgetAgent(for: row, details: details)
+            agent.card = companionCard(for: row, details: details)
+            return agent
+        }
+    }
+
+    /// What the Agents window's card shows for `row`. Without `details`, the steps keep their kind
+    /// and times but lose their targets, and the files stay off, as tasks and steps do.
+    private func companionCard(for row: AgentRow, details: Bool) -> AgentWidgetSnapshot.Card {
+        let presence = row.presence
+        let worktree = row.session.id
+        func call(_ call: AgentToolCall) -> AgentToolCall {
+            var copy = call
+            copy.summary = details ? call.summary.map { AgentText.shortenPaths($0, in: worktree) } : nil
+            copy.filePath = nil
+            return copy
+        }
+        let underway: Bool = switch presence.activity {
+        case .working, .needsPermission, .askedQuestion: true
+        case .ready, .idle: false
+        }
+        let hooks = presence.source == .hooks
+        let changes = row.session.changes
+        return AgentWidgetSnapshot.Card(
+            reportsSteps: hooks, turnUnderway: hooks && underway, turnStartedAt: presence.turnStartedAt,
+            calls: hooks ? presence.turnSteps.map(call) : [], callsThisTurn: presence.toolCallsThisTurn,
+            waitingCallID: presence.awaitingCallID, lastCall: hooks ? presence.lastToolCall.map(call) : nil,
+            files: details ? row.files.map { file in
+                AgentWidgetSnapshot.Card.File(path: file.path, additions: file.isBinary ? nil : file.additions,
+                                              deletions: file.isBinary ? nil : file.deletions, flagged: file.isFlagged)
+            } : [],
+            changes: .init(files: changes.count, toReview: row.session.unreviewedCount, flagged: changes.flaggedCount,
+                           additions: changes.totalAdditions, deletions: changes.totalDeletions),
+            others: presence.others.map { other in
+                .init(agent: other.kind.displayName, symbol: other.kind.symbolName, state: other.widgetState,
+                      status: AgentText.shortenPaths(other.statusText, in: worktree), since: other.since)
+            })
+    }
+}
 #endif
