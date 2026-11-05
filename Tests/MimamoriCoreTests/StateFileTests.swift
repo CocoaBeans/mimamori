@@ -268,3 +268,66 @@ struct StateFileTests {
         #expect(inspector.largeFileLimit == InspectorConfiguration().largeFileLimit)
     }
 }
+
+// MARK: The notice at launch
+
+extension StateFileTests {
+    @Test func saysNothingWhenTheFileReadsInFullOrIsMissing() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = StateFile(url: folder.appendingPathComponent("state.json"))
+        #expect(file.load().notice(stateFile: file.url) == nil)
+
+        try fixture("1.1.0").write(to: file.url)
+        #expect(file.load().notice(stateFile: file.url) == nil)
+    }
+
+    @Test func pointsAtTheCopyKeptAside() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = StateFile(url: folder.appendingPathComponent("state.json"))
+        try Data("{\"repositories\": [".utf8).write(to: file.url)
+
+        let loaded = file.load()
+        let notice = try #require(loaded.notice(stateFile: file.url))
+        let aside = try #require(loaded.keptAside)
+        #expect(notice.file == aside)
+        #expect(notice.message == "It opened what it could. It kept a copy of the file as it was.")
+    }
+
+    @Test func saysWhenItOpenedThePreviousCopy() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = StateFile(url: folder.appendingPathComponent("state.json"))
+        try Data("not json".utf8).write(to: file.url)
+        try fixture("1.1.0").write(to: file.previousURL)
+
+        let loaded = file.load()
+        let notice = try #require(loaded.notice(stateFile: file.url))
+        #expect(notice.file == loaded.keptAside)
+        #expect(notice.message.hasPrefix("It opened what it saved the time before, so your latest changes may be missing."))
+    }
+
+    @Test func saysWhenANewerMimamoriSavedIt() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = StateFile(url: folder.appendingPathComponent("state.json"))
+        try fixture("future").write(to: file.url)
+
+        let notice = try #require(file.load().notice(stateFile: file.url))
+        #expect(notice.message.hasPrefix("It was saved by a newer Mimamori, so this one opened what it could."))
+    }
+
+    @Test func saysWhenNothingCouldBeKept() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = StateFile(url: folder.appendingPathComponent("state.json"))
+        try fixture("1.1.0").write(to: file.url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.url.path) }
+
+        let notice = try #require(file.load().notice(stateFile: file.url))
+        #expect(notice.file == file.url)
+        #expect(notice.message.contains("won't be saved"))
+    }
+}

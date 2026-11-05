@@ -100,6 +100,8 @@ final class AppModel {
     /// Whether the welcome window has been seen. Someone already watching repositories has no
     /// need of it, however they got there.
     @ObservationIgnored private(set) var welcomeShown = false
+    /// Why `state.json` couldn't all be read at launch, shown once over the main window.
+    var stateNotice: StateNotice?
     /// Repositories agents work in that Mimamori could watch, waiting for your answer.
     var repositoryOffers: [RepositoryOffer] = []
     /// What git said about folders agents worked in, so each is asked about once.
@@ -110,8 +112,11 @@ final class AppModel {
     @ObservationIgnored private var quitObserver: NSObjectProtocol?
 
     init() {
-        let persisted = Persistence.state.load().state
+        let loaded = Persistence.state.load()
+        let persisted = loaded.state
         self.persisted = persisted
+        let notice = loaded.notice(stateFile: Persistence.stateURL)
+        self.stateNotice = notice
         self.settings = persisted.settings
         self.showActivity = persisted.ui.showActivity
         self.showCommits = persisted.ui.showCommits
@@ -123,7 +128,8 @@ final class AppModel {
         self.activityScopeAll = persisted.ui.activityScopeAll
         self.selectedWorktreeID = persisted.ui.selectedWorktree
         self.agentsWindowOpen = persisted.ui.agentsWindowOpen
-        self.welcomeShown = persisted.ui.welcomeShown || !persisted.repositories.isEmpty
+        // A state file that couldn't be read means you've been here before; the notice says what happened.
+        self.welcomeShown = persisted.ui.welcomeShown || !persisted.repositories.isEmpty || notice != nil
         self.overviewWindowOpen = persisted.ui.overviewWindowOpen
         self.collapsedRepositories = persisted.collapsedRepositories
         self.hiddenWorktrees = persisted.hiddenWorktrees

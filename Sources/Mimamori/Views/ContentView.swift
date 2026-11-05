@@ -40,6 +40,7 @@ struct ContentView: View {
         .onChange(of: model.sortOrder) { model.persistUISoon() }
         .onChange(of: model.selectedWorktreeID) { model.persistUISoon() }
         .frame(minHeight: 480)
+        .modifier(StateNoticeAlert())
         .onAppear {
             // The Agents window opens again if it was open when Mimamori last quit.
             if model.agentsWindowOpen || model.debugFlags.contains("agents-window") { openWindow(id: "agents") }

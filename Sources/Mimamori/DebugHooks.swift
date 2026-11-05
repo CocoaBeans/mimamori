@@ -345,6 +345,7 @@ enum DebugHooks {
         lines.append("git: \(model.gitVersion ?? "none") error=\(model.gitError ?? "-")")
         lines.append("selected: \(model.selectedWorktreeID ?? "-") showActivity=\(model.showActivity) sort=\(model.sortOrder.rawValue) flaggedOnly=\(model.flaggedOnly)")
         lines.append("settings updates: requested=\(model.settingsUpdateRequests) applied=\(model.settingsUpdatesApplied) hideReviewed=\(model.hideReviewed)")
+        lines.append("state notice: \(model.stateNotice.map { "\($0.message) [\($0.file.lastPathComponent)]" } ?? "-")")
         for window in NSApp.windows {
             lines.append("window \(type(of: window)) \"\(window.title)\" number=\(window.windowNumber) visible=\(window.isVisible) key=\(window.isKeyWindow) frame=\(window.frame)")
         }
