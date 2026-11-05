@@ -22,6 +22,8 @@ struct DiffView: View {
     @State private var pendingJump: Int?
     /// Syntax colors and word emphasis for `diff`, worked out off the main thread.
     @State private var decorations = DiffDecorations.empty
+    /// The note being written, if any.
+    @State private var noteDraft: NoteDraft?
 
     private var review: ReviewStatus { commit == nil ? session.reviewStatus(of: change) : .unreviewed }
 
@@ -43,7 +45,8 @@ struct DiffView: View {
                     DiffHeaderView(change: change, diff: diff, worktreePath: session.id,
                                    attribution: commit == nil ? session.attributions[change.path] : nil,
                                    review: review, sinceReview: sinceReviewInfo,
-                                   onToggleReviewed: commit == nil ? { model.toggleReviewForSelection() } : nil) { lineNumber in
+                                   onToggleReviewed: commit == nil ? { model.toggleReviewForSelection() } : nil,
+                                   notesMenu: notesMenu) { lineNumber in
                         jump(toNewLine: lineNumber)
                     }
                     Divider()
@@ -53,13 +56,57 @@ struct DiffView: View {
             .task(id: "\(commit?.oid ?? "")|\(change.contentKey)|\(reviewedBlob ?? "")|\(wantsSinceReview)|\(model.settings.syntaxHighlighting)") {
                 showAll = false
                 targetLineID = nil
+                if noteDraft?.editing == nil, noteDraft?.text.isEmpty ?? true { noteDraft = nil }
                 await load()
                 // MIMAMORI_DEBUG_FLAGS=diff-line:<n>: jump to new-file line n, as a flag's link does.
                 if let flag = model.debugFlags.first(where: { $0.hasPrefix("diff-line:") }),
                    let number = Int(flag.dropFirst("diff-line:".count)) {
                     jump(toNewLine: number)
                 }
+                // MIMAMORI_DEBUG_FLAGS=note-line:<n> or note-line:<n>-<m>: start a note there, as its bubble does.
+                if let flag = model.debugFlags.first(where: { $0.hasPrefix("note-line:") }), noteDraft == nil, let diff {
+                    let bounds = flag.dropFirst("note-line:".count).split(separator: "-").compactMap { Int($0) }
+                    if let first = bounds.first, let last = bounds.last, first <= last,
+                       let hunk = diff.hunks.first(where: { $0.lines.contains { $0.newNumber == first && $0.kind != .deletion } }) {
+                        noteDraft = NoteDraft(side: .new, lines: first...last, hunk: hunk.id)
+                    }
+                }
             }
+    }
+
+    /// The file's notes, in the working tree only: a commit's diff is history.
+    private var noteContext: DiffNotes? {
+        guard commit == nil else { return nil }
+        let session = session
+        return DiffNotes(
+            notes: session.notes.notes(for: change.path), currentBlob: change.newOID, showsOldSide: !loadedSinceReview,
+            add: { [path = change.path] side, lines, quote, text in
+                session.addNote(path: path, side: side, lines: lines, quote: quote, text: text)
+            },
+            edit: { session.editNote($0, text: $1) },
+            delete: { session.deleteNote($0) },
+            setResolved: { session.setNoteResolved($0, $1) })
+    }
+
+    private var notesMenu: DiffHeaderView.NotesMenu? {
+        guard commit == nil else { return nil }
+        let fileNotes = session.notes.unsent.filter { $0.path == change.path }
+        let all = session.notes.unsent
+        return DiffHeaderView.NotesMenu(
+            open: session.notes.open.filter { $0.path == change.path }.count,
+            fileUnsent: fileNotes.count, worktreeUnsent: all.count,
+            canAddFileNote: diff.map { !$0.hunks.isEmpty } ?? false,
+            addFileNote: { noteDraft = NoteDraft(lines: nil) },
+            copyFile: { copyNotes(fileNotes) },
+            copyAll: { copyNotes(all) })
+    }
+
+    /// Copies `notes` as one prompt to paste into the agent, by file and line, and records them as copied.
+    private func copyNotes(_ notes: [ReviewNote]) {
+        guard !notes.isEmpty else { return }
+        let ordered = notes.sorted { ($0.path, $0.lines?.lowerBound ?? 0) < ($1.path, $1.lines?.lowerBound ?? 0) }
+        Workspace.copy(ReviewNotePrompt.format(ordered, branch: session.displayName))
+        session.markNotesSent(ordered.map(\.id), to: nil)
     }
 
     private var sinceReviewInfo: DiffHeaderView.SinceReview? {
@@ -102,7 +149,8 @@ struct DiffView: View {
                                 sideBySide: model.settings.diffLayout == .sideBySide,
                                 fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID,
                                 flags: AttentionFlag.byLine(change.flags),
-                                currentBranch: commit == nil ? currentSideName : nil)
+                                currentBranch: commit == nil ? currentSideName : nil,
+                                notes: noteContext, draft: $noteDraft)
             }
         } else if let errorText {
             ContentUnavailableView("Could Not Load Diff", systemImage: "exclamationmark.triangle",
@@ -175,6 +223,7 @@ struct DiffView: View {
             }
             loadedSinceReview = false
             await show(full)
+            if commit == nil, let full { session.reanchorNotes(in: full, for: change) }
             if full == nil { errorText = "git produced no diff for this file." }
             if let line = pendingJump {
                 pendingJump = nil
@@ -212,7 +261,20 @@ struct DiffHeaderView: View {
     var review: ReviewStatus = .unreviewed
     var sinceReview: SinceReview? = nil
     var onToggleReviewed: (() -> Void)? = nil
+    var notesMenu: NotesMenu? = nil
     let onJump: (Int) -> Void
+
+    /// The file's notes for the agent, and what you can do with them.
+    struct NotesMenu {
+        /// Notes on this file not yet resolved.
+        var open: Int
+        var fileUnsent: Int
+        var worktreeUnsent: Int
+        var canAddFileNote: Bool
+        var addFileNote: () -> Void
+        var copyFile: () -> Void
+        var copyAll: () -> Void
+    }
 
     /// How the file stands against the version you reviewed, when it changed since.
     struct SinceReview {
@@ -267,6 +329,33 @@ struct DiffHeaderView: View {
               : "Mark as reviewed and go to the next file to review (⌘↩)")
     }
 
+    private func notesButton(_ menu: NotesMenu) -> some View {
+        Menu {
+            Button("Add Note on This File", action: menu.addFileNote)
+                .disabled(!menu.canAddFileNote)
+            Divider()
+            Button("Copy This File's Notes as a Prompt" + (menu.fileUnsent > 0 ? " (\(menu.fileUnsent))" : ""), action: menu.copyFile)
+                .disabled(menu.fileUnsent == 0)
+            Button("Copy All Unsent Notes as a Prompt" + (menu.worktreeUnsent > 0 ? " (\(menu.worktreeUnsent))" : ""), action: menu.copyAll)
+                .disabled(menu.worktreeUnsent == 0)
+        } label: {
+            HStack(spacing: 2) {
+                Image(systemName: menu.open > 0 ? "text.bubble.fill" : "text.bubble")
+                if menu.open > 0 {
+                    Text(menu.open, format: .number)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(menu.open == 0
+              ? "Notes for the agent: hover over a line and click its bubble, or add one on the whole file"
+              : "Notes for the agent on this file: add one, or copy them as a prompt to paste where you talk to it")
+        .accessibilityLabel("Notes")
+        .accessibilityValue(menu.open == 1 ? "1 open note" : "\(menu.open) open notes")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             // Title row: only the path has to give way, everything else keeps its size.
@@ -291,6 +380,9 @@ struct DiffHeaderView: View {
                     .layoutPriority(1)
                 }
                 HStack(spacing: 6) {
+                    if let notesMenu {
+                        notesButton(notesMenu)
+                    }
                     Toggle(isOn: sideBySideBinding) {
                         Image(systemName: "rectangle.split.2x1")
                     }
@@ -517,8 +609,14 @@ struct DiffContentView: View {
     var flags: [Int: AttentionFlag] = [:]
     /// The branch checked out, to name a conflict's current side ("HEAD (main)").
     var currentBranch: String? = nil
+    /// The file's notes, where notes apply.
+    var notes: DiffNotes? = nil
+    /// The note being written, kept by the diff's owner so its header can start one too.
+    var draft: Binding<NoteDraft?> = .constant(nil)
 
     private static let initialLimit = 2500
+    /// Where the notes above the diff are, to scroll a new whole-file note into view.
+    private static let notesAboveID = "notes-above"
     /// Narrower than this, two columns are too cramped to read; show one instead.
     private static let minimumSplitWidth: CGFloat = 560
     /// The change overview beside the diff, for diffs longer than a screen or so.
@@ -621,6 +719,11 @@ struct DiffContentView: View {
                             proxy.scrollTo(key, anchor: .center)
                         }
                     }
+                    .onChange(of: draft.wrappedValue) { old, new in
+                        // A new note on the whole file opens above the diff, which may be out of view.
+                        guard let new, new.lines == nil, new.editing == nil, old == nil || old?.lines != nil else { return }
+                        withAnimation { proxy.scrollTo(Self.notesAboveID, anchor: .top) }
+                    }
                     if showsOverview {
                         DiffOverviewStrip(overview: DiffOverview(hunks: visible.hunks, sideBySide: split,
                                                                  flaggedLines: overviewMarks),
@@ -667,14 +770,18 @@ struct DiffContentView: View {
     // drawing a row's old content when its id moved to another section.
     @ViewBuilder
     private func rows(visible: Visible, wrap: Bool) -> some View {
+        notesAboveDiff
+        let index = noteIndex(visible.hunks)
         ForEach(visible.hunks) { hunk in
             Section {
                 ForEach(hunk.lines) { line in
                     DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
                                 syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
                                 isTarget: line.id == targetLineID, flag: flag(for: line),
-                                conflict: placement(for: line), currentBranch: currentBranch)
+                                conflict: placement(for: line), currentBranch: currentBranch,
+                                note: index.mark(for: line), onNote: noteAction(for: line, in: hunk))
                         .id(DiffRowKey(hunk: hunk.id, row: line.id))
+                    noteRows(after: [line.id], index: index, inset: numberWidth * 2 + 20)
                 }
             } header: {
                 HunkHeaderRow(hunk: hunk, fontSize: fontSize)
@@ -685,19 +792,161 @@ struct DiffContentView: View {
 
     @ViewBuilder
     private func splitRows(visible: Visible) -> some View {
+        notesAboveDiff
+        let index = noteIndex(visible.hunks)
         ForEach(visible.hunks) { hunk in
             Section {
                 ForEach(SideBySide.rows(for: hunk)) { row in
+                    // Removed lines take notes on the left, the rest on the right.
+                    let left = row.left?.kind == .deletion ? row.left : nil
+                    let right = row.right?.kind == .deletion ? nil : row.right
                     SplitLineRow(row: row, decorations: decorations, fontSize: fontSize, numberWidth: numberWidth,
                                  isTarget: targetLineID != nil && (row.left?.id == targetLineID || row.right?.id == targetLineID),
-                                 flag: flag(for: row.right), conflict: placement(for: row.right), currentBranch: currentBranch)
+                                 flag: flag(for: row.right), conflict: placement(for: row.right), currentBranch: currentBranch,
+                                 leftNote: left.map(index.mark) ?? .none, rightNote: right.map(index.mark) ?? .none,
+                                 onNoteLeft: left.flatMap { noteAction(for: $0, in: hunk) },
+                                 onNoteRight: right.flatMap { noteAction(for: $0, in: hunk) })
                         .id(DiffRowKey(hunk: hunk.id, row: row.id))
+                    noteRows(after: [left?.id, right?.id].compactMap { $0 }, index: index, inset: numberWidth + 8)
                 }
             } header: {
                 HunkHeaderRow(hunk: hunk, fontSize: fontSize)
             }
         }
         truncationFooter(visible)
+    }
+
+    // MARK: Notes
+
+    /// Which notes and gutter marks go with which lines, worked out once per drawing.
+    private struct NoteIndex {
+        /// Notes after a line, by its id: the line each one's range ends on.
+        var after: [Int: [ReviewNote]] = [:]
+        /// The line the new note being written follows.
+        var draftAfter: Int?
+        var noted: [ReviewNote.Side: Set<Int>] = [:]
+        var draftSide: ReviewNote.Side?
+        var draftLines: ClosedRange<Int>?
+
+        func mark(for line: DiffLine) -> NoteMark {
+            for side in [ReviewNote.Side.new, .old] {
+                guard let number = ReviewNotes.number(of: line, on: side) else { continue }
+                if draftSide == side, draftLines?.contains(number) == true { return .drafting }
+                if noted[side]?.contains(number) == true { return .noted }
+            }
+            return .none
+        }
+    }
+
+    private func noteIndex(_ hunks: [DiffHunk]) -> NoteIndex {
+        guard let notes else { return NoteIndex() }
+        let draft = draft.wrappedValue.flatMap { $0.editing == nil ? $0 : nil }
+        var index = NoteIndex(noted: [.new: notes.notedLines(side: .new),
+                                      .old: notes.showsOldSide ? notes.notedLines(side: .old) : []],
+                              draftSide: draft?.side, draftLines: draft?.lines)
+        guard !notes.notes.isEmpty || draft?.lines != nil else { return index }
+        for hunk in hunks {
+            for line in hunk.lines {
+                for side in [ReviewNote.Side.new, .old] {
+                    guard let number = ReviewNotes.number(of: line, on: side) else { continue }
+                    let attached = notes.onLines(side: side, endingAt: number)
+                    if !attached.isEmpty { index.after[line.id, default: []] += attached }
+                    if let draft, draft.side == side, draft.hunk == hunk.id, draft.lines?.upperBound == number {
+                        index.draftAfter = line.id
+                    }
+                }
+            }
+        }
+        return index
+    }
+
+    /// Starts a note on `line`, or with Shift held stretches the one being written to it.
+    private func noteAction(for line: DiffLine, in hunk: DiffHunk) -> (() -> Void)? {
+        guard let notes else { return nil }
+        let side: ReviewNote.Side = line.kind == .deletion ? .old : .new
+        guard let number = ReviewNotes.number(of: line, on: side), side == .new || notes.showsOldSide else { return nil }
+        return { [draft] in
+            let current = draft.wrappedValue
+            if NSEvent.modifierFlags.contains(.shift), var current, current.editing == nil, current.side == side,
+               current.hunk == hunk.id, let lines = current.lines {
+                current.lines = min(lines.lowerBound, number)...max(lines.upperBound, number)
+                draft.wrappedValue = current
+            } else {
+                // A note you started keeps its words when you pick another line for it.
+                let text = current?.editing == nil ? current?.text ?? "" : ""
+                draft.wrappedValue = NoteDraft(side: side, lines: number...number, hunk: hunk.id, text: text)
+            }
+        }
+    }
+
+    /// Notes on the whole file, and notes whose lines are no longer in the diff.
+    @ViewBuilder
+    private var notesAboveDiff: some View {
+        if let notes {
+            let above = notes.aboveDiff
+            let fileDraft = draft.wrappedValue.map { $0.lines == nil && $0.editing == nil } ?? false
+            if !above.isEmpty || fileDraft {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(above) { noteView($0, notes: notes) }
+                    if fileDraft { composer(notes) }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .id(Self.notesAboveID)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func noteRows(after lineIDs: [Int], index: NoteIndex, inset: CGFloat) -> some View {
+        if let notes {
+            let ids = lineIDs.count == 2 && lineIDs[0] == lineIDs[1] ? [lineIDs[0]] : lineIDs
+            let attached = ids.flatMap { index.after[$0] ?? [] }
+            let drafting = index.draftAfter.map(ids.contains) ?? false
+            if !attached.isEmpty || drafting {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(attached) { noteView($0, notes: notes) }
+                    if drafting { composer(notes) }
+                }
+                .padding(.leading, inset)
+                .padding(.trailing, 12)
+                .padding(.vertical, 5)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func noteView(_ note: ReviewNote, notes: DiffNotes) -> some View {
+        if draft.wrappedValue?.editing == note.id {
+            composer(notes)
+        } else {
+            ReviewNoteCard(note: note, currentBlob: notes.currentBlob,
+                           onEdit: { draft.wrappedValue = NoteDraft(side: note.side, lines: note.lines, editing: note.id, text: note.text) },
+                           onDelete: { notes.delete(note.id) },
+                           onResolve: { notes.setResolved(note.id, $0) })
+        }
+    }
+
+    private func composer(_ notes: DiffNotes) -> some View {
+        ReviewNoteComposer(
+            draft: Binding(get: { draft.wrappedValue ?? NoteDraft() }, set: { draft.wrappedValue = $0 }),
+            onSave: {
+                guard let current = draft.wrappedValue else { return }
+                let text = current.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let id = current.editing {
+                    notes.edit(id, text)
+                } else {
+                    notes.add(current.side, current.lines, quote(for: current), text)
+                }
+                draft.wrappedValue = nil
+            },
+            onCancel: { draft.wrappedValue = nil })
+    }
+
+    /// The lines a new note covers, as they read now.
+    private func quote(for draft: NoteDraft) -> [String] {
+        guard let lines = draft.lines, let hunk = diff.hunks.first(where: { $0.id == draft.hunk }) else { return [] }
+        return hunk.lines.filter { ReviewNotes.number(of: $0, on: draft.side).map(lines.contains) ?? false }.map(\.text)
     }
 
     @ViewBuilder
@@ -833,6 +1082,15 @@ struct DiffLineRow: View {
     /// becomes a labelled divider.
     var conflict: MergeConflicts.Placement? = nil
     var currentBranch: String? = nil
+    /// Whether the line has a note, or is in one being written.
+    var note: NoteMark = .none
+    /// Starts a note on this line; nil where notes can't go.
+    var onNote: (() -> Void)? = nil
+    @State private var hovering = false
+
+    private var place: String {
+        line.kind == .deletion ? "removed line \(line.oldNumber ?? 0)" : "line \(line.newNumber ?? 0)"
+    }
 
     private var marker: String {
         // Inside a conflict, + and − say nothing about who wrote a line.
@@ -850,6 +1108,11 @@ struct DiffLineRow: View {
             Text(line.oldNumber.map(String.init) ?? "")
                 .frame(width: numberWidth, alignment: .trailing)
                 .foregroundStyle(.tertiary)
+                .overlay(alignment: .leading) {
+                    if let onNote {
+                        NoteGutterButton(mark: note, visible: hovering, place: place, action: onNote)
+                    }
+                }
             Text(line.newNumber.map(String.init) ?? "")
                 .frame(width: numberWidth, alignment: .trailing)
                 .foregroundStyle(.tertiary)
@@ -879,11 +1142,16 @@ struct DiffLineRow: View {
             if let conflict { ConflictStyle.stripe(conflict.part) } else { DiffLineStyle.flagStripe(flag) }
         }
         .overlay {
+            if note == .drafting {
+                Color.accentColor.opacity(0.14)
+                    .allowsHitTesting(false)
+            }
             if isTarget {
                 Rectangle()
                     .strokeBorder(Color.accentColor, lineWidth: 1.5)
             }
         }
+        .onHover { inside in if onNote != nil { hovering = inside } }
         .flagHelp(flag)
     }
 }
@@ -941,20 +1209,26 @@ struct SplitLineRow: View {
     /// Where the new side's line falls in a merge conflict.
     var conflict: MergeConflicts.Placement? = nil
     var currentBranch: String? = nil
+    var leftNote: NoteMark = .none
+    var rightNote: NoteMark = .none
+    /// Start a note on the removed line on the left, or the line on the right.
+    var onNoteLeft: (() -> Void)? = nil
+    var onNoteRight: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
             SplitCell(line: row.left, number: row.left?.oldNumber,
                       syntax: row.left.flatMap { decorations.syntax[$0.id] },
                       emphasis: row.left.flatMap { decorations.emphasis[$0.id] },
-                      numberWidth: numberWidth)
+                      numberWidth: numberWidth, note: leftNote, onNote: onNoteLeft)
             Rectangle()
                 .fill(Color.secondary.opacity(0.25))
                 .frame(width: 1)
             SplitCell(line: row.right, number: row.right?.newNumber,
                       syntax: row.right.flatMap { decorations.syntax[$0.id] },
                       emphasis: row.right.flatMap { decorations.emphasis[$0.id] },
-                      numberWidth: numberWidth, flag: flag, conflict: conflict, currentBranch: currentBranch)
+                      numberWidth: numberWidth, flag: flag, conflict: conflict, currentBranch: currentBranch,
+                      note: rightNote, onNote: onNoteRight)
         }
         // Both cells take the taller one's height, so their backgrounds line up.
         .fixedSize(horizontal: false, vertical: true)
@@ -977,12 +1251,22 @@ private struct SplitCell: View {
     var flag: AttentionFlag? = nil
     var conflict: MergeConflicts.Placement? = nil
     var currentBranch: String? = nil
+    var note: NoteMark = .none
+    var onNote: (() -> Void)? = nil
+    @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             Text(number.map(String.init) ?? "")
                 .frame(width: numberWidth, alignment: .trailing)
                 .foregroundStyle(.tertiary)
+                .overlay(alignment: .leading) {
+                    if let onNote, let line {
+                        NoteGutterButton(mark: note, visible: hovering,
+                                         place: line.kind == .deletion ? "removed line \(number ?? 0)" : "line \(number ?? 0)",
+                                         action: onNote)
+                    }
+                }
                 .padding(.trailing, 8)
             if let conflict, conflict.part.isMarker, let line {
                 ConflictStyle.label(conflict, currentBranch: currentBranch, fontSize: nil)
@@ -1006,6 +1290,13 @@ private struct SplitCell: View {
         .overlay(alignment: .leading) {
             if let conflict { ConflictStyle.stripe(conflict.part) } else { DiffLineStyle.flagStripe(flag) }
         }
+        .overlay {
+            if note == .drafting {
+                Color.accentColor.opacity(0.14)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onHover { inside in if onNote != nil { hovering = inside } }
         .flagHelp(flag)
     }
 }

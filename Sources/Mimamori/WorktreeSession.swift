@@ -43,6 +43,7 @@ final class WorktreeSession: Identifiable {
     private(set) var watcherActive = false
     private(set) var attributions: [String: ChangeAttribution] = [:]
     private(set) var reviews: ReviewLedger
+    private(set) var notes: ReviewNotes
     var selectedPath: String?
 
     /// The branch's commits, read when the Commits list first shows and kept current after.
@@ -92,6 +93,7 @@ final class WorktreeSession: Identifiable {
         self.baseline = persisted.baseline
         self.scopePrefixes = persisted.scopePrefixes
         self.reviews = persisted.reviews
+        self.notes = persisted.notes
         self.onActivity = onActivity
         self.onSettingsChanged = onSettingsChanged
     }
@@ -102,7 +104,7 @@ final class WorktreeSession: Identifiable {
     var flaggedCount: Int { changes.flaggedCount }
     var isBusy: Bool { phase == .refreshing || phase == .indexing || phase == .starting }
     var persistedSettings: PersistedWorktreeSettings {
-        PersistedWorktreeSettings(baseline: baseline, scopePrefixes: scopePrefixes, reviews: reviews)
+        PersistedWorktreeSettings(baseline: baseline, scopePrefixes: scopePrefixes, reviews: reviews, notes: notes)
     }
 
     func change(for path: String) -> FileChange? { changesByPath[path] }
@@ -136,6 +138,47 @@ final class WorktreeSession: Identifiable {
     func clearAllReviews() {
         guard !reviews.isEmpty else { return }
         reviews.clearAll()
+        onSettingsChanged(self)
+    }
+
+    // MARK: Notes
+
+    /// Resolved notes are forgotten after this long.
+    private static let resolvedNoteRetention: TimeInterval = 7 * 86400
+
+    /// Leaves a note on `lines` of `path` (nil: the whole file), quoting them as they read now.
+    func addNote(path: String, side: ReviewNote.Side, lines: ClosedRange<Int>?, quote: [String], text: String) {
+        notes.add(ReviewNote(path: path, side: side, lines: lines, quote: quote, text: text,
+                             blob: changesByPath[path]?.newOID))
+        onSettingsChanged(self)
+    }
+
+    func editNote(_ id: UUID, text: String) {
+        notes.edit(id, text: text)
+        onSettingsChanged(self)
+    }
+
+    func deleteNote(_ id: UUID) {
+        notes.delete(id)
+        onSettingsChanged(self)
+    }
+
+    func setNoteResolved(_ id: UUID, _ resolved: Bool) {
+        if resolved { notes.resolve(id) } else { notes.reopen(id) }
+        onSettingsChanged(self)
+    }
+
+    /// Records that `ids` were handed over, to `agent` or (nil) copied.
+    func markNotesSent(_ ids: [UUID], to agent: String?) {
+        let blobs = changesByPath.compactMapValues(\.newOID)
+        notes.markSent(ids, to: agent, blobs: blobs)
+        onSettingsChanged(self)
+    }
+
+    /// Moves the notes on a file to where their lines are in its diff now; only a working-tree
+    /// diff against the baseline will do, since notes on removed lines count lines there.
+    func reanchorNotes(in diff: FileDiff, for change: FileChange) {
+        guard notes.reanchor(path: change.path, in: diff, blob: change.newOID) else { return }
         onSettingsChanged(self)
     }
 
@@ -452,6 +495,9 @@ final class WorktreeSession: Identifiable {
         // An unavailable baseline lists nothing, which says nothing about what is still changed.
         if fresh.baseline.isAvailable, !reviews.isEmpty,
            reviews.prune(keepingPaths: Set(byPath.keys), olderThan: now.addingTimeInterval(-Self.reviewRetention)) {
+            onSettingsChanged(self)
+        }
+        if !notes.isEmpty, notes.prune(resolvedBefore: now.addingTimeInterval(-Self.resolvedNoteRetention)) {
             onSettingsChanged(self)
         }
         if lastChanged.count > 5000 {

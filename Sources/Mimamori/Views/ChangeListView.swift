@@ -102,7 +102,7 @@ struct ChangeListView: View {
                         ChangeRow(change: row.change, recency: row.recency, lastChanged: row.lastChanged,
                                   now: model.now, worktreePath: session.id,
                                   attribution: session.attributions[row.change.path],
-                                  review: review,
+                                  review: review, notes: session.notes.unsentCount(for: row.change.path),
                                   onToggleReviewed: { session.setReviewed(!review.isReviewed, paths: [row.change.path]) })
                             .equatable()
                             .tag(row.change.path)
@@ -335,7 +335,7 @@ extension ChangeRow: @preconcurrency Equatable {
     static func == (a: ChangeRow, b: ChangeRow) -> Bool {
         a.change == b.change && a.recency == b.recency && a.lastChanged == b.lastChanged && a.now == b.now
             && a.worktreePath == b.worktreePath && a.attribution == b.attribution && a.review == b.review
-            && (a.onToggleReviewed == nil) == (b.onToggleReviewed == nil)
+            && a.notes == b.notes && (a.onToggleReviewed == nil) == (b.onToggleReviewed == nil)
     }
 }
 
@@ -347,6 +347,8 @@ struct ChangeRow: View {
     let worktreePath: String
     var attribution: ChangeAttribution? = nil
     var review: ReviewStatus = .unreviewed
+    /// Notes on the file not yet handed to the agent.
+    var notes = 0
     var onToggleReviewed: (() -> Void)? = nil
 
     private var visibleFlags: [AttentionFlag] {
@@ -418,6 +420,14 @@ struct ChangeRow: View {
                             .help("Reviewed")
                     }
                     FlagIcons(flags: change.flags.filter { $0.severity == .info })
+                    if notes > 0 {
+                        Label("\(notes)", systemImage: "text.bubble.fill")
+                            .labelStyle(.titleAndIcon)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(Color.accentColor)
+                            .fixedSize()
+                            .help(notes == 1 ? "1 note for the agent, not sent yet" : "\(notes) notes for the agent, not sent yet")
+                    }
                     // Fixed, like DeltaText: at the change list's narrowest they would wrap a
                     // character a line. The path gives way instead.
                     if change.isUntracked {

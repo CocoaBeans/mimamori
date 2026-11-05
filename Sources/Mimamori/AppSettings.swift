@@ -179,11 +179,14 @@ struct PersistedWorktreeSettings: Codable, Hashable, Sendable {
     var baseline: Baseline = .head
     var scopePrefixes: [String] = []
     var reviews = ReviewLedger()
+    var notes = ReviewNotes()
 
-    init(baseline: Baseline = .head, scopePrefixes: [String] = [], reviews: ReviewLedger = ReviewLedger()) {
+    init(baseline: Baseline = .head, scopePrefixes: [String] = [], reviews: ReviewLedger = ReviewLedger(),
+         notes: ReviewNotes = ReviewNotes()) {
         self.baseline = baseline
         self.scopePrefixes = scopePrefixes
         self.reviews = reviews
+        self.notes = notes
     }
 
     init(from decoder: Decoder) throws {
@@ -191,6 +194,7 @@ struct PersistedWorktreeSettings: Codable, Hashable, Sendable {
         baseline = try c.decodeIfPresent(Baseline.self, forKey: .baseline) ?? .head
         scopePrefixes = try c.decodeIfPresent([String].self, forKey: .scopePrefixes) ?? []
         reviews = try c.decodeIfPresent(ReviewLedger.self, forKey: .reviews) ?? ReviewLedger()
+        notes = try c.decodeIfPresent(ReviewNotes.self, forKey: .notes) ?? ReviewNotes()
     }
 }
 

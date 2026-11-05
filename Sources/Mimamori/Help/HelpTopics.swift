@@ -82,6 +82,12 @@ struct HelpTopic: Identifiable {
             - **Mark as Reviewed** (⌘↩) dims the file and moves to the next one.
             - The **To review** count above the list is also a filter (⌥⌘R) that shows only what's left.
             - When an agent edits a file you reviewed, it comes back as changed since your review, and the diff can show just the newer edits.
+
+            ## Leave notes for the agent
+            - Hover over a line in a diff and click the bubble beside its number to leave a note. Shift-click another line's bubble to cover the lines between. Return saves, Option-Return starts a new line.
+            - The bubble menu in the diff's header adds a note on the whole file, and copies notes as one prompt to paste where you talk to the agent.
+            - A note follows its lines as the file changes. When they're gone, it moves above the diff with the lines it was written on.
+            - Resolve a note once the agent has dealt with it. The file list and the sidebar count the notes not sent yet.
             """),
 
         HelpTopic(

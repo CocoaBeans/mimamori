@@ -259,6 +259,11 @@ struct WorktreeRow: View {
                     CountChip(symbol: "exclamationmark.triangle.fill", count: session.flaggedCount, tint: .orange)
                         .help(session.flaggedCount == 1 ? "1 file needs a look" : "\(session.flaggedCount) files need a look")
                 }
+                let notes = session.notes.unsent.count
+                if notes > 0 {
+                    CountChip(symbol: "text.bubble", count: notes, tint: .accentColor)
+                        .help(notes == 1 ? "1 note for the agent, not sent yet" : "\(notes) notes for the agent, not sent yet")
+                }
                 ReviewCountBadge(session: session)
             }
         }

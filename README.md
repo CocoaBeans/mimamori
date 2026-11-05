@@ -48,6 +48,10 @@ Git clients are built for committing. When an agent is editing on your behalf, y
   - The header's **To review** count is also a filter (⌥⌘R) that shows only what is left; while any filter hides files, a bar under the list says how many.
   - A mark covers the content you saw, so when an agent edits the file again it comes back as *changed since your review*, and the diff can show just the edits made after you looked.
   - Each sidebar row shows its counts as chips that say what they count: ± changed files, 👁 left to review once you start, ✓ when all are reviewed, ⚠ files that need a look. A worktree with an agent leads with the agent's badge and a short status ("Needs permission", "Working · Bash").
+- **Takes review notes for the agent.** Hover over a line in a diff and click the bubble in its gutter to leave a note on it, Shift-click another line's bubble to cover the lines between, or add a note on the whole file from the header's bubble menu. Notes work on removed lines too, in one column or two.
+  - A note quotes its lines and follows them as the file changes. When they are gone it moves above the diff, marked as changed, with the lines it was written on.
+  - The header's bubble menu copies this file's notes, or every unsent note in the worktree, as one prompt to paste where you talk to the agent: a block per note with its file, lines, code and your words. Copied notes say when; edit one and it counts as unsent again.
+  - The file list and the sidebar count notes not sent yet. Resolve a note once the agent has dealt with it; resolved notes fold to a line and are forgotten after a week. Notes are saved with the worktree's review marks.
 - **Writes up a session.** ⇧⌘E (or the document button by the filter) opens a Markdown summary of a worktree's session in a window of its own, one per worktree, to move and resize beside your work.
   - It covers what changed, what needs attention and why, what you have reviewed, the commits since the baseline, and what the agent did, with diffs if you want them.
   - It gathers itself again a couple of seconds after the worktree changes. With diffs included, it says it is out of date and waits for Refresh instead, since every diff is read again.
@@ -127,6 +131,7 @@ This creates a throwaway repository, prints its path, and then edits, adds, dele
   Settings › Snapshots shows how much disk space the selected worktree's snapshots use on their own: the objects no branch, tag, other ref, worktree HEAD or index keeps (`git rev-list --objects-edge-aggressive --disk-usage`, git 2.38 or later). Deleting the snapshots frees that space the next time `git gc` prunes unreachable objects, which by default waits about two weeks.
 
 - **Review marks** record, per file, the blob you saw (from the shadow index). Comparing that against the current blob tells reviewed, unreviewed and changed-since-review apart, and `git diff <reviewed blob> <current blob>` gives the since-review diff. Marks live with the worktree's settings in `state.json`; blobs nothing else references are eventually pruned by `git gc`, after which only the full diff is available.
+- **Review notes** are kept beside the marks in `state.json`. Each quotes the lines it was written on and records their numbers on the new side, or the old side for removed lines. When the full diff loads, a note looks for its quoted lines among the diff's lines, taking the copy nearest its old place, and is outdated when they are gone.
 - **Refresh pacing.** File events are debounced (default 400 ms) with a maximum delay (default 2.5 s) so continuous churn still refreshes. Changes inside folders git ignores (`.build`, `node_modules`) are recognized once and skipped from then on, so a build does not set off refreshes. File events are reliable, so the quiet, staggered backstop poll runs only every 10 minutes per worktree, plus once for every worktree when the Mac wakes from sleep.
 
 ## Agents and hooks
@@ -357,6 +362,7 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `status-pill` | Open the toolbar pill's popover and render it |
 | `sidebar` | Render the sidebar rows that have agents or changes |
 | `diff-line:<n>` | Scroll the selected file's diff to new-file line n |
+| `note-line:<n>` or `note-line:<n>-<m>` | Start a note on new-file lines n to m of the selected file, as their bubbles do |
 | `about` | Open the About window |
 | `permission:allow` | Answer a waiting permission request once it has waited 5 s, as Allow does (`permission:deny` for Deny) |
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
