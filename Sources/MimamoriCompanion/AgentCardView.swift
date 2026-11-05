@@ -131,44 +131,46 @@ struct AgentCardView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The project, then the worktree, then how long it has been at it.
+    /// The project and how long it has been at it, then the worktree on a line of its own: a
+    /// phone is too narrow for both names beside the timer.
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if let color = agent.repositoryColor {
-                Circle()
-                    .fill(color.color)
-                    .frame(width: 9, height: 9)
-                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-            }
-            // The project is what you recognize at a glance, so the worktree gives way first.
-            Text(agent.repository)
-                .font(.headline)
-                .lineLimit(1)
-                .layoutPriority(1)
-            Text(agent.worktree)
-                .font(.headline.weight(.regular))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if agent.others > 0 {
-                Text("+\(agent.others)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 6)
-            if let steps {
-                Text(steps)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if let color = agent.repositoryColor {
+                    Circle()
+                        .fill(color.color)
+                        .frame(width: 9, height: 9)
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                }
+                Text(agent.repository)
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                if let steps {
+                    Text(steps)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                }
+                StateTimer(agent: agent)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(agent.state.tint.opacity(0.16), in: Capsule())
                     .fixedSize()
             }
-            StateTimer(agent: agent)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(agent.state.tint.opacity(0.16), in: Capsule())
-                .fixedSize()
+            HStack(spacing: 4) {
+                Text(agent.worktree)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if agent.others > 0 {
+                    Text("+\(agent.others)")
+                        .font(.caption2.weight(.bold))
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
     }
 
