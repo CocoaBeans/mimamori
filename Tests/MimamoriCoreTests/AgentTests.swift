@@ -397,6 +397,126 @@ struct HookSocketServerTests {
         #expect(server.receivedEvents == 1)
     }
 
+    // Every copy of Mimamori listens at the same path. A copy that took the path from a running
+    // one left that one listening on a file nothing could reach, so it heard no hooks at all: an
+    // agent caught mid-turn stayed "running, idle" while it went on working.
+
+    @Test func aSecondCopyLeavesTheSocketToTheFirst() async throws {
+        let path = Self.socketPath()
+        let first = HookSocketServer(path: path) { _ in }
+        try first.start()
+        defer { first.stop() }
+        let second = HookSocketServer(path: path) { _ in }
+        try second.start()
+        #expect(second.state == .deferring)
+        #expect(!second.isListening)
+        #expect(first.checkPath() == .listening)
+        #expect(try await Self.post(to: path) == "204")
+        #expect(first.receivedEvents == 1)
+
+        // The second quits: the first's socket stays.
+        second.stop()
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(try await Self.post(to: path) == "204")
+        #expect(first.receivedEvents == 2)
+    }
+
+    @Test func aDeferringCopyTakesOverOnceTheFirstQuits() async throws {
+        let path = Self.socketPath()
+        let first = HookSocketServer(path: path) { _ in }
+        try first.start()
+        let second = HookSocketServer(path: path) { _ in }
+        try second.start()
+        defer { second.stop() }
+        #expect(second.checkPath() == .deferring)
+        first.stop()
+        #expect(second.checkPath() == .listening)
+        #expect(try await Self.post(to: path) == "204")
+        #expect(second.receivedEvents == 1)
+    }
+
+    @Test func takesTheSocketBackFromACopyThatTookItAndQuit() async throws {
+        let path = Self.socketPath()
+        let server = HookSocketServer(path: path) { _ in }
+        let states = ReceivedStates()
+        server.onNote = { note in if case .state(let state) = note { states.append(state) } }
+        try server.start()
+        defer { server.stop() }
+
+        // An older copy starts: it replaces the socket file with its own.
+        let other = try Self.listen(at: path)
+        #expect(server.checkPath() == .deferring)
+        #expect(!server.isListening)
+        // It quits without removing its file, which now refuses connections.
+        close(other)
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(server.checkPath() == .listening)
+        #expect(states.all == [.deferring, .listening])
+        #expect(try await Self.post(to: path) == "204")
+        #expect(server.receivedEvents == 1)
+    }
+
+    @Test func takesTheSocketBackByItself() async throws {
+        let path = Self.socketPath()
+        let server = HookSocketServer(path: path) { _ in }
+        server.pathCheckInterval = 0.1
+        try server.start()
+        defer { server.stop() }
+        unlink(path)
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: path) { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(server.state == .listening)
+        #expect(try await Self.post(to: path) == "204")
+        #expect(server.receivedEvents == 1)
+    }
+
+    @Test func aStaleSocketFileIsReplaced() async throws {
+        let path = Self.socketPath()
+        // A copy that crashed left its socket file behind.
+        close(try Self.listen(at: path))
+        let server = HookSocketServer(path: path) { _ in }
+        try server.start()
+        defer { server.stop() }
+        #expect(server.state == .listening)
+        server.stop()
+        #expect(!FileManager.default.fileExists(atPath: path))
+    }
+
+    private static func socketPath() -> String {
+        NSTemporaryDirectory() + "mimamori-test-\(UUID().uuidString.prefix(8)).sock"
+    }
+
+    /// Binds a bare listening socket at `path`, as another copy of Mimamori would.
+    private static func listen(at path: String) throws -> Int32 {
+        unlink(path)
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: Array(path.utf8)) }
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        try #require(bound == 0 && Darwin.listen(fd, 4) == 0)
+        return fd
+    }
+
+    /// Posts a Hermes event the way Mimamori's hook script does; returns the HTTP status.
+    private static func post(to path: String) async throws -> String {
+        let json = #"{"hook_event_name":"pre_tool_call","session_id":"h1","cwd":"/Users/me/.hermes","tool_name":"terminal","tool_input":{"command":"ls"},"extra":{"tool_call_id":"c1"}}"#
+        let result = try await ProcessRunner.run(
+            executable: URL(fileURLWithPath: "/usr/bin/curl"),
+            arguments: ["-s", "-m", "2", "-o", "/dev/null", "-w", "%{http_code}", "-H", "Expect:", "-H", "Content-Type: application/json",
+                        "--unix-socket", path, "--data-binary", "@-", "http://mimamori/event/hermes"],
+            stdin: Data(json.utf8))
+        return result.stdoutText
+    }
+
+    private final class ReceivedStates: @unchecked Sendable {
+        private let lock = NSLock()
+        private var states: [HookSocketServer.State] = []
+        func append(_ state: HookSocketServer.State) { lock.lock(); states.append(state); lock.unlock() }
+        var all: [HookSocketServer.State] { lock.lock(); defer { lock.unlock() }; return states }
+    }
+
     private final class ReceivedEvents: @unchecked Sendable {
         private let lock = NSLock()
         private var events: [HookEvent] = []
@@ -502,6 +622,46 @@ struct HermesSessionTests {
         #expect(HermesSessions.directory(forSession: "new", in: url) == nil)
         // Quotes in an id are data, not SQL.
         #expect(HermesSessions.directory(forSession: "x' OR '1'='1", in: url) == nil)
+    }
+
+    @Test func aTurnJoinedMidwayIsPlacedAndShowsWorking() throws {
+        // Mimamori starts while a Hermes desktop session is mid-turn. Its gateway reports ~/.hermes
+        // as the working directory, the first events are tool calls naming no absolute path, and
+        // no turn start was seen. The session's recorded directory places them.
+        let session = "20260903_173947_d73992"
+        let url = try database([
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, cwd TEXT, git_repo_root TEXT)",
+            "INSERT INTO sessions VALUES ('\(session)', 'tui', '/p/steward', '/p/steward')",
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+        func payload(_ name: String, _ tool: String, _ input: String, _ id: String) -> String {
+            #"{"hook_event_name":"\#(name)","session_id":"\#(session)","cwd":"/Users/me/.hermes","tool_name":"\#(tool)","tool_input":\#(input),"extra":{"tool_call_id":"\#(id)"}}"#
+        }
+        let payloads = [
+            payload("post_tool_call", "execute_code", #"{"code":"import os"}"#, "c0"),
+            payload("pre_tool_call", "execute_code", #"{"code":"import os"}"#, "c1"),
+            payload("post_tool_call", "execute_code", #"{"code":"import os"}"#, "c1"),
+            payload("pre_tool_call", "patch", #"{"path":"app/lib/main.dart","old_string":"a","new_string":"b"}"#, "c2"),
+        ]
+        let worktree: (String) -> String? = { $0 == "/p/steward" || $0.hasPrefix("/p/steward/") ? "/p/steward" : nil }
+        var placement = SessionPlacement()
+        var machine = AgentStatusMachine()
+        for (index, payload) in payloads.enumerated() {
+            let event = try #require(AgentEventTranslator.translate(Data(payload.utf8), agent: .hermes,
+                                                                    receivedAt: Date(timeIntervalSince1970: 1000 + Double(index))))
+            let decision = placement.place(session: event.sessionID, cwdMatch: event.cwd.flatMap(worktree),
+                                           pathMatch: event.filePath.flatMap(worktree), changesFiles: event.isMutatingTool,
+                                           homeMatch: HermesSessions.directory(forSession: session, in: url).flatMap(worktree))
+            #expect(decision.worktree == "/p/steward")
+            _ = machine.apply(event)
+        }
+        let status = try #require(machine.status)
+        guard case .working(let tool, _) = status.activity else {
+            Issue.record("expected working, got \(status.activity)")
+            return
+        }
+        #expect(tool == "patch")
+        #expect(status.turnToolCalls.map(\.toolName) == ["execute_code", "patch"])
     }
 
     @Test func anUnexpectedDatabaseReadsAsUnknown() throws {

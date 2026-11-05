@@ -269,7 +269,7 @@ struct HelpTopic: Identifiable {
             markdown: """
             ## An agent doesn't show up, or says nothing
             Open **Help › Troubleshoot Agent Hooks…**.
-            - **Socket** says whether Mimamori is listening for hooks.
+            - **Socket** says whether Mimamori is listening for hooks. While two copies of Mimamori run, only one listens; the other takes over a few seconds after it quits.
             - **Send Test Event** runs the hook command as an agent would, and says whether the event arrived.
             - **Recent Events** lists what came in and where it went. *Not placed* means no watched worktree holds the folder the agent works in, so add its repository (⌘O). Nothing at all means the agent isn't running its hooks: start a new session after installing them.
             - Hermes runs a hook only once you approve it. Run `hermes --accept-hooks` once in Terminal, then start a new session.

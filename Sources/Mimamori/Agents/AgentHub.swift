@@ -259,8 +259,13 @@ final class AgentHub {
         do {
             try server.start()
             self.server = server
-            socketError = nil
-            Log.hooks.notice("Listening for hook events at \(self.socketPath)")
+            if server.state == .deferring {
+                socketError = Self.deferringMessage
+                Log.hooks.notice("Another copy of Mimamori is listening for hook events at \(self.socketPath); this one takes over when it quits")
+            } else {
+                socketError = nil
+                Log.hooks.notice("Listening for hook events at \(self.socketPath)")
+            }
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(300))
                 self?.isListening = server.isListening
@@ -384,8 +389,19 @@ final class AgentHub {
             Log.hooks.notice("A test event arrived through the hook command")
         case .hungUp(let id):
             permissionAnsweredElsewhere(id)
+        case .state(let state):
+            isListening = state == .listening
+            socketError = state == .deferring ? Self.deferringMessage : nil
+            if state == .deferring {
+                Log.hooks.error("Another copy of Mimamori took the hook socket at \(self.socketPath); hook events go to it until it quits")
+            } else if state == .listening {
+                Log.hooks.notice("Listening for hook events at \(self.socketPath) again")
+            }
         }
     }
+
+    /// Why the socket is not listening while another copy of Mimamori has it.
+    static let deferringMessage = "another copy of Mimamori has the socket; this one takes over when it quits"
 
     private func record(_ entry: HookLogEntry) {
         hookLog.insert(entry, at: 0)

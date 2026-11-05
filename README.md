@@ -241,7 +241,7 @@ When you create a new git repository, run `open -g -a Mimamori "<path>"` so Mima
 
 When an agent doesn't show up, or shows up without saying what it is doing, open **Settings › Agents › Hooks** (or **Help › Troubleshoot Agent Hooks…**):
 
-- **Socket** says whether Mimamori is listening, and why not when it isn't. The usual reason is a path longer than the 104 bytes a Unix socket allows, when `MIMAMORI_SUPPORT_DIR` points somewhere deep.
+- **Socket** says whether Mimamori is listening, and why not when it isn't. The usual reason is a path longer than the 104 bytes a Unix socket allows, when `MIMAMORI_SUPPORT_DIR` points somewhere deep. Every copy of Mimamori uses the same socket, so while two run at once (a build of your own and the one in Applications, say) one listens and the other says another copy has the socket. It takes over within a few seconds of that copy quitting.
 - **Send Test Event** runs the hook command Mimamori installs, with a test event on its standard input as an agent would, and says whether it arrived and how long it took. If the test arrives but an agent's events don't, the agent isn't running its hooks.
 - **Recent Events** lists the latest 200 requests to the socket and what became of each:
   - *→ a worktree*: placed there.

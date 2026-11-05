@@ -59,6 +59,11 @@ public struct HookRejection: Sendable, Hashable {
 /// `?agent=<name>` to say which agent it is and `?event=<name>` for a payload that names no
 /// event; `POST /event/hermes` for Hermes; `GET /health`. A body with a `mimamori_test` key is a
 /// test from Settings: it is answered and reported, not handed on as an agent's event.
+///
+/// Every copy of Mimamori uses the same path, and a socket file that is replaced leaves its
+/// listener reachable by nothing. So a server never takes the path from another that answers
+/// there, removes only its own socket file, and checks now and then that the file is still its
+/// own: when another copy took it and has quit, it takes the path back.
 public final class HookSocketServer: @unchecked Sendable {
     public typealias Handler = @Sendable (HookEvent) -> Void
 
@@ -70,6 +75,18 @@ public final class HookSocketServer: @unchecked Sendable {
         /// The hook waiting on permission request `id` went away before an answer: the agent no
         /// longer waits on it. Claude Code ends the hook when you say no in its own prompt.
         case hungUp(permission: String)
+        /// The server stopped or started listening after it started: another copy of Mimamori
+        /// took the socket, or let it go.
+        case state(State)
+    }
+
+    /// Whether the server has the socket.
+    public enum State: Sendable, Equatable {
+        case stopped
+        case listening
+        /// Another copy of Mimamori answers at the path, so events go to it. This one takes the
+        /// path once nothing answers there.
+        case deferring
     }
 
     public let path: String
@@ -83,6 +100,12 @@ public final class HookSocketServer: @unchecked Sendable {
     private let lock = NSLock()
     private var source: DispatchSourceRead?
     private var listening = false
+    private var currentState = State.stopped
+    /// The socket file this server bound, to tell it from one another copy put at the path.
+    private var socketFile: (device: dev_t, inode: ino_t)?
+    private var pathWatch: DispatchSourceTimer?
+    /// How often the server checks that the socket file at the path is still its own.
+    public var pathCheckInterval: TimeInterval = 5
     private var eventCount = 0
     private var agentClassifier = AgentClassifier()
     private var noteHandler: (@Sendable (Note) -> Void)?
@@ -101,6 +124,7 @@ public final class HookSocketServer: @unchecked Sendable {
     deinit { stop() }
 
     public var isListening: Bool { lock.lock(); defer { lock.unlock() }; return listening }
+    public var state: State { lock.lock(); defer { lock.unlock() }; return currentState }
     public var receivedEvents: Int { lock.lock(); defer { lock.unlock() }; return eventCount }
 
     /// How callers are recognized as agents; set it to include the names you added in Settings.
@@ -124,28 +148,78 @@ public final class HookSocketServer: @unchecked Sendable {
         set { lock.lock(); answering = newValue; lock.unlock() }
     }
 
+    /// Listens at `path`, unless another copy of Mimamori answers there: then it defers to that
+    /// copy (`state` says so) and takes the path once nothing answers. Throws when the socket
+    /// cannot be made, for instance when the path is longer than a socket address allows.
     public func start() throws {
         lock.lock(); defer { lock.unlock() }
-        guard source == nil else { return }
-        try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
-        unlink(path)
+        guard currentState == .stopped else { return }
+        guard Self.address(for: path) != nil else { throw POSIXError(.ENAMETOOLONG) }
+        if Self.answers(at: path) {
+            // Taking the path would leave that copy listening on a file nothing can reach.
+            currentState = .deferring
+        } else {
+            try bindLocked()
+        }
+        let watch = DispatchSource.makeTimerSource(queue: acceptQueue)
+        let interval = max(0.05, pathCheckInterval)
+        watch.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(Int(interval * 200)))
+        watch.setEventHandler { [weak self] in self?.checkPath() }
+        watch.resume()
+        pathWatch = watch
+    }
 
+    public func stop() {
+        lock.lock(); defer { lock.unlock() }
+        pathWatch?.cancel()
+        pathWatch = nil
+        // A file another copy put at the path is that copy's to remove.
+        if ownsPathLocked() { unlink(path) }
+        closeListenerLocked()
+        currentState = .stopped
+    }
+
+    /// Makes sure events reach a Mimamori: while listening, that the socket file at the path is
+    /// still this server's; while deferring, that the other copy still answers. Takes the path
+    /// (back) when nothing answers there. Runs every `pathCheckInterval` seconds by itself.
+    @discardableResult
+    public func checkPath() -> State {
+        lock.lock()
+        let before = currentState
+        let settled = before == .stopped || (before == .listening && ownsPathLocked())
+        lock.unlock()
+        if settled { return before }
+
+        // Another copy replaced the socket file (or it was removed): this listener is out of reach.
+        let otherCopy = Self.answers(at: path)
+        lock.lock()
+        guard currentState != .stopped else { lock.unlock(); return .stopped }
+        closeListenerLocked()
+        if otherCopy {
+            currentState = .deferring
+        } else {
+            // Not ours to give up on: try again at the next check.
+            do { try bindLocked() } catch { currentState = .deferring }
+        }
+        let after = currentState
+        lock.unlock()
+        if after != before { note(.state(after)) }
+        return after
+    }
+
+    /// Binds a fresh socket at the path, replacing whatever file is there. Call with `lock` held.
+    private func bindLocked() throws {
+        try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        guard var address = Self.address(for: path) else { throw POSIXError(.ENAMETOOLONG) }
+        unlink(path)
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw Self.posixError() }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
-        let bytes = Array(path.utf8)
-        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
-            close(fd)
-            throw POSIXError(.ENAMETOOLONG)
-        }
-        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: bytes) }
         let bound = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
         }
         // Only you can connect: macOS checks write permission on the socket file.
-        guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 64) == 0 else {
+        var file = stat()
+        guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 64) == 0, stat(path, &file) == 0 else {
             let error = Self.posixError()
             close(fd)
             unlink(path)
@@ -158,16 +232,48 @@ public final class HookSocketServer: @unchecked Sendable {
         source.setCancelHandler { close(fd) }
         source.resume()
         self.source = source
+        socketFile = (file.st_dev, file.st_ino)
         listening = true
+        currentState = .listening
     }
 
-    public func stop() {
-        lock.lock(); defer { lock.unlock() }
-        guard let source else { return }
-        source.cancel()
-        self.source = nil
+    /// Call with `lock` held.
+    private func closeListenerLocked() {
+        source?.cancel()
+        source = nil
+        socketFile = nil
         listening = false
-        unlink(path)
+    }
+
+    /// Whether the file at the path is the socket this server bound. Call with `lock` held.
+    private func ownsPathLocked() -> Bool {
+        guard let socketFile else { return false }
+        var file = stat()
+        return stat(path, &file) == 0 && file.st_dev == socketFile.device && file.st_ino == socketFile.inode
+    }
+
+    private static func address(for path: String) -> sockaddr_un? {
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        let bytes = Array(path.utf8)
+        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else { return nil }
+        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: bytes) }
+        return address
+    }
+
+    /// Whether something listens at `path`: another copy of Mimamori. A socket file left by a
+    /// copy that quit refuses the connection.
+    static func answers(at path: String) -> Bool {
+        guard var address = address(for: path) else { return false }
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+        return withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        } == 0
     }
 
     private static func posixError() -> POSIXError {
