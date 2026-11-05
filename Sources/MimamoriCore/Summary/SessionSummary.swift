@@ -82,14 +82,14 @@ public struct SessionSummaryOptions: Sendable, Hashable, Codable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = SessionSummaryOptions()
-        attention = try c.decodeIfPresent(Bool.self, forKey: .attention) ?? defaults.attention
-        files = try c.decodeIfPresent(Bool.self, forKey: .files) ?? defaults.files
-        unreviewed = try c.decodeIfPresent(Bool.self, forKey: .unreviewed) ?? defaults.unreviewed
-        commits = try c.decodeIfPresent(Bool.self, forKey: .commits) ?? defaults.commits
-        activity = try c.decodeIfPresent(Bool.self, forKey: .activity) ?? defaults.activity
-        diffs = try c.decodeIfPresent(Bool.self, forKey: .diffs) ?? defaults.diffs
-        maxDiffLines = try c.decodeIfPresent(Int.self, forKey: .maxDiffLines) ?? defaults.maxDiffLines
-        maxActivityEntries = try c.decodeIfPresent(Int.self, forKey: .maxActivityEntries) ?? defaults.maxActivityEntries
+        attention = c.decode(.attention, or: defaults.attention)
+        files = c.decode(.files, or: defaults.files)
+        unreviewed = c.decode(.unreviewed, or: defaults.unreviewed)
+        commits = c.decode(.commits, or: defaults.commits)
+        activity = c.decode(.activity, or: defaults.activity)
+        diffs = c.decode(.diffs, or: defaults.diffs)
+        maxDiffLines = c.decode(.maxDiffLines, or: defaults.maxDiffLines)
+        maxActivityEntries = c.decode(.maxActivityEntries, or: defaults.maxActivityEntries)
     }
 }
 

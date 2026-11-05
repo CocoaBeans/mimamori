@@ -10,6 +10,15 @@ public struct InspectorConfiguration: Sendable, Hashable, Codable {
     public var rules = RuleConfiguration()
 
     public init() {}
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = InspectorConfiguration()
+        largeFileLimit = c.decode(.largeFileLimit, or: defaults.largeFileLimit)
+        maxContentScanFiles = c.decode(.maxContentScanFiles, or: defaults.maxContentScanFiles)
+        maxScannedAddedLines = c.decode(.maxScannedAddedLines, or: defaults.maxScannedAddedLines)
+        rules = c.decode(.rules, or: defaults.rules)
+    }
 }
 
 /// One per watched worktree. Owns the shadow index, computes change sets

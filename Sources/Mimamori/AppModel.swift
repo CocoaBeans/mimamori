@@ -110,7 +110,7 @@ final class AppModel {
     @ObservationIgnored private var quitObserver: NSObjectProtocol?
 
     init() {
-        let persisted = Persistence.load()
+        let persisted = Persistence.state.load().state
         self.persisted = persisted
         self.settings = persisted.settings
         self.showActivity = persisted.ui.showActivity
@@ -928,7 +928,7 @@ final class AppModel {
         saveTask = Task.detached(priority: .utility) {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            Persistence.save(snapshot)
+            Persistence.state.save(snapshot)
         }
     }
 
@@ -951,6 +951,6 @@ final class AppModel {
                                         agentsWindowOpen: agentsWindowOpen, overviewWindowOpen: overviewWindowOpen,
                                         welcomeShown: welcomeShown)
         saveTask?.cancel()
-        Persistence.save(persisted)
+        Persistence.state.save(persisted)
     }
 }

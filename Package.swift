@@ -34,6 +34,7 @@ let package = Package(
             ]
         ),
 
-        .testTarget(name: "MimamoriCoreTests", dependencies: ["MimamoriCore"]),
+        // Fixtures/state holds state.json as each release wrote it, for the loading tests.
+        .testTarget(name: "MimamoriCoreTests", dependencies: ["MimamoriCore"], resources: [.copy("Fixtures")]),
     ]
 )

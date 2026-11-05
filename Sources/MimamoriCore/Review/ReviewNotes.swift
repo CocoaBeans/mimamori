@@ -41,6 +41,26 @@ public struct ReviewNote: Codable, Hashable, Sendable, Identifiable {
         self.isOutdated = false
     }
 
+    // A note needs its file and its words; the rest fall back to what a new note has.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ReviewNote(path: try c.decode(String.self, forKey: .path), lines: nil,
+                                  text: try c.decode(String.self, forKey: .text))
+        path = defaults.path
+        text = defaults.text
+        id = c.decode(.id, or: defaults.id)
+        side = c.decode(.side, or: defaults.side)
+        lines = c.decode(.lines, or: defaults.lines)
+        quote = c.decode(.quote, or: defaults.quote)
+        createdAt = c.decode(.createdAt, or: defaults.createdAt)
+        editedAt = c.decode(.editedAt, or: defaults.editedAt)
+        blob = c.decode(.blob, or: defaults.blob)
+        sentAt = c.decode(.sentAt, or: defaults.sentAt)
+        sentTo = c.decode(.sentTo, or: defaults.sentTo)
+        resolvedAt = c.decode(.resolvedAt, or: defaults.resolvedAt)
+        isOutdated = c.decode(.isOutdated, or: defaults.isOutdated)
+    }
+
     public var isSent: Bool { sentAt != nil }
     public var isResolved: Bool { resolvedAt != nil }
 
@@ -64,6 +84,13 @@ public struct ReviewNotes: Codable, Hashable, Sendable {
 
     public init(_ notes: [ReviewNote] = []) {
         all = notes
+    }
+
+    // Notes are read one at a time, so one that can't be read loses only itself.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ReviewNotes()
+        all = c.decode(.all, or: defaults.all)
     }
 
     public var isEmpty: Bool { all.isEmpty }

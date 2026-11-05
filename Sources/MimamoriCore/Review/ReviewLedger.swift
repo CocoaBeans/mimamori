@@ -13,6 +13,14 @@ public struct ReviewMark: Codable, Hashable, Sendable {
         self.blob = blob
         self.reviewedAt = reviewedAt
     }
+
+    // A mark is its fingerprint and time: without them it is dropped, and the rest of the ledger kept.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        fingerprint = try c.decode(String.self, forKey: .fingerprint)
+        reviewedAt = try c.decode(Date.self, forKey: .reviewedAt)
+        blob = c.decode(.blob, or: nil)
+    }
 }
 
 public enum ReviewStatus: Hashable, Sendable {
@@ -36,6 +44,13 @@ public struct ReviewLedger: Codable, Hashable, Sendable {
     public private(set) var marks: [String: ReviewMark] = [:]
 
     public init() {}
+
+    // Marks are read one at a time, so one that can't be read loses only itself.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ReviewLedger()
+        marks = c.decode(.marks, or: defaults.marks)
+    }
 
     public var isEmpty: Bool { marks.isEmpty }
 

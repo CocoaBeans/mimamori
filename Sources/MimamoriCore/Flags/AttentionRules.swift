@@ -11,6 +11,17 @@ public struct RuleConfiguration: Sendable, Hashable, Codable {
 
     public init() {}
 
+    // A rule this version doesn't know, saved by a newer one, is dropped from `disabledRules`.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = RuleConfiguration()
+        disabledRules = c.decode(.disabledRules, or: defaults.disabledRules)
+        scopePrefixes = c.decode(.scopePrefixes, or: defaults.scopePrefixes)
+        massDeletionThreshold = c.decode(.massDeletionThreshold, or: defaults.massDeletionThreshold)
+        largeAdditionThreshold = c.decode(.largeAdditionThreshold, or: defaults.largeAdditionThreshold)
+        hugeFileBytes = c.decode(.hugeFileBytes, or: defaults.hugeFileBytes)
+    }
+
     public func isEnabled(_ rule: RuleID) -> Bool { !disabledRules.contains(rule) }
 }
 

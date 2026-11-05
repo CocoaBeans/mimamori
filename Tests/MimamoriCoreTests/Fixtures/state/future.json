@@ -1,0 +1,233 @@
+{
+  "collapsedRepositories": [
+    "A2B3C4D5-E6F7-4809-9A1B-2C3D4E5F6071"
+  ],
+  "hiddenWorktrees": [
+    "/Users/sample/Projects/acme-store-worktrees/old-spike"
+  ],
+  "pinnedWorktrees": [
+    "/Users/sample/Projects/acme-store"
+  ],
+  "repositories": [
+    {
+      "addedAt": "2026-10-28T09:15:00Z",
+      "color": "chartreuse",
+      "group": "Work",
+      "id": "6F1C2A4E-0B3D-4C59-9E8A-1D2F3A4B5C6D",
+      "path": "/Users/sample/Projects/acme-store"
+    },
+    {
+      "addedAt": "2026-10-30T16:40:00Z",
+      "hidesIcon": true,
+      "id": "A2B3C4D5-E6F7-4809-9A1B-2C3D4E5F6071",
+      "path": "/Users/sample/Projects/99-bottles"
+    }
+  ],
+  "schemaVersion": 7,
+  "settings": {
+    "activityRetentionDays": 7,
+    "agentBannerExpanded": true,
+    "agentRepositoryPolicy": "watch",
+    "agentScanEnabled": true,
+    "agentScanIntervalSeconds": 3,
+    "agentToolCallsInFeed": "all",
+    "agentsWindowCollapsed": [],
+    "agentsWindowDetailed": true,
+    "agentsWindowFloats": false,
+    "allowsDiscardingChanges": true,
+    "answerPermissionsInMimamori": true,
+    "autoAnswer": "allow",
+    "autoAnswerPermissions": false,
+    "autoAnswerSeconds": 30,
+    "backstopPollSeconds": 600,
+    "customAgentNames": [
+      "Builder"
+    ],
+    "diffFontSize": 13,
+    "diffLayout": "threeWay",
+    "gitPathOverride": "",
+    "ignoredAgentRepositories": [
+      "/Users/sample/Projects/scratch"
+    ],
+    "inspector": {
+      "followsSubmodules": true,
+      "largeFileLimit": 20971520,
+      "maxContentScanFiles": 300,
+      "maxScannedAddedLines": 5000,
+      "rules": {
+        "disabledRules": [
+          "lockfile",
+          "debugLeftover",
+          "licenseChange"
+        ],
+        "hugeFileBytes": 1000000,
+        "largeAdditionThreshold": 1000,
+        "licenseThreshold": 3,
+        "massDeletionThreshold": 500,
+        "scopePrefixes": []
+      }
+    },
+    "maxRefreshLatencySeconds": 2.5,
+    "maxSnapshotsPerWorktree": 200,
+    "menuBarCollapsed": [
+      "worktrees"
+    ],
+    "minimap": {
+      "enabled": true,
+      "width": 80
+    },
+    "notificationsEnabled": true,
+    "notifyMinimumSeverity": 2,
+    "notifyOnAgentCollision": true,
+    "notifyOnAgentPermission": true,
+    "notifyOnAgentTurnFinished": false,
+    "recencyWindowSeconds": 90,
+    "refreshDebounceMilliseconds": 400,
+    "showMenuBarExtra": true,
+    "showTasksInWidgets": true,
+    "snapshotMinimumIntervalSeconds": 15,
+    "snapshotsEnabled": true,
+    "summaryOptions": {
+      "activity": true,
+      "attention": true,
+      "commits": true,
+      "diffs": true,
+      "files": true,
+      "maxActivityEntries": 150,
+      "maxDiffLines": 3000,
+      "screenshots": true,
+      "unreviewed": true
+    },
+    "syntaxHighlighting": true,
+    "wrapDiffLines": true
+  },
+  "ui": {
+    "activityAgentFilter": "agentsOnly",
+    "activityScopeAll": false,
+    "agentsWindowOpen": true,
+    "flaggedOnly": true,
+    "hideReviewed": true,
+    "inspectorWidth": 320,
+    "overviewWindowOpen": false,
+    "selectedWorktree": "/Users/sample/Projects/acme-store",
+    "showActivity": true,
+    "showCommits": false,
+    "sidebarAgentsOnly": false,
+    "sortOrder": "author",
+    "welcomeShown": true
+  },
+  "worktreeSettings": {
+    "/Users/sample/Projects/99-bottles": {
+      "baseline": {
+        "start": {}
+      },
+      "notes": {
+        "all": []
+      },
+      "reviews": {
+        "marks": {}
+      },
+      "scopePrefixes": []
+    },
+    "/Users/sample/Projects/acme-store": {
+      "baseline": {
+        "snapshot": {
+          "_0": "refs/monitor/1a2b3c4d5e6f/snapshots/20261101T100000Z"
+        }
+      },
+      "notes": {
+        "all": [
+          {
+            "blob": "3b18e512dba79e4c8300dd08aeb37f8e728b8dad",
+            "createdAt": "2026-11-01T10:07:00Z",
+            "id": "0D9E8F7A-6B5C-4D3E-8F1A-2B3C4D5E6F70",
+            "isOutdated": false,
+            "lines": [
+              12,
+              14
+            ],
+            "path": "Sources/Checkout/Cart.swift",
+            "quote": [
+              "    func total() -> Decimal {",
+              "        items.reduce(0) { $0 + $1.price }",
+              "    }"
+            ],
+            "reactions": [
+              "eyes"
+            ],
+            "sentAt": "2026-11-01T10:09:00Z",
+            "sentTo": "Claude Code",
+            "side": "new",
+            "text": "Taxes are left out here."
+          },
+          {
+            "createdAt": "2026-11-01T10:08:00Z",
+            "id": "1E2F3A4B-5C6D-4E7F-8A9B-0C1D2E3F4A5B",
+            "isOutdated": false,
+            "path": "Package.resolved",
+            "quote": [],
+            "side": "both",
+            "text": "Why did this move to a branch?"
+          },
+          {
+            "createdAt": "2026-11-01T09:50:00Z",
+            "id": "2F3A4B5C-6D7E-4F80-9AB1-C2D3E4F5A6B7",
+            "isOutdated": false,
+            "lines": [
+              40,
+              40
+            ],
+            "path": "Sources/Checkout/Coupon.swift",
+            "quote": [
+              "        guard code.isEmpty == false else { return nil }"
+            ],
+            "resolvedAt": "2026-11-01T10:20:00Z",
+            "sentAt": "2026-11-01T10:09:00Z",
+            "sentTo": "Claude Code",
+            "side": "old",
+            "text": "Keep this check."
+          }
+        ]
+      },
+      "pinnedNote": "0D9E8F7A-6B5C-4D3E-8F1A-2B3C4D5E6F70",
+      "reviews": {
+        "marks": {
+          "Package.resolved": {
+            "blob": "9daeafb9864cf43055ae93beb0afd6c7d144bfa4",
+            "fingerprint": "100644:9daeafb9864cf43055ae93beb0afd6c7d144bfa4",
+            "reviewedAt": "2026-11-01T10:06:30Z",
+            "reviewedBy": "Builder"
+          },
+          "Sources/Checkout/Cart.swift": {
+            "blob": "3b18e512dba79e4c8300dd08aeb37f8e728b8dad",
+            "fingerprint": "100644:3b18e512dba79e4c8300dd08aeb37f8e728b8dad",
+            "reviewedAt": "2026-11-01T10:05:00Z"
+          }
+        }
+      },
+      "scopePrefixes": [
+        "Sources/Checkout"
+      ]
+    },
+    "/Users/sample/Projects/acme-store-worktrees/feature-login": {
+      "baseline": {
+        "commit": {
+          "_0": "4f2a9c1"
+        }
+      },
+      "notes": {
+        "all": []
+      },
+      "reviews": {
+        "marks": {
+          "Sources/Auth/LoginView.swift": {
+            "blob": "5e1c309dae7f45e0f39b1bf3ac3cd9db12e7d689",
+            "fingerprint": "100644:5e1c309dae7f45e0f39b1bf3ac3cd9db12e7d689",
+            "reviewedAt": "2026-11-02T14:00:00Z"
+          }
+        }
+      },
+      "scopePrefixes": []
+    }
+  }
+}
