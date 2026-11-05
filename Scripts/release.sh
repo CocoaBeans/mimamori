@@ -2,8 +2,10 @@
 # Builds a release: archives Mimamori, exports it signed with Developer ID (the app and its widget
 # extension, each with its own entitlements and the hardened runtime), notarizes and staples it,
 # then packs it in a DMG that is notarized and stapled in turn. Signs the DMG for Sparkle and
-# writes the appcast that offers it. Leaves build/Mimamori-<version>.dmg and build/appcast.xml,
-# and prints the DMG's SHA-256 for the Homebrew cask and the command that publishes both.
+# writes the appcast that offers it, with the release notes from docs/releases/<version>.md
+# embedded for the update window. Leaves build/Mimamori-<version>.dmg and build/appcast.xml, and
+# prints the DMG's SHA-256 for the Homebrew cask and the command that publishes both, with the same
+# notes on the release page.
 #
 # The version is the project's MARKETING_VERSION and the build number its CURRENT_PROJECT_VERSION
 # (Scripts/set-version.sh changes them); Sparkle compares build numbers, so each release needs a
@@ -41,11 +43,22 @@ FEED="${RELEASE_FEED_URL:-$(setting MIMAMORI_FEED_URL | tr -d '"')}"
 if [[ $FEED == */releases/latest/download/appcast.xml ]]; then
   REPOSITORY="${FEED%/releases/latest/download/appcast.xml}"
   DOWNLOAD="$REPOSITORY/releases/download/v$VERSION/Mimamori-$VERSION.dmg"
-  NOTES="$REPOSITORY/releases/tag/v$VERSION"
+  HISTORY="$REPOSITORY/releases"
 else
   REPOSITORY="${FEED%/*}"
   DOWNLOAD="$REPOSITORY/Mimamori-$VERSION.dmg"
-  NOTES=""
+  HISTORY=""
+fi
+# The release notes, in Markdown: on the release page, and embedded in the appcast so the update
+# window shows them alone rather than the whole GitHub page. A dry run can do without.
+NOTES_FILE="${RELEASE_NOTES:-docs/releases/$VERSION.md}"
+if [[ -f $NOTES_FILE ]]; then
+  DESCRIPTION="$(Scripts/release-notes.sh "$NOTES_FILE")"
+elif [[ $DRY_RUN == 1 ]]; then
+  DESCRIPTION=""
+else
+  echo "Write the release notes in $NOTES_FILE first (or point RELEASE_NOTES at them)." >&2
+  exit 1
 fi
 OUT=build/release
 ARCHIVE=$OUT/Mimamori.xcarchive
@@ -177,7 +190,8 @@ cat > $APPCAST <<XML
       <sparkle:version>$BUILD</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>$MINIMUM_SYSTEM</sparkle:minimumSystemVersion>
-$([[ -n $NOTES ]] && echo "      <sparkle:releaseNotesLink>$NOTES</sparkle:releaseNotesLink>")
+$([[ -n $HISTORY ]] && echo "      <sparkle:fullReleaseNotesLink>$HISTORY</sparkle:fullReleaseNotesLink>")
+$([[ -n $DESCRIPTION ]] && printf '      <description><![CDATA[%s]]></description>' "$DESCRIPTION")
       <enclosure url="$DOWNLOAD" type="application/octet-stream" $ENCLOSURE/>
     </item>
   </channel>
@@ -196,4 +210,4 @@ done
 echo "Ready: $PWD/$DMG$([[ $DRY_RUN == 1 ]] && echo ' (dry run: development signing, not notarized)')"
 echo "Appcast: $PWD/$APPCAST (Mimamori $VERSION, build $BUILD)"
 echo "SHA-256: $(shasum -a 256 $DMG | cut -d' ' -f1)"
-[[ $DRY_RUN == 1 || -z $NOTES ]] || echo "Publish: gh release create v$VERSION $DMG $APPCAST --repo ${REPOSITORY#https://github.com/} --title 'Mimamori $VERSION'"
+[[ $DRY_RUN == 1 || -z $HISTORY ]] || echo "Publish: gh release create v$VERSION $DMG $APPCAST --repo ${REPOSITORY#https://github.com/} --title 'Mimamori $VERSION' --notes-file $NOTES_FILE"
