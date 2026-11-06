@@ -10,7 +10,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
-- Tapping a notification from the iPhone app opens it again, instead of closing it.
+- Tapping a notification from the iPhone app opens it again, instead of closing it
+  ([#80](https://github.com/CocoaBeans/mimamori/pull/80)).
 
 ## [1.2.1] - 2026-11-06
 
