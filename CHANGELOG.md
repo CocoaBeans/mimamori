@@ -28,7 +28,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Allow or Deny Claude Code's permission requests from the iPhone, on the agent's card or its
   notification, with the exact command, the Mac's countdown, and Face ID before Allow. Needs
   "Answer permission requests in Mimamori" on, and the activity feed says which iPhone answered
-  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
+  ([#61](https://github.com/CocoaBeans/mimamori/pull/61)).
 
 ### Changed
 
