@@ -21,7 +21,8 @@ enum CompanionNotificationSetting {
 /// as its switch in the app's settings allows.
 @MainActor
 final class AgentNotifier: NSObject, UNUserNotificationCenterDelegate {
-    private let center = UNUserNotificationCenter.current()
+    /// Not kept: Swift 6.1 won't send a stored center across actors, as `await` on it would.
+    private var center: UNUserNotificationCenter { .current() }
     private let defaults: UserDefaults
     private var previous: [AgentWidgetSnapshot.Agent]?
     private var askedForPermission = false
@@ -42,7 +43,7 @@ final class AgentNotifier: NSObject, UNUserNotificationCenterDelegate {
     func requestAuthorizationIfNeeded() async {
         guard wantsAny, !askedForPermission else { return }
         askedForPermission = true
-        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
     }
 
     /// A new connection: the next snapshot is the baseline again.
