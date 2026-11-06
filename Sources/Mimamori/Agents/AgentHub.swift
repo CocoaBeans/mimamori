@@ -85,6 +85,8 @@ struct PermissionRequest: Hashable, Identifiable {
     var agent: AgentKind
     var tool: String
     var detail: String?
+    /// A shell tool's whole command, where `detail` has its first line: what the iPhone shows.
+    var command: String? = nil
     var since: Date
     /// The call that asked and the subagent it came from, as the session's status matched them:
     /// what tells which events settle the request.
@@ -142,8 +144,11 @@ final class AgentHub {
     /// in the agent's own prompt, or let go).
     var onPermissionRequest: @MainActor (PermissionRequest) -> Void = { _ in }
     var onPermissionSettled: @MainActor (_ id: String) -> Void = { _ in }
-    /// You or the countdown answered a request in Mimamori, for the activity feed.
-    var onPermissionAnswered: @MainActor (_ pending: PermissionRequest, _ allow: Bool, _ automatically: Bool) -> Void = { _, _, _ in }
+    /// You, the countdown or a paired iPhone (named) answered a request in Mimamori, for the activity feed.
+    var onPermissionAnswered: @MainActor (_ pending: PermissionRequest, _ allow: Bool, _ automatically: Bool,
+                                          _ phone: String?) -> Void = { _, _, _, _ in }
+    /// A request came, went or stopped its countdown, for the iPhone, which shows each one.
+    var onPermissionsChange: @MainActor () -> Void = {}
 
     // Bookkeeping that views never read, kept out of observation.
     /// One machine per session (`AgentStatus.key`) in each worktree.
@@ -349,7 +354,8 @@ final class AgentHub {
             // The status matched the request to the call that asked, which tells what settles it.
             let call = machine.status?.pendingPermission ?? PendingPermission(callID: event.toolUseID, agentID: event.agentID)
             var pending = PermissionRequest(id: id, session: key, worktree: worktree, agent: event.agent,
-                                            tool: event.toolName ?? "", detail: event.summary, since: event.receivedAt, call: call)
+                                            tool: event.toolName ?? "", detail: event.summary, command: event.command,
+                                            since: event.receivedAt, call: call)
             if settings.autoAnswerPermissions {
                 let allow = settings.autoAnswer == .allow
                 // A call you asked Claude Code to always ask about is never allowed by itself.
@@ -363,6 +369,7 @@ final class AgentHub {
             scheduleAutoAnswer(pending)
             Log.agents.notice("\(event.agent.displayName, privacy: .public) asks to use \(pending.tool, privacy: .public); waiting for an answer here or in its own prompt")
             onPermissionRequest(pending)
+            onPermissionsChange()
         }
         if moved || before == nil { attributeProcesses() }
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
@@ -402,16 +409,18 @@ final class AgentHub {
 
     // MARK: Permission requests
 
-    /// You answered a permission request in Mimamori, or its countdown did: the hook hands the
-    /// agent the decision.
-    func answerPermission(_ id: String, allow: Bool, automatically: Bool = false) {
+    /// You answered a permission request in Mimamori, on a paired iPhone (`phone`, its name), or
+    /// its countdown did: the hook hands the agent the decision.
+    func answerPermission(_ id: String, allow: Bool, automatically: Bool = false, phone: String? = nil) {
         guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
         pendingPermissions.removeValue(forKey: pending.session)
         autoAnswerTasks.removeValue(forKey: id)?.cancel()
         server?.permissions.answer(id, allow ? .allow : .deny)
         onPermissionSettled(id)
-        onPermissionAnswered(pending, allow, automatically)
-        Log.agents.notice("\(allow ? "Allowed" : "Denied", privacy: .public) \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) from Mimamori\(automatically ? " by itself, after waiting" : "", privacy: .public)")
+        onPermissionAnswered(pending, allow, automatically, phone)
+        onPermissionsChange()
+        let how = phone.map { " on \($0)" } ?? (automatically ? " by itself, after waiting" : "")
+        Log.agents.notice("\(allow ? "Allowed" : "Denied", privacy: .public) \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) from Mimamori\(how, privacy: .public)")
         // Allowed, it gets on with the step: show it working rather than still waiting on you.
         if allow { noteApproved(in: pending.worktree, session: pending.session) }
     }
@@ -421,6 +430,7 @@ final class AgentHub {
         guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
         autoAnswerTasks.removeValue(forKey: id)?.cancel()
         pendingPermissions[pending.session]?.autoAnswer = nil
+        onPermissionsChange()
     }
 
     private func scheduleAutoAnswer(_ pending: PermissionRequest) {
@@ -454,6 +464,7 @@ final class AgentHub {
         autoAnswerTasks.removeValue(forKey: pending.id)?.cancel()
         server?.permissions.answer(pending.id, nil)
         onPermissionSettled(pending.id)
+        onPermissionsChange()
     }
 
     /// The agent's own prompt was answered, or the session moved on: the step that asked finished

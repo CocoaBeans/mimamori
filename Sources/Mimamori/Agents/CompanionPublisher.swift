@@ -7,14 +7,18 @@ import Network
 /// paired key can't connect, and nobody else on the network can read what is sent.
 ///
 /// It sends the snapshot the desktop widgets get, on their rules: at once when who needs you
-/// changes, otherwise at most every 10 s, and only when something shown changed. A phone that
-/// connects, or asks, gets what's current, which starts no polling.
+/// changes, or a permission request comes or goes, otherwise at most every 10 s, and only when
+/// something shown changed. A phone that connects, or asks, gets what's current, which starts no
+/// polling.
 @MainActor
 final class CompanionPublisher {
     private static let minimumInterval: TimeInterval = 10
 
     /// A phone said who it is: which pairing it connected with, and its name.
     var onHello: ((CompanionMessage.Hello) -> Void)?
+    /// A phone answered a permission request, with the pairing it said hello with, if it has:
+    /// what became of it goes back to that phone.
+    var onAnswer: ((CompanionMessage.Answer, _ pairingID: String?) -> CompanionMessage.AnswerResult)?
     /// A phone that had said hello went away, with its pairing's id.
     var onGoodbye: ((String) -> Void)?
     /// The listener's state, in a sentence for Settings; nil while all is well.
@@ -91,7 +95,7 @@ final class CompanionPublisher {
     func update(_ agents: [AgentWidgetSnapshot.Agent]) {
         latest = agents
         guard agents != sent else { return }
-        let waiting = Self.waiting(agents)
+        let waiting = CompanionMessage.urgentKeys(agents)
         if waiting != needingYou || sent == nil {
             sendToAll()
             return
@@ -106,15 +110,11 @@ final class CompanionPublisher {
         }
     }
 
-    private static func waiting(_ agents: [AgentWidgetSnapshot.Agent]) -> Set<String> {
-        Set(agents.filter { $0.state == .needsYou || $0.collision != nil }.map(\.id))
-    }
-
     private func sendToAll() {
         pending?.cancel()
         pending = nil
         sent = latest
-        needingYou = Self.waiting(latest)
+        needingYou = CompanionMessage.urgentKeys(latest)
         lastSentAt = Date()
         guard !phones.isEmpty, let line = currentLine() else { return }
         for phone in phones.values { send(line, to: phone.connection) }
@@ -180,6 +180,12 @@ final class CompanionPublisher {
             guard let message = try? CompanionMessage(line: line) else { continue }
             if let hello = message.hello { onHello?(hello) }
             if message.wantsSnapshot == true, let reply = currentLine() { send(reply, to: connection) }
+            // Only a phone connected with a paired key gets this far; which pairing it said it is
+            // decides whether the answer counts.
+            if let answer = message.answer, let result = onAnswer?(answer, phone.pairingID),
+               let reply = try? CompanionMessage(answerResult: result).line() {
+                send(reply, to: connection)
+            }
         }
     }
 
@@ -199,14 +205,42 @@ final class CompanionPublisher {
 // MARK: Cards
 
 extension AppModel {
+    /// Lets paired phones answer permission requests through `AgentHub.answerPermission`, and
+    /// sends them each request as it comes and goes.
+    func connectCompanionToPermissions() {
+        companion.permissionRequests = { [weak self] in
+            guard let self else { return (false, []) }
+            return (self.settings.answerPermissionsInMimamori, Set(self.agentHub.pendingPermissions.values.map(\.id)))
+        }
+        companion.onAnswer = { [weak self] id, allow, phone in
+            self?.agentHub.answerPermission(id, allow: allow, phone: phone)
+        }
+        agentHub.onPermissionsChange = { [weak self] in
+            self?.companion.updateSoon { [weak self] in self?.companionAgents() ?? [] }
+        }
+    }
+
     /// The agents as the widgets draw them, each with its Agents window card.
     func companionAgents() -> [AgentWidgetSnapshot.Agent] {
         let details = settings.showTasksInWidgets
         return agentRows.map { row in
             var agent = widgetAgent(for: row, details: details)
             agent.card = companionCard(for: row, details: details)
+            agent.permissionRequest = companionPermissionRequest(for: row)
             return agent
         }
+    }
+
+    /// The request the phone can answer for `row`, while Mimamori answers requests. Its detail goes
+    /// whatever "Show tasks and steps in widgets" says: the status line carries it anyway, and
+    /// nobody should allow a command they can't see.
+    private func companionPermissionRequest(for row: AgentRow) -> AgentWidgetSnapshot.PermissionRequest? {
+        guard settings.answerPermissionsInMimamori, let id = row.presence.permissionRequestID,
+              let pending = agentHub.pendingPermissions.values.first(where: { $0.id == id }) else { return nil }
+        let detail = CompanionAnswerCheck.clipped(pending.command ?? pending.detail)
+        let autoAnswer = pending.autoAnswer.map { AgentWidgetSnapshot.PermissionRequest.AutoAnswer(allow: $0.allow, at: $0.at) }
+        return AgentWidgetSnapshot.PermissionRequest(id: pending.id, tool: pending.tool, detail: detail, since: pending.since,
+                                                     autoAnswer: autoAnswer)
     }
 
     /// What the Agents window's card shows for `row`. Without `details`, the steps keep their kind

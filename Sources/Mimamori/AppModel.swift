@@ -170,9 +170,10 @@ final class AppModel {
         }
         agentHub.onPermissionRequest = { [weak self] pending in self?.permissionRequested(pending) }
         agentHub.onPermissionSettled = { [weak self] id in self?.notifier.withdrawPermission(id: id) }
-        agentHub.onPermissionAnswered = { [weak self] pending, allow, automatically in
-            self?.permissionAnswered(pending, allow: allow, automatically: automatically)
+        agentHub.onPermissionAnswered = { [weak self] pending, allow, automatically, phone in
+            self?.permissionAnswered(pending, allow: allow, automatically: automatically, phone: phone)
         }
+        connectCompanionToPermissions()
         quitObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil,
                                                               queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
@@ -1021,8 +1022,8 @@ final class AppModel {
     }
 
     /// Every answer given in Mimamori goes in the feed, so there is a record of what it allowed.
-    private func permissionAnswered(_ pending: PermissionRequest, allow: Bool, automatically: Bool) {
-        let how = automatically ? "by itself, after \(settings.autoAnswerSeconds) s" : "in Mimamori"
+    private func permissionAnswered(_ pending: PermissionRequest, allow: Bool, automatically: Bool, phone: String?) {
+        let how = phone.map { "on \($0)" } ?? (automatically ? "by itself, after \(settings.autoAnswerSeconds) s" : "in Mimamori")
         record([ActivityEntry(worktreePath: pending.worktree, kind: .agentAttention, path: nil,
                               title: "\(allow ? "Allowed" : "Denied") \(how): \(pending.tool)", detail: pending.detail,
                               severity: allow && automatically ? .warning : nil, agent: pending.agent.displayName)])

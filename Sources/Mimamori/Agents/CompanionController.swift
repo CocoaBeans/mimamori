@@ -20,6 +20,13 @@ final class CompanionController {
     /// What's keeping phones from connecting, in a sentence; nil while all is well.
     private(set) var problem: String?
 
+    /// Whether Mimamori answers permission requests, and the ids of those waiting now: what an
+    /// answer from a phone is checked against. Set by AppModel.
+    @ObservationIgnored var permissionRequests: () -> (answering: Bool, pending: Set<String>) = { (false, []) }
+    /// Settles a request a paired phone answered, with the phone's name; set by AppModel.
+    @ObservationIgnored var onAnswer: (_ requestID: String, _ allow: Bool, _ phone: String) -> Void = { _, _, _ in }
+
+    @ObservationIgnored private var pendingUpdate: Task<Void, Never>?
     @ObservationIgnored private let publisher = CompanionPublisher()
     @ObservationIgnored private let url: URL
     @ObservationIgnored private let keychain: CompanionKeychain
@@ -29,6 +36,10 @@ final class CompanionController {
         self.keychain = keychain
         pairings = CompanionPairings.load(from: url)
         publisher.onHello = { [weak self] hello in self?.said(hello) }
+        publisher.onAnswer = { [weak self] answer, pairingID in
+            self?.answered(answer, pairingID: pairingID)
+                ?? CompanionMessage.AnswerResult(requestID: answer.requestID, accepted: false)
+        }
         publisher.onGoodbye = { [weak self] id in self?.left(id) }
         publisher.onProblem = { [weak self] problem in self?.problem = problem }
     }
@@ -50,6 +61,17 @@ final class CompanionController {
     func update(_ agents: [AgentWidgetSnapshot.Agent]) {
         guard isOn else { return }
         publisher.update(agents)
+    }
+
+    /// The agents once the change under way is done: a request coming or going changes the
+    /// agents' state in more than one step, and the phone should get the end of it.
+    func updateSoon(_ agents: @escaping @MainActor () -> [AgentWidgetSnapshot.Agent]) {
+        guard isOn, pendingUpdate == nil else { return }
+        pendingUpdate = Task { [weak self] in
+            guard let self else { return }
+            self.pendingUpdate = nil
+            self.update(agents())
+        }
     }
 
     // MARK: Pairing
@@ -136,6 +158,23 @@ final class CompanionController {
         }
         connected.insert(hello.pairingID)
         save()
+    }
+
+    /// A phone's Allow or Deny: settled only if it comes from a paired phone, for a request that
+    /// still waits (`CompanionAnswerCheck`).
+    private func answered(_ answer: CompanionMessage.Answer, pairingID: String?) -> CompanionMessage.AnswerResult {
+        let requests = permissionRequests()
+        let phones = Dictionary(pairings.phones.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let verdict = CompanionAnswerCheck.verdict(for: answer, pairingID: pairingID, phones: phones,
+                                                   answering: requests.answering, pending: requests.pending)
+        switch verdict {
+        case .answer(let id, let allow, let phone):
+            onAnswer(id, allow, phone)
+            return CompanionMessage.AnswerResult(requestID: id, accepted: true)
+        case .refuse(let reason):
+            Log.companion.notice("Turned down an answer from an iPhone: \(reason, privacy: .public)")
+            return CompanionMessage.AnswerResult(requestID: answer.requestID, accepted: false, reason: reason)
+        }
     }
 
     private func left(_ id: String) {

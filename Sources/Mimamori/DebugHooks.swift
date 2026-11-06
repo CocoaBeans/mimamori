@@ -412,8 +412,10 @@ enum DebugHooks {
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
         for pending in hub.pendingPermissions.values {
             let plan = pending.autoAnswer.map { "\($0.allow ? "allow" : "deny") in \(Int($0.at.timeIntervalSinceNow.rounded()))s" } ?? "waits"
-            lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent) auto=\(plan) askRule=\(pending.waitsForAskRule ?? "-")")
+            lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent) auto=\(plan) askRule=\(pending.waitsForAskRule ?? "-") id=\(pending.id)")
         }
+        let companion = model.companion
+        lines.append("companion: on=\(companion.isOn) paired=\(companion.pairings.phones.map(\.name)) connected=\(companion.connected.count) problem=\(companion.problem ?? "-")")
         lines.append("repositories: \(model.repositories.map(\.rootPath)) offers: \(model.repositoryOffers.map(\.root)) policy: \(model.settings.agentRepositoryPolicy.rawValue)")
         lines.append("windows: " + NSApp.windows.map { "\($0.title.isEmpty ? "-" : $0.title)[\($0.isVisible ? "shown" : "hidden"), level \($0.level.rawValue), \($0.identifier?.rawValue ?? "-")]" }.joined(separator: ", "))
         if let hookTestResult { lines.append("hook test: \(hookTestResult)") }
