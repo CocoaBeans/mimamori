@@ -61,6 +61,9 @@ final class CompanionModel {
     /// Requests the `-debugAnswer` launch argument has answered already.
     @ObservationIgnored var debugAnswered: Set<String> = []
     #endif
+    /// The worktree whose agent's actions are on screen, and those actions once they arrive.
+    private(set) var watching: String?
+    private(set) var actions: AgentActions?
 
     @ObservationIgnored private var browser: NWBrowser?
     @ObservationIgnored private var connection: NWConnection?
@@ -138,6 +141,14 @@ final class CompanionModel {
     /// Asks the Mac for a snapshot now.
     func refresh() {
         send(CompanionMessage(wantsSnapshot: true))
+    }
+
+    /// Shows `worktree`'s agent's actions: the Mac sends them now and as they change. Nil stops.
+    func watch(_ worktree: String?) {
+        guard worktree != watching else { return }
+        watching = worktree
+        if actions?.worktreePath != worktree { actions = nil }
+        send(CompanionMessage(watchActions: worktree ?? ""))
     }
 
     func choose(_ mac: PairedMac) {
@@ -312,6 +323,8 @@ final class CompanionModel {
                 justPaired = mac
             }
             Task { await notifier.requestAuthorizationIfNeeded() }
+            // A new connection starts with nothing watched on the Mac's side.
+            if let watching { send(CompanionMessage(watchActions: watching)) }
             send(CompanionMessage(hello: .init(pairingID: mac.pairingID, deviceName: UIDevice.current.name,
                                                model: Self.model)))
         case .waiting(let error), .failed(let error):
@@ -384,6 +397,7 @@ final class CompanionModel {
             guard let message = try? CompanionMessage(line: line) else { continue }
             if let challenge = message.challenge { prove(challenge) }
             if let result = message.answerResult { answerResultArrived(result) }
+            if let actions = message.actions, actions.worktreePath == watching { self.actions = actions }
             guard let snapshot = message.snapshot else { continue }
             let now = Date()
             self.snapshot = snapshot

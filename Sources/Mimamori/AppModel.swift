@@ -178,6 +178,7 @@ final class AppModel {
                                                               queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
         }
+        companion.actionsFor = { [weak self] worktree in self?.companionActions(for: worktree) }
         companion.setOn(companionWanted(settings))
         #if DEBUG
         DebugHooks.start(model: self)

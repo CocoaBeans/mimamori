@@ -26,6 +26,8 @@ final class CompanionPublisher {
     var onGoodbye: ((String) -> Void)?
     /// The listener's state, in a sentence for Settings; nil while all is well.
     var onProblem: ((String?) -> Void)?
+    /// An agent's list of actions, by worktree, for a phone showing it.
+    var actionsFor: ((String) -> AgentActions?)?
 
     private var listener: NWListener?
     private var phones: [ObjectIdentifier: Phone] = [:]
@@ -42,6 +44,8 @@ final class CompanionPublisher {
         var pairingID: String?
         /// The pairing it proved it is, against this connection's own nonce: what answers go by.
         var identity = CompanionConnectionIdentity()
+        /// The worktree whose agent's actions it shows.
+        var watching: String?
     }
 
     var isRunning: Bool { listener != nil }
@@ -122,7 +126,16 @@ final class CompanionPublisher {
         needingYou = CompanionMessage.urgentKeys(latest)
         lastSentAt = Date()
         guard !phones.isEmpty, let line = currentLine() else { return }
-        for phone in phones.values { send(line, to: phone.connection) }
+        for phone in phones.values {
+            send(line, to: phone.connection)
+            // The actions it shows change with the agent: they go out on the snapshot's rules.
+            if let worktree = phone.watching, let actions = actionsLine(for: worktree) { send(actions, to: phone.connection) }
+        }
+    }
+
+    private func actionsLine(for worktree: String) -> Data? {
+        guard let actions = actionsFor?(worktree) else { return nil }
+        return try? CompanionMessage(actions: actions).line()
     }
 
     private func currentLine() -> Data? {
@@ -191,6 +204,10 @@ final class CompanionPublisher {
             }
             if let proof = message.proof { check(proof, from: id) }
             if message.wantsSnapshot == true, let reply = currentLine() { send(reply, to: connection) }
+            if let worktree = message.watchActions {
+                phones[id]?.watching = worktree.isEmpty ? nil : worktree
+                if !worktree.isEmpty, let actions = actionsLine(for: worktree) { send(actions, to: connection) }
+            }
             // Only a phone connected with a paired key gets this far; the pairing it proved it is,
             // not the one it claims, decides whether the answer counts.
             if let answer = message.answer, let result = onAnswer?(answer, phones[id]?.identity.verifiedPairingID),
@@ -301,5 +318,37 @@ extension AppModel {
                 .init(agent: other.kind.displayName, symbol: other.kind.symbolName, state: other.widgetState,
                       status: AgentText.shortenPaths(other.statusText, in: worktree), since: other.since)
             })
+    }
+}
+
+// MARK: Actions
+
+extension AppModel {
+    /// The list of actions of the agent leading in `worktree`, for a phone showing it: its last
+    /// calls (up to 200, every tool) under the turns they belong to, whose prompts come from the
+    /// activity feed. Without "Show tasks and steps in widgets", steps keep their kind and times
+    /// but not their targets, and turns lose their prompts.
+    func companionActions(for worktree: String) -> AgentActions? {
+        guard let status = agentHub.statuses[worktree]?.first else { return nil }
+        let details = settings.showTasksInWidgets
+        let agent = status.agent.displayName
+        var starts = activity.compactMap { entry -> AgentActions.TurnStart? in
+            guard entry.worktreePath == worktree, entry.kind == .agentTurn, entry.agent == agent,
+                  entry.title.hasSuffix("started a turn") else { return nil }
+            return AgentActions.TurnStart(at: entry.date, prompt: details ? entry.detail : nil)
+        }
+        // The turn under way, as the agent's status knows it, if the feed has no start near it.
+        if let start = status.turnStartedAt ?? status.lastTurnStartedAt,
+           !starts.contains(where: { abs($0.at.timeIntervalSince(start)) < 5 }) {
+            starts.append(AgentActions.TurnStart(at: start, prompt: details ? status.task : nil))
+        }
+        let calls = status.recentToolCalls.map { call in
+            var copy = call
+            copy.summary = details ? call.summary.map { AgentText.shortenPaths($0, in: worktree) } : nil
+            copy.filePath = nil
+            return copy
+        }
+        return AgentActions(worktreePath: worktree, agent: agent, turns: AgentActions.turns(calls: calls, starts: starts),
+                            waitingCallID: agentHub.presence(for: worktree)?.awaitingCallID)
     }
 }

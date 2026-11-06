@@ -76,6 +76,12 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
         }
     }
 
+    /// The worktree whose agent's actions the phone shows, to be sent now and as they change;
+    /// empty to stop. Phone to Mac.
+    public var watchActions: String?
+    /// The actions of the agent the phone watches; Mac to phone.
+    public var actions: AgentActions?
+
     /// What the Mac lists a paired phone by.
     public struct Hello: Codable, Sendable, Equatable {
         /// The pairing it connected with. TLS has already checked that the phone holds a paired
@@ -93,7 +99,8 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
     }
 
     public init(snapshot: AgentWidgetSnapshot? = nil, wantsSnapshot: Bool? = nil, hello: Hello? = nil,
-                answer: Answer? = nil, answerResult: AnswerResult? = nil, challenge: Challenge? = nil, proof: Proof? = nil) {
+                answer: Answer? = nil, answerResult: AnswerResult? = nil, challenge: Challenge? = nil, proof: Proof? = nil,
+                watchActions: String? = nil, actions: AgentActions? = nil) {
         self.version = Self.currentVersion
         self.snapshot = snapshot
         self.wantsSnapshot = wantsSnapshot
@@ -102,6 +109,8 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
         self.answerResult = answerResult
         self.challenge = challenge
         self.proof = proof
+        self.watchActions = watchActions
+        self.actions = actions
     }
 
     /// The message as one line, ending in a newline. JSON escapes newlines inside strings, so

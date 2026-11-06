@@ -45,6 +45,12 @@ final class CompanionController {
         publisher.onProblem = { [weak self] problem in self?.problem = problem }
     }
 
+    /// An agent's list of actions, by worktree, for a phone showing it.
+    var actionsFor: ((String) -> AgentActions?)? {
+        get { publisher.actionsFor }
+        set { publisher.actionsFor = newValue }
+    }
+
     func setOn(_ on: Bool) {
         guard on != isOn else { return }
         isOn = on

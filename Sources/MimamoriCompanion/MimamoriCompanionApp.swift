@@ -64,9 +64,11 @@ struct AgentsScreen: View {
     @AppStorage("showsDetails") private var detailed = true
     @AppStorage("collapsedGroups") private var collapsedGroups = ""
     @State private var showingSettings = false
+    /// The agent whose list of actions is open, by worktree.
+    @State private var path: [String] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     StatusRow(model: model)
@@ -99,6 +101,9 @@ struct AgentsScreen: View {
                                                     Task { await model.answer(request, allow: allow) }
                                                 }
                                             }
+                                            .contentShape(Rectangle())
+                                            .onTapGesture { path.append(agent.id) }
+                                            .accessibilityAction(named: "Show Actions") { path.append(agent.id) }
                                             .id("\(entry.group.rawValue) \(agent.id)")
                                         }
                                     }
@@ -113,6 +118,9 @@ struct AgentsScreen: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Agents")
+            .navigationDestination(for: String.self) { worktree in
+                AgentActionsView(model: model, worktree: worktree)
+            }
             .sheet(isPresented: $showingSettings) {
                 CompanionSettingsSheet(notifier: model.notifier)
             }
