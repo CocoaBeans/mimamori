@@ -127,6 +127,7 @@ private struct PairingSheet: View {
                 Text("The code works once, while this window is open.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                WaitingForPhone(companion: companion)
             }
             Button(companion.justPaired != nil ? "Done" : "Cancel", action: onDone)
                 .keyboardShortcut(companion.justPaired != nil ? .defaultAction : .cancelAction)
@@ -134,6 +135,39 @@ private struct PairingSheet: View {
         }
         .padding(24)
         .frame(width: 360)
+    }
+}
+
+/// Waiting for the phone to connect with the code; after a while, what to check.
+private struct WaitingForPhone: View {
+    let companion: CompanionController
+    /// Long enough for the Camera, the link and a connection.
+    private static let patience: TimeInterval = 20
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let waited = companion.pairingStartedAt.map { context.date.timeIntervalSince($0) } ?? 0
+            VStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Waiting for your iPhone…")
+                        .foregroundStyle(.secondary)
+                }
+                if let problem = companion.problem {
+                    Text(problem)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                } else if waited >= Self.patience {
+                    Text("Still nothing? Check that the iPhone is on the same network as this Mac, not on its cable, and that Mimamori is allowed in Privacy & Security › Local Network, in System Settings here and in Settings on the iPhone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 }
 

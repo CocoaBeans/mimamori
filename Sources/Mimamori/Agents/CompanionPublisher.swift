@@ -74,7 +74,7 @@ final class CompanionPublisher {
     }
 
     private func listenerChanged(_ state: NWListener.State) {
-        Log.companion.info("Companion listener: \(String(describing: state), privacy: .public)")
+        Log.companion.notice("Companion listener: \(String(describing: state), privacy: .public)")
         switch state {
         case .ready:
             onProblem?(nil)
@@ -140,7 +140,7 @@ final class CompanionPublisher {
                 switch state {
                 case .ready:
                     // TLS has checked the phone's key by now.
-                    Log.companion.info("Companion connected: \(String(describing: connection.endpoint), privacy: .public)")
+                    Log.companion.notice("Companion connected: \(String(describing: connection.endpoint), privacy: .public)")
                     if let line = self?.currentLine() { self?.send(line, to: connection) }
                 case .failed, .cancelled:
                     self?.drop(connection)
@@ -192,7 +192,7 @@ final class CompanionPublisher {
     private func drop(_ connection: NWConnection) {
         guard let phone = phones.removeValue(forKey: ObjectIdentifier(connection)) else { return }
         if let id = phone.pairingID { onGoodbye?(id) }
-        Log.companion.info("Companion disconnected: \(String(describing: connection.endpoint), privacy: .public)")
+        Log.companion.notice("Companion disconnected: \(String(describing: connection.endpoint), privacy: .public)")
     }
 }
 

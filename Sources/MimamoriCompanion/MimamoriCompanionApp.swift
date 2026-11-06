@@ -117,9 +117,11 @@ private struct StatusRow: View {
         case .unpaired:
             PairingHelp()
         case .searching:
-            Label("Looking for \(model.chosen?.name ?? "your Mac") on this network…", systemImage: "magnifyingglass")
+            Label(model.pairing.map { "Finishing pairing: looking for \($0.name) on this network…" }
+                  ?? "Looking for \(model.chosen?.name ?? "your Mac") on this network…",
+                  systemImage: "magnifyingglass")
         case .connecting(let name):
-            Label("Connecting to \(name)…", systemImage: "network")
+            Label(model.pairing != nil ? "Finishing pairing with \(name)…" : "Connecting to \(name)…", systemImage: "network")
         case .connected(let name):
             VStack(alignment: .leading, spacing: 2) {
                 Label(name, systemImage: "lock.desktopcomputer")

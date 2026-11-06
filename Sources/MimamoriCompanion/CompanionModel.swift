@@ -37,13 +37,20 @@ final class CompanionModel {
     private(set) var pairedMacs: [PairedMac] = []
     /// The paired Macs found on the network now, by Mac id, with the service name to connect to.
     private(set) var foundMacs: [String: String] = [:]
+    /// Every Mimamori on the network, by service name, for when the chosen Mac's id isn't among
+    /// them: a record the phone still holds from before, or a Mac whose id changed.
+    @ObservationIgnored private var allServices: [String] = []
+    /// Attempts at the chosen Mac since it last connected, to try the next service each time.
+    @ObservationIgnored private var attempts = 0
     private(set) var status: Status = .unpaired
     private(set) var snapshot: AgentWidgetSnapshot?
     /// When the last snapshot arrived, and how long after the Mac wrote it.
     private(set) var receivedAt: Date?
     private(set) var delay: TimeInterval?
-    /// The Mac a pairing link just paired, to say so.
+    /// The Mac a pairing link just paired, once this phone has reached it, to say so.
     private(set) var justPaired: PairedMac?
+    /// The Mac a pairing link named, until this phone first reaches it with the new key.
+    private(set) var pairing: PairedMac?
 
     @ObservationIgnored private var browser: NWBrowser?
     @ObservationIgnored private var connection: NWConnection?
@@ -127,7 +134,8 @@ final class CompanionModel {
         pairedMacs.removeAll { $0.macID == mac.macID }
         pairedMacs.append(mac)
         savePairedMacs()
-        justPaired = mac
+        pairing = mac
+        justPaired = nil
         choose(mac)
         return true
     }
@@ -141,6 +149,7 @@ final class CompanionModel {
         keychain.delete(mac.pairingID)
         pairedMacs.removeAll { $0.macID == mac.macID }
         savePairedMacs()
+        if pairing?.macID == mac.macID { pairing = nil }
         if chosen?.macID == mac.macID {
             disconnect()
             snapshot = nil
@@ -168,13 +177,16 @@ final class CompanionModel {
 
     private func found(_ results: Set<NWBrowser.Result>) {
         var macs: [String: String] = [:]
+        var names: Set<String> = []
         for result in results {
-            guard case .service(let name, _, _, _) = result.endpoint,
-                  case .bonjour(let record) = result.metadata,
-                  let macID = record[CompanionBonjour.macIDKey] else { continue }
-            macs[macID] = name
+            guard case .service(let name, _, _, _) = result.endpoint else { continue }
+            names.insert(name)
+            if case .bonjour(let record) = result.metadata, let macID = record[CompanionBonjour.macIDKey] {
+                macs[macID] = name
+            }
         }
         foundMacs = macs
+        allServices = names.sorted()
         if connection == nil { connectToChosen() }
     }
 
@@ -185,11 +197,15 @@ final class CompanionModel {
             status = .unpaired
             return
         }
-        guard let service = foundMacs[mac.macID] else {
+        // The Mac by its id; failing that, each Mimamori in turn: TLS lets in only the one that
+        // holds this pairing's key.
+        let candidates = foundMacs[mac.macID].map { [$0] } ?? allServices
+        guard !candidates.isEmpty else {
             if case .unavailable = status { return }
             status = .searching
             return
         }
+        let service = candidates[attempts % candidates.count]
         guard let key = keychain.key(for: mac.pairingID) else {
             status = .unavailable("This iPhone has lost its pairing with \(mac.name). Pair it again from the Mac.")
             return
@@ -226,11 +242,16 @@ final class CompanionModel {
         switch state {
         case .ready:
             timeout?.cancel()
+            attempts = 0
             status = .connected(mac.name)
+            if pairing?.macID == mac.macID {
+                pairing = nil
+                justPaired = mac
+            }
             send(CompanionMessage(hello: .init(pairingID: mac.pairingID, deviceName: UIDevice.current.name,
                                                model: Self.model)))
         case .waiting(let error), .failed(let error):
-            lost(connection, mac: mac, reason: Self.reason(for: error, mac: mac))
+            lost(connection, mac: mac, reason: reason(for: error, mac: mac))
         case .cancelled:
             if status == .connected(mac.name) { lost(connection, mac: mac, reason: "Disconnected from \(mac.name).") }
         default:
@@ -242,6 +263,7 @@ final class CompanionModel {
     private func lost(_ connection: NWConnection, mac: PairedMac, reason: String) {
         guard connection === self.connection else { return }
         status = .unavailable(reason)
+        attempts += 1
         disconnect()
         retry?.cancel()
         retry = Task { [weak self] in
@@ -252,8 +274,11 @@ final class CompanionModel {
     }
 
     /// A failed handshake most likely means the Mac no longer has this phone's key.
-    private static func reason(for error: NWError, mac: PairedMac) -> String {
+    private func reason(for error: NWError, mac: PairedMac) -> String {
         if case .tls = error {
+            if pairing?.macID == mac.macID {
+                return "\(mac.name) didn't accept the pairing. On the Mac, choose Pair iPhone… and scan the new code: each works only while its window is open."
+            }
             return "\(mac.name) didn't accept this iPhone. If you removed it there, pair it again."
         }
         return "Can't reach \(mac.name): \(error.localizedDescription)"

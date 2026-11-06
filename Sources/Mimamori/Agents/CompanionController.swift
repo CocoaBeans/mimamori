@@ -13,6 +13,8 @@ final class CompanionController {
     private(set) var pairingCode: CompanionPairingCode?
     /// The phone that paired with the code shown, so the sheet can say so.
     private(set) var justPaired: CompanionPairings.Phone?
+    /// When the code shown was made, so the sheet can say what to check if no phone comes.
+    private(set) var pairingStartedAt: Date?
     /// Phones connected now, by pairing id.
     private(set) var connected: Set<String> = []
     /// What's keeping phones from connecting, in a sentence; nil while all is well.
@@ -65,6 +67,7 @@ final class CompanionController {
         }
         if let old = pairingCode { forget(unusedCode: old) }
         pairingCode = CompanionPairingCode(macID: pairings.macID, macName: Host.current().localizedName ?? "Mac", key: key)
+        pairingStartedAt = Date()
         justPaired = nil
         restart()
     }
@@ -73,6 +76,7 @@ final class CompanionController {
     func endPairing() {
         guard let code = pairingCode else { return }
         pairingCode = nil
+        pairingStartedAt = nil
         justPaired = nil
         if forget(unusedCode: code) { restart() }
     }
