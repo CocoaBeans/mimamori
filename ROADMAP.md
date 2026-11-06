@@ -98,6 +98,9 @@ state, never on a loop.
 - [ ] The iPhone companion over cellular, through Tailscale, and a Live Activity; later,
       notifications through CloudKit for an App Store build
       ([Steps](docs/plans/iphone-companion.md#steps)).
+- [ ] On the iPhone companion, an agent's changed files and their diffs: the list as the Mac shows
+      it, with flags and review state, and a diff to read on the phone. A large piece, still to be
+      planned.
 - [x] See an agent's subagents: keep its card active while they run, and show each one's kind,
       task, time and latest step, on the Mac and the iPhone; and the commands it runs in the
       background ([docs/plans/subagents.md](docs/plans/subagents.md)).
