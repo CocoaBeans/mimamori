@@ -171,6 +171,34 @@ struct HermesHookTests {
         #expect(scoped.cwd == "/Users/x/Projects/backend")
     }
 
+    /// An approval hook as Hermes sends it: the command in `extra`, and no tool.
+    private func approval(_ name: String, surface: String, choice: String? = nil) -> String {
+        let decided = choice.map { #","choice":"\#($0)","decided_by":"aux_llm""# } ?? ""
+        return #"{"hook_event_name":"\#(name)","session_id":"sess_1","cwd":"/Users/x/.hermes","tool_name":null,"tool_input":null,"extra":{"command":"cd /repo && python3 - <<'EOF'","description":"script execution via heredoc","session_key":"agent:main:local:dm:sess_1","surface":"\#(surface)","tool_call_id":"","turn_id":""\#(decided)}}"#
+    }
+
+    @Test func aSmartApprovalCheckIsNotARequestForYou() throws {
+        // The second model's check, and its verdict, leave the card as it was.
+        let check = try #require(parse(approval("pre_approval_request", surface: "smart")))
+        #expect(check.name == .other)
+        #expect(check.rawName == "pre_approval_request")
+        let verdict = try #require(parse(approval("post_approval_response", surface: "smart", choice: "smart_approve")))
+        #expect(verdict.name == .other)
+
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"cd /repo && python3 -"},"session_id":"sess_1","cwd":"/Users/x/.hermes","extra":{"tool_call_id":"call_1"}}"#)))
+        let notes = machine.apply(check)
+        #expect(notes.isEmpty)
+        #expect(machine.status?.activity.needsAttention == false)
+        #expect(machine.status?.activity.isMidTurn == true)
+
+        // A command the model can't decide comes to you next, from the surface you use.
+        let asked = try #require(parse(approval("pre_approval_request", surface: "cli")))
+        #expect(asked.name == .permissionRequest)
+        _ = machine.apply(asked)
+        #expect(machine.status?.activity.needsAttention == true)
+    }
+
     /// A tool `execute_code` runs, as Hermes's hook sends it: no session, no call id, the turn's task.
     private func kernelPatch(task: String = "task_1", path: String = "/repo/app/a.dart") -> String {
         #"{"hook_event_name":"pre_tool_call","tool_name":"patch","tool_input":{"path":"\#(path)","old_string":"a","new_string":"b"},"session_id":"","cwd":"/Users/x/.hermes","extra":{"task_id":"\#(task)","tool_call_id":"","turn_id":""}}"#

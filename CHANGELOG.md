@@ -8,6 +8,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Fixed
+
+- Hermes no longer shows as needing permission while its smart approvals have a second model check a command; only a request that comes to you does.
+
 ## [1.2.0] - 2026-11-05
 
 ### Added

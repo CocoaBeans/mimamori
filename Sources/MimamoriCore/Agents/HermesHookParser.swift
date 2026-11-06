@@ -58,7 +58,11 @@ public enum HermesHookParser {
                                 extra["session_cwd"], extra["cwd"], extra["working_directory"]]
             .compactMap { $0 as? String }.first { $0.hasPrefix("/") }
         if let sessionDirectory { object["cwd"] = sessionDirectory }
-        let mapped = eventMap[rawName] ?? .other
+        // With smart approvals on, Hermes asks a second model about a risky command before it asks
+        // you, and reports that check as an approval request of its own. Nobody is asked yet: if
+        // the model can't decide, Hermes asks you next, as a request from the surface you use.
+        let checkedByModel = extra["surface"] as? String == "smart"
+        let mapped: HookEvent.Name = checkedByModel ? .other : eventMap[rawName] ?? .other
         object["hook_event_name"] = mapped == .other ? rawName : mapped.rawValue
         guard var event = HookEventParser.parse(object, receivedAt: receivedAt, agent: .hermes,
                                                 resolveRelativePaths: sessionDirectory != nil) else { return nil }
