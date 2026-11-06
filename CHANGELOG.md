@@ -55,6 +55,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- One Hermes session no longer shows as two, warning that "Two Hermes sessions" edited a file,
+  when it edits files from `execute_code`. Hermes reports those tools with no session, and
+  Mimamori now places them on the session whose turn ran them
+  ([#72](https://github.com/CocoaBeans/mimamori/pull/72)).
 - Answering by itself checks a Claude Code command against your ask rules whole, up to 64 KB,
   instead of its first 8000 characters, where a rule about its end could be missed; a longer
   command waits for you. A tool Mimamori doesn't know is described by a harmless field, never by
