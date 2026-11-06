@@ -14,7 +14,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   command; only a request that comes to you does
   ([#76](https://github.com/CocoaBeans/mimamori/pull/76)).
 - A permission request from a command Hermes ran from `execute_code` now shows on its session's card,
-  with the tool it's for, instead of being dropped.
+  with the tool it's for, instead of being dropped
+  ([#77](https://github.com/CocoaBeans/mimamori/pull/77)).
 
 ## [1.2.0] - 2026-11-05
 
