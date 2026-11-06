@@ -5,6 +5,8 @@ import SwiftUI
 @main
 struct MimamoriCompanionApp: App {
     @State private var model = CompanionModel()
+    @State private var keepAlive = BackgroundKeepAlive()
+    @AppStorage(CompanionNotificationSetting.staysConnected) private var staysConnected = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -23,9 +25,20 @@ struct MimamoriCompanionApp: App {
                 .onOpenURL { url in model.pair(with: url) }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
-                    case .active: model.resume()
-                    case .background: model.suspend()
-                    default: break
+                    case .active:
+                        let keptAlive = keepAlive.isRunning
+                        keepAlive.stop()
+                        model.resume(keptAlive: keptAlive)
+                    case .background:
+                        // Staying connected, the app keeps running and tells you as agents change;
+                        // otherwise iOS suspends it, so it lets go of the Mac first.
+                        if staysConnected, model.chosen != nil {
+                            keepAlive.start()
+                        } else {
+                            model.suspend()
+                        }
+                    default:
+                        break
                     }
                 }
         }
@@ -38,6 +51,7 @@ struct AgentsScreen: View {
     let model: CompanionModel
     @AppStorage("showsDetails") private var detailed = true
     @AppStorage("collapsedGroups") private var collapsedGroups = ""
+    @State private var showingSettings = false
 
     var body: some View {
         NavigationStack {
@@ -82,6 +96,9 @@ struct AgentsScreen: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Agents")
+            .sheet(isPresented: $showingSettings) {
+                CompanionSettingsSheet(notifier: model.notifier)
+            }
             .alert("Paired with \(model.justPaired?.name ?? "your Mac")", isPresented: Binding(
                 get: { model.justPaired != nil }, set: { if !$0 { model.dismissJustPaired() } })) {
                 Button("OK") { model.dismissJustPaired() }
@@ -90,6 +107,15 @@ struct AgentsScreen: View {
             }
             .refreshable { model.refresh() }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .help("Notifications, and staying connected in the background")
+                    .accessibilityLabel("Settings")
+                }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Toggle(isOn: $detailed) {
                         Label("Details", systemImage: "rectangle.grid.1x2")

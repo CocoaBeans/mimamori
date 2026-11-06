@@ -59,6 +59,8 @@ final class CompanionModel {
     @ObservationIgnored private var retry: Task<Void, Never>?
     @ObservationIgnored private var restartBrowser: Task<Void, Never>?
     @ObservationIgnored private let keychain = CompanionKeychain.standard
+    /// Tells you as agents change.
+    @ObservationIgnored let notifier = AgentNotifier()
     @ObservationIgnored private let defaults = UserDefaults.standard
 
     /// The Mac to show: the one last chosen, or the first paired.
@@ -95,7 +97,13 @@ final class CompanionModel {
 
     /// The app came back to the front: connect afresh. A connection kept from before iOS
     /// suspended the app may be dead without knowing it yet, showing old states as current.
-    func resume() {
+    /// `keptAlive`: the app stayed running in the background, so its connection is current and
+    /// only needs asking for what's new.
+    func resume(keptAlive: Bool = false) {
+        if keptAlive, connection != nil, case .connected = status {
+            refresh()
+            return
+        }
         attempts = 0
         // What went wrong before the app left the front is old news.
         if case .unavailable = status { status = chosen == nil ? .unpaired : .searching }
@@ -254,6 +262,7 @@ final class CompanionModel {
         retry?.cancel()
         disconnect()
         reader = CompanionLineReader()
+        notifier.reset()
         status = .connecting(mac.name)
         // The service by name, not the browse result's endpoint, which is tied to the interface it
         // was found on: found over a USB cable, that connection never came up.
@@ -289,6 +298,7 @@ final class CompanionModel {
                 pairing = nil
                 justPaired = mac
             }
+            Task { await notifier.requestAuthorizationIfNeeded() }
             send(CompanionMessage(hello: .init(pairingID: mac.pairingID, deviceName: UIDevice.current.name,
                                                model: Self.model)))
         case .waiting(let error), .failed(let error):
@@ -349,6 +359,7 @@ final class CompanionModel {
             guard let message = try? CompanionMessage(line: line), let snapshot = message.snapshot else { continue }
             let now = Date()
             self.snapshot = snapshot
+            notifier.update(snapshot)
             receivedAt = now
             delay = now.timeIntervalSince(snapshot.writtenAt)
         }
