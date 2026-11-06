@@ -214,6 +214,9 @@ struct HelpTopic: Identifiable {
             ## Removing an iPhone
             **Remove…** beside it in Settings › iPhone deletes its key, and it's cut off at once. On the iPhone, **Forget** in the Mac menu does the same from that end.
 
+            ## An agent's actions
+            Tap an agent on the iPhone to see its list of actions: every step of the turn under way, newest first, then the turns before it under their prompts, with when each step ran, how long it took, and whether it failed or waits on you. With **Show tasks and steps in widgets** off, the steps keep their kind and times but not what they acted on.
+
             ## Notifications
             The iPhone tells you when an agent needs you, finishes a turn, or edits the same file as another, as your Mac does; the gear on the iPhone chooses which. They come while Mimamori is open on the iPhone, or always with **Stay connected in the background** on there: Mimamori then keeps running after you leave it, playing silence so iOS doesn't suspend it, which uses more battery.
 

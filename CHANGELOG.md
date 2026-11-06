@@ -30,6 +30,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
   "Answer permission requests in Mimamori" on, and the activity feed says which iPhone answered
   ([#61](https://github.com/CocoaBeans/mimamori/pull/61)).
 
+- Tap an agent on the iPhone for its list of actions: every step of its turn, newest first, then
+  the turns before it under their prompts, with when each ran, how long it took and whether it
+  failed ([#64](https://github.com/CocoaBeans/mimamori/pull/64)).
+
 ### Changed
 
 - With git from Xcode or its Command Line Tools, Mimamori runs that git directly rather than

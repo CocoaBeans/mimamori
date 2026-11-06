@@ -7,9 +7,10 @@
 > `permissionRequest`, and the phone's `answer`, which the Mac acts on only from a paired phone for
 > a request still waiting (`CompanionAnswerCheck`). Which paired phone is proved per connection:
 > the Mac's `challenge` nonce, answered by an HMAC under the pairing's secret (`CompanionProof`),
-> since TLS alone shows only that a phone holds one of the keys. Next: an agent's list of actions. Builds of
-> your own come first: same network, then the silent-audio keep-alive with "needs you"
-> notifications, then Tailscale. CloudKit and a relay wait for an App Store build.
+> since TLS alone shows only that a phone holds one of the keys. Then an agent's list of actions,
+> which completes step 2. Builds of your own come first: same network, then the silent-audio
+> keep-alive with "needs you" notifications, then Tailscale. CloudKit and a relay wait for an App
+> Store build.
 > The Mac side stays on macOS 15 with `NWListener` (see "Decided").
 
 ## Goal
