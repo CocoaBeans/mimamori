@@ -53,6 +53,58 @@ public struct HookEvent: Sendable, Hashable {
     public var permissionRequestID: String? = nil
     /// A shell tool's whole command (`summary` has its first line), for matching permission rules.
     public var command: String? = nil
+    /// The subagent's kind (`agent_type`, such as `Explore`) when one sent the event.
+    public var agentType: String? = nil
+    /// What's still in flight (`background_tasks`, on Stop and SubagentStop): running subagents and
+    /// commands run in the background. Nil when the event doesn't say.
+    public var backgroundTasks: [BackgroundTask]? = nil
+    /// SubagentStop: the subagent's last words (`last_assistant_message`), shortened.
+    public var lastMessage: String? = nil
+    /// The `Agent` (or `Task`) call that launches a subagent, and on its PostToolUse what came back.
+    public var subagentLaunch: SubagentLaunch? = nil
+
+    /// A task `background_tasks` lists.
+    public struct BackgroundTask: Sendable, Hashable {
+        /// For a subagent, its `agent_id`.
+        public var id: String
+        /// `subagent`, `shell`, …
+        public var type: String
+        public var status: String?
+        public var description: String?
+        public var agentType: String?
+
+        public init(id: String, type: String, status: String? = nil, description: String? = nil, agentType: String? = nil) {
+            self.id = id
+            self.type = type
+            self.status = status
+            self.description = description
+            self.agentType = agentType
+        }
+
+        public var isSubagent: Bool { type == "subagent" }
+        public var isRunning: Bool { status == nil || status == "running" }
+    }
+
+    /// What an `Agent` call asked for: `tool_input`, and on PostToolUse `tool_response`'s
+    /// `status` (`completed`, or `async_launched` for one sent to the background) and `agentId`.
+    public struct SubagentLaunch: Sendable, Hashable {
+        public var subagentType: String?
+        public var description: String?
+        public var background: Bool
+        public var isolation: String?
+        public var status: String?
+        public var agentID: String?
+
+        public init(subagentType: String? = nil, description: String? = nil, background: Bool = false,
+                    isolation: String? = nil, status: String? = nil, agentID: String? = nil) {
+            self.subagentType = subagentType
+            self.description = description
+            self.background = background
+            self.isolation = isolation
+            self.status = status
+            self.agentID = agentID
+        }
+    }
 
     public init(name: Name, rawName: String, agent: AgentKind = .claudeCode, sessionID: String? = nil, cwd: String? = nil,
                 transcriptPath: String? = nil, toolName: String? = nil, toolUseID: String? = nil, filePath: String? = nil,
@@ -188,6 +240,22 @@ public enum HookEventParser {
             batchToolUseIDs: batch,
             receivedAt: receivedAt)
         event.command = (toolInput?["command"] as? String).map { String($0.prefix(8000)) }
+        event.agentType = object["agent_type"] as? String
+        event.lastMessage = (object["last_assistant_message"] as? String).map { String(firstLine($0).prefix(300)) }
+        if let tasks = object["background_tasks"] as? [[String: Any]] {
+            event.backgroundTasks = tasks.compactMap { task -> HookEvent.BackgroundTask? in
+                guard let id = task["id"] as? String, let type = task["type"] as? String else { return nil }
+                return HookEvent.BackgroundTask(id: id, type: type, status: task["status"] as? String,
+                                      description: task["description"] as? String, agentType: task["agent_type"] as? String)
+            }
+        }
+        if toolName == "Agent" || toolName == "Task", let toolInput {
+            let response = object["tool_response"] as? [String: Any]
+            event.subagentLaunch = HookEvent.SubagentLaunch(
+                subagentType: toolInput["subagent_type"] as? String, description: toolInput["description"] as? String,
+                background: toolInput["run_in_background"] as? Bool ?? false, isolation: toolInput["isolation"] as? String,
+                status: response?["status"] as? String, agentID: response?["agentId"] as? String)
+        }
         return event
     }
 

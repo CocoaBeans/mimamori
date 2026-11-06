@@ -39,7 +39,7 @@ public enum AgentActivity: Sendable, Hashable, Codable {
 
     public var title: String {
         switch self {
-        case .working(let tool, _): tool.map { "working · \($0)" } ?? "working"
+        case .working(let tool, let detail): tool.map { "working · \($0)" } ?? detail.map { "working · \($0)" } ?? "working"
         case .needsPermission(let tool, _): tool.isEmpty ? "needs permission" : "needs permission for \(tool)"
         case .askedQuestion: "has a question for you"
         case .ready: "ready for your next prompt"
@@ -117,6 +117,18 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var turnStartUnheard = false
     /// When the session's previous turn ended, as far as Mimamori heard.
     public var lastTurnEndedAt: Date?
+    /// Subagents the session started, running or lately finished.
+    public var subagents: [Subagent] = []
+    /// Agent calls in the foreground whose subagent hasn't been heard from yet.
+    public var pendingLaunches: [SubagentLaunchRecord] = []
+    /// Commands running in the background, as the last `background_tasks` counted them.
+    public var backgroundCommands = 0
+    /// The agent stopped while subagents ran: its turn ends when the last of them does.
+    public var waitingOnSubagents = false
+    /// How the agent's own stop went, kept for when the turn finally ends.
+    public var deferredStopFailure: String?? = nil
+
+    public var runningSubagents: [Subagent] { subagents.filter(\.isRunning) }
 
     public init(agent: AgentKind, activity: AgentActivity, since: Date, lastEventAt: Date, sessionID: String? = nil,
                 turnStartedAt: Date? = nil, toolCallsThisTurn: Int = 0, recentToolCalls: [AgentToolCall] = []) {
@@ -142,6 +154,44 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var turnToolCalls: [AgentToolCall] {
         guard let start = turnStartedAt ?? lastTurnStartedAt else { return Array(recentToolCalls.suffix(10)) }
         return recentToolCalls.filter { $0.startedAt >= start }
+    }
+
+    /// Subagents finished half an hour ago are forgotten, and no more than 30 are kept: steps keep
+    /// their `agentID` either way.
+    mutating func forgetOldSubagents(now: Date) {
+        subagents.removeAll { $0.finishedAt.map { now.timeIntervalSince($0) > 30 * 60 } ?? false }
+        if subagents.count > 30 { subagents.removeFirst(subagents.count - 30) }
+    }
+
+    /// Ends the turn: Ready, nothing left running, and the note saying so. `failure` is a
+    /// StopFailure's reason (nil for a turn that ended well, `.some(nil)` for a failure with none).
+    mutating func endTurn(at now: Date, failure: String?? = nil) -> AgentNote {
+        if activity != .ready {
+            activity = .ready
+            since = now
+        }
+        pendingPermission = nil
+        for index in recentToolCalls.indices where recentToolCalls[index].finishedAt == nil {
+            recentToolCalls[index].finishedAt = now
+        }
+        waitingOnSubagents = false
+        deferredStopFailure = nil
+        var detail: String? = nil
+        if let started = turnStartedAt {
+            let seconds = Int(now.timeIntervalSince(started))
+            let calls = toolCallsThisTurn == 1 ? "1 tool call" : "\(toolCallsThisTurn) tool calls"
+            detail = "\(calls) in \(seconds >= 60 ? "\(seconds / 60)m \(seconds % 60)s" : "\(seconds)s")"
+        }
+        turnStartedAt = nil
+        turnStartUnheard = false
+        lastTurnEndedAt = now
+        let agentName = agent.displayName
+        if let failure {
+            let reason = failure.map { $0.replacingOccurrences(of: "_", with: " ") }
+            return AgentNote(kind: .turnFinished, title: "\(agentName)'s turn ended on an error",
+                             detail: [reason, detail].compactMap { $0 }.joined(separator: " · "))
+        }
+        return AgentNote(kind: .turnFinished, title: "\(agentName) finished a turn", detail: detail)
     }
 
     /// The Claude Code shell command waiting on your permission, and since when.
@@ -210,6 +260,11 @@ public struct AgentStatusMachine: Sendable {
             current.sessionID = nil
             current.turnStartUnheard = false
             current.lastTurnEndedAt = nil
+            current.subagents = []
+            current.pendingLaunches = []
+            current.backgroundCommands = 0
+            current.waitingOnSubagents = false
+            current.deferredStopFailure = nil
         }
         current.agent = event.agent
         current.lastEventAt = now
@@ -250,6 +305,55 @@ public struct AgentStatusMachine: Sendable {
             }
         }
 
+        func subagentIndex(_ id: String) -> Int {
+            if let index = current.subagents.firstIndex(where: { $0.id == id }) { return index }
+            current.subagents.append(Subagent(id: id, startedAt: now))
+            return current.subagents.count - 1
+        }
+
+        /// While the agent waits on its subagents, the status says how many are left, and the
+        /// turn ends with the last of them.
+        func settleWaiting() {
+            guard current.waitingOnSubagents else { return }
+            let running = current.runningSubagents.count
+            if running == 0 {
+                notes.append(current.endTurn(at: now, failure: current.deferredStopFailure))
+            } else {
+                set(.working(tool: nil, detail: Subagent.waitingDetail(running)))
+            }
+        }
+
+        // A subagent's event says it's alive; its first may say which Agent call started it.
+        if let id = event.agentID {
+            let known = current.subagents.contains { $0.id == id }
+            let index = subagentIndex(id)
+            if current.subagents[index].type == nil { current.subagents[index].type = event.agentType }
+            current.subagents[index].lastEventAt = now
+            if !known, let launch = current.pendingLaunches.firstIndex(where: { $0.type == nil || $0.type == event.agentType }) {
+                if current.subagents[index].description == nil {
+                    current.subagents[index].description = current.pendingLaunches[launch].description
+                }
+                current.pendingLaunches.remove(at: launch)
+            }
+        }
+        // What's still in flight: the running subagents, with what each was asked, and commands run
+        // in the background. A background subagent no longer listed has finished.
+        if let tasks = event.backgroundTasks {
+            let listed = tasks.filter { $0.isSubagent && $0.isRunning }
+            for task in listed {
+                let index = subagentIndex(task.id)
+                current.subagents[index].background = true
+                if current.subagents[index].type == nil { current.subagents[index].type = task.agentType }
+                if current.subagents[index].description == nil { current.subagents[index].description = task.description }
+            }
+            let ids = Set(listed.map(\.id))
+            for index in current.subagents.indices {
+                let subagent = current.subagents[index]
+                if subagent.background, subagent.isRunning, !ids.contains(subagent.id) { current.subagents[index].finishedAt = now }
+            }
+            current.backgroundCommands = tasks.filter { $0.type == "shell" && $0.isRunning }.count
+        }
+
         switch event.name {
         case .sessionStart:
             set(.ready)
@@ -261,6 +365,11 @@ public struct AgentStatusMachine: Sendable {
         case .sessionEnd:
             set(.idle)
             closeOpenCalls()
+            for index in current.subagents.indices where current.subagents[index].isRunning {
+                current.subagents[index].finishedAt = now
+            }
+            current.waitingOnSubagents = false
+            current.deferredStopFailure = nil
             current.lastTurnEndedAt = now
             notes.append(AgentNote(kind: .sessionEnded, title: "\(agentName) session ended", detail: event.message))
 
@@ -269,7 +378,7 @@ public struct AgentStatusMachine: Sendable {
             // question; only a fresh turn resets the counters.
             let midTurn: Bool
             switch current.activity {
-            case .working, .askedQuestion, .needsPermission: midTurn = current.turnStartedAt != nil
+            case .working, .askedQuestion, .needsPermission: midTurn = current.turnStartedAt != nil && !current.waitingOnSubagents
             case .ready, .idle: midTurn = false
             }
             // A prompt while a dialog was open means it was dismissed (Esc ends the turn without a Stop).
@@ -289,24 +398,39 @@ public struct AgentStatusMachine: Sendable {
                 current.turnStartUnheard = event.agent == .hermes && !heardBefore
                 current.task = event.message
                 current.toolCallsThisTurn = 0
+                current.waitingOnSubagents = false
+                current.deferredStopFailure = nil
                 notes.append(AgentNote(kind: .turnStarted, title: "\(agentName) started a turn", detail: event.message))
             }
 
         case .preToolUse:
             let tool = event.toolName ?? "tool"
+            // A subagent's step after the agent's turn ended is the subagent's: no turn starts, and
+            // the agent's own status stays as it is.
+            let subagentAfterTurn = event.agentID != nil && current.turnStartedAt == nil
             // A call with no turn under way: Mimamori started (or restarted) mid-turn and never saw
             // the prompt. The turn starts here, so its steps, files and timeline still show.
-            if current.turnStartedAt == nil {
+            if current.turnStartedAt == nil, !subagentAfterTurn {
                 current.turnStartedAt = now
                 current.lastTurnStartedAt = now
                 current.turnStartUnheard = true
                 current.toolCallsThisTurn = 0
             }
-            current.toolCallsThisTurn += 1
+            if !subagentAfterTurn { current.toolCallsThisTurn += 1 }
             let call = AgentToolCall(id: event.toolUseID ?? UUID().uuidString, toolName: tool, summary: event.summary,
-                                     filePath: event.filePath, startedAt: now)
+                                     filePath: event.filePath, startedAt: now, agentID: event.agentID)
             current.recentToolCalls.append(call)
             if current.recentToolCalls.count > maxToolCalls { current.recentToolCalls.removeFirst(current.recentToolCalls.count - maxToolCalls) }
+            if let id = event.agentID {
+                let index = subagentIndex(id)
+                current.subagents[index].steps += 1
+                current.subagents[index].lastStep = call
+            }
+            // An Agent call in the foreground: its subagent's first step will say which it is.
+            if event.agentID == nil, let launch = event.subagentLaunch, !launch.background {
+                current.pendingLaunches.append(SubagentLaunchRecord(toolUseID: event.toolUseID, type: launch.subagentType,
+                                                                    description: launch.description))
+            }
             let waitingElsewhere: Bool
             if case .needsPermission = current.activity, let pending = current.pendingPermission {
                 // One agent moving on settles its own request; a subagent waiting on you does
@@ -321,14 +445,29 @@ public struct AgentStatusMachine: Sendable {
                 set(.askedQuestion(detail: event.summary))
                 notes.append(AgentNote(kind: .waiting, title: "\(agentName) has a question for you", detail: event.summary))
             } else {
-                if !waitingElsewhere { set(.working(tool: tool, detail: event.summary)) }
+                if !waitingElsewhere, !subagentAfterTurn, !current.waitingOnSubagents { set(.working(tool: tool, detail: event.summary)) }
                 notes.append(AgentNote(kind: .toolCall, title: "\(agentName): \(tool)", detail: event.summary,
                                        filePath: event.filePath, isMutatingTool: event.isMutatingTool))
             }
 
         case .postToolUse, .postToolUseFailure, .permissionDenied:
             let finished = finish(id: event.toolUseID, tool: event.toolName, failed: event.name != .postToolUse)
-            if settlesPermission(endedCall: finished) { set(.working(tool: nil, detail: nil)) }
+            // An Agent call ending says which subagent it started: at once for one sent to the
+            // background (`async_launched`), when it finished for one in the foreground.
+            if let launch = event.subagentLaunch, let id = launch.agentID {
+                let index = subagentIndex(id)
+                if current.subagents[index].type == nil { current.subagents[index].type = launch.subagentType }
+                if current.subagents[index].description == nil { current.subagents[index].description = launch.description }
+                if launch.status == "async_launched" { current.subagents[index].background = true }
+                current.pendingLaunches.removeAll { $0.toolUseID != nil && $0.toolUseID == event.toolUseID }
+            }
+            if settlesPermission(endedCall: finished) {
+                if current.waitingOnSubagents {
+                    settleWaiting()
+                } else if event.agentID == nil || current.turnStartedAt != nil {
+                    set(.working(tool: nil, detail: nil))
+                }
+            }
 
         case .postToolBatch:
             // Denied calls get no PostToolUse; the batch is the only word that they are done.
@@ -378,33 +517,65 @@ public struct AgentStatusMachine: Sendable {
             }
 
         case .stop, .stopFailure:
-            set(.ready)
-            closeOpenCalls()
-            var detail: String? = nil
-            if let started = current.turnStartedAt {
-                let seconds = Int(now.timeIntervalSince(started))
-                let calls = current.toolCallsThisTurn == 1 ? "1 tool call" : "\(current.toolCallsThisTurn) tool calls"
-                detail = "\(calls) in \(seconds >= 60 ? "\(seconds / 60)m \(seconds % 60)s" : "\(seconds)s")"
-            }
-            if event.name == .stopFailure {
-                let reason = event.message.map { $0.replacingOccurrences(of: "_", with: " ") }
-                notes.append(AgentNote(kind: .turnFinished, title: "\(agentName)'s turn ended on an error",
-                                       detail: [reason, detail].compactMap { $0 }.joined(separator: " · ")))
+            let failure: String?? = event.name == .stopFailure ? .some(event.message) : nil
+            if event.agentID == nil, !current.runningSubagents.isEmpty {
+                // The agent is done but its subagents aren't: the turn goes on until they finish.
+                for index in current.recentToolCalls.indices
+                where current.recentToolCalls[index].finishedAt == nil && current.recentToolCalls[index].agentID == nil {
+                    current.recentToolCalls[index].finishedAt = now
+                }
+                current.waitingOnSubagents = true
+                current.deferredStopFailure = failure
+                settleWaiting()
             } else {
-                notes.append(AgentNote(kind: .turnFinished, title: "\(agentName) finished a turn", detail: detail))
+                notes.append(current.endTurn(at: now, failure: failure))
             }
-            current.turnStartedAt = nil
-            current.turnStartUnheard = false
-            current.lastTurnEndedAt = now
 
         case .subagentStop:
-            notes.append(AgentNote(kind: .notification, title: "\(agentName) subagent finished"))
+            var title = "\(agentName) subagent finished", detail: String? = nil
+            if let id = event.agentID {
+                let index = subagentIndex(id)
+                if current.subagents[index].finishedAt == nil { current.subagents[index].finishedAt = now }
+                current.subagents[index].lastMessage = event.lastMessage
+                for call in current.recentToolCalls.indices
+                where current.recentToolCalls[call].agentID == id && current.recentToolCalls[call].finishedAt == nil {
+                    current.recentToolCalls[call].finishedAt = now
+                }
+                title = "\(agentName)'s \(current.subagents[index].title) subagent finished"
+                detail = current.subagents[index].description
+            }
+            notes.append(AgentNote(kind: .notification, title: title, detail: detail))
+            settleWaiting()
 
         case .preCompact, .other:
             break
         }
 
+        current.forgetOldSubagents(now: now)
         status = current
+        return notes
+    }
+
+    /// Takes a subagent silent for `Subagent.quietLimit` to have finished, its stop unheard, and
+    /// ends a turn waiting only on such subagents. Returns the note for a turn it ended; called
+    /// now and then, since no event comes to say so.
+    public mutating func expireSubagents(now: Date = Date()) -> [AgentNote] {
+        guard var current = status else { return [] }
+        var notes: [AgentNote] = []
+        for index in current.subagents.indices
+        where current.subagents[index].isRunning && now.timeIntervalSince(current.subagents[index].lastEventAt) > Subagent.quietLimit {
+            current.subagents[index].finishedAt = now
+        }
+        if current.waitingOnSubagents {
+            let running = current.runningSubagents.count
+            if running == 0 {
+                notes.append(current.endTurn(at: now, failure: current.deferredStopFailure))
+            } else if case .working = current.activity {
+                current.activity = .working(tool: nil, detail: Subagent.waitingDetail(running))
+            }
+        }
+        current.forgetOldSubagents(now: now)
+        if current != status { status = current }
         return notes
     }
 

@@ -360,6 +360,11 @@ struct AgentDashboardRow: View {
                 } else {
                     compactFooter
                 }
+                // Its subagents in full on a detailed card; a compact one counts them in its footer.
+                if detailed {
+                    let subagents = presence.shownSubagents(at: now)
+                    if !subagents.isEmpty { SubagentsList(subagents: subagents, now: now, worktree: row.session.id) }
+                }
                 // After this agent's own steps and files, so none of them reads as another's.
                 if !presence.others.isEmpty {
                     OtherAgentsList(others: presence.others, now: now, worktree: row.session.id)
@@ -416,6 +421,11 @@ struct AgentDashboardRow: View {
                     .truncationMode(.middle)
             } else if presence.source == .hooks, presence.toolCallsThisTurn > 0 {
                 Text(presence.toolCallsThisTurn == 1 ? "1 tool call this turn" : "\(presence.toolCallsThisTurn) tool calls this turn")
+            }
+            if let subagents = presence.runningSubagentsSummary {
+                Label(subagents, systemImage: AgentToolCategory.subagent.symbol)
+                    .foregroundStyle(AgentToolCategory.subagent.color)
+                    .help("Subagents it started are still running; the details show them")
             }
             Spacer(minLength: 6)
             ChangeSummary(session: row.session)

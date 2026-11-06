@@ -31,6 +31,17 @@ struct AgentPresence: Hashable {
     var others: [AgentPresence] = []
     /// Files two of them edited, unless you dismissed it.
     var collision: AgentCollision? = nil
+    /// The subagents it started, running or lately finished.
+    var subagents: [Subagent] = []
+    /// Commands it runs in the background.
+    var backgroundCommands = 0
+
+    /// Its subagents running, and those finished in the last minute, so their end shows.
+    func shownSubagents(at now: Date) -> [Subagent] {
+        subagents.filter { subagent in
+            subagent.finishedAt.map { now.timeIntervalSince($0) < Subagent.listedAfterFinishing } ?? true
+        }
+    }
 
     var needsAttention: Bool { source == .hooks && activity.needsAttention || collision != nil }
     var agentCount: Int { 1 + others.count }
@@ -39,7 +50,8 @@ struct AgentPresence: Hashable {
         switch (source, activity) {
         case (.hooks, .working(let tool, let detail)):
             if let tool { return detail.map { "working · \(tool) \($0)" } ?? "working · \(tool)" }
-            return "working"
+            // "working · waiting on 2 subagents"
+            return detail.map { "working · \($0)" } ?? "working"
         case (.hooks, .needsPermission(let tool, let detail)):
             if tool.isEmpty { return "needs permission" }
             return detail.map { "needs permission · \(tool) \($0)" } ?? "needs permission · \(tool)"
@@ -808,7 +820,17 @@ final class AgentHub {
                 if gone {
                     remove(session: key, from: worktree)
                     changed = true
+                    continue
                 }
+                // A subagent silent for long is taken to have finished, its stop unheard; a turn
+                // left waiting only on such subagents ends.
+                var expiring = machine
+                let notes = expiring.expireSubagents(now: now)
+                if expiring.status != status {
+                    machines[worktree]?[key] = expiring
+                    changed = true
+                }
+                if !notes.isEmpty { onNotes(worktree, status.agent, notes) }
             }
         }
         if changed { schedulePublish(urgent: true) } else { updateAgents() }
@@ -977,7 +999,8 @@ final class AgentHub {
                              turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
                              processIDs: processIDs,
                              awaitingCallID: status.pendingPermission?.callID,
-                             permissionRequestID: pendingPermissions[status.key]?.id)
+                             permissionRequestID: pendingPermissions[status.key]?.id,
+                             subagents: status.subagents, backgroundCommands: status.backgroundCommands)
     }
 
     private func processPresence(_ running: [AgentProcess]) -> AgentPresence {

@@ -10,9 +10,11 @@ public struct AgentToolCall: Identifiable, Sendable, Hashable, Codable {
     public var finishedAt: Date?
     /// The call failed (a command exiting non-zero) or was interrupted.
     public var failed: Bool
+    /// The subagent that made it (Claude Code's `agent_id`); nil for the main agent.
+    public var agentID: String?
 
     public init(id: String, toolName: String, summary: String?, filePath: String?, startedAt: Date, finishedAt: Date? = nil,
-                failed: Bool = false) {
+                failed: Bool = false, agentID: String? = nil) {
         self.id = id
         self.toolName = toolName
         self.summary = summary
@@ -20,6 +22,7 @@ public struct AgentToolCall: Identifiable, Sendable, Hashable, Codable {
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.failed = failed
+        self.agentID = agentID
     }
 
     public var category: AgentToolCategory { AgentToolCategory(toolName: toolName) }

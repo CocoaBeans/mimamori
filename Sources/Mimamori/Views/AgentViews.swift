@@ -381,6 +381,11 @@ struct AgentStatusBanner: View {
                 }
                 if expanded, let details {
                     expandedContent(details)
+                    let subagents = presence.shownSubagents(at: now)
+                    if !subagents.isEmpty {
+                        SubagentsList(subagents: subagents, now: now, worktree: details.worktree)
+                            .padding(.top, 4)
+                    }
                 }
                 if !presence.others.isEmpty {
                     OtherAgentsList(others: presence.others, now: now, worktree: details?.worktree)
