@@ -8,6 +8,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Fixed
+
+- Tapping a notification from the iPhone app opens it again, instead of closing it.
+
 ## [1.2.1] - 2026-11-06
 
 ### Fixed

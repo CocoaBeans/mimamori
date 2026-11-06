@@ -130,11 +130,20 @@ final class AgentNotifier: NSObject, UNUserNotificationCenterDelegate {
         return kind == CompanionAlerts.Kind.needsYou.rawValue || kind == "answerFailed" ? [.banner, .list, .sound] : [.list]
     }
 
-    /// Allow or Deny on a notification. iOS may have woken the app in the background for it, and
-    /// waits until this returns.
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    /// A tap on a notification, or its Allow or Deny. iOS may have woken the app in the background
+    /// for it, and waits for `completionHandler`.
+    ///
+    /// Not the async form: Swift calls that one's completion handler from a background thread, and
+    /// UIKit stops the app when it is (every tap on a notification crashed the app).
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
         let action = response.actionIdentifier
-        guard let requestID = response.notification.request.content.userInfo["requestID"] as? String else { return }
-        await handle(action: action, requestID: requestID)
+        let requestID = response.notification.request.content.userInfo["requestID"] as? String
+        // Called on the main actor below, and only once.
+        nonisolated(unsafe) let done = completionHandler
+        Task { @MainActor in
+            if let requestID { await handle(action: action, requestID: requestID) }
+            done()
+        }
     }
 }
