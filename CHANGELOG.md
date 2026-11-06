@@ -13,6 +13,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Hermes no longer shows as needing permission while its smart approvals have a second model check a
   command; only a request that comes to you does
   ([#76](https://github.com/CocoaBeans/mimamori/pull/76)).
+- A permission request from a command Hermes ran from `execute_code` now shows on its session's card,
+  with the tool it's for, instead of being dropped.
 
 ## [1.2.0] - 2026-11-05
 

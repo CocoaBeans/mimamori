@@ -534,9 +534,11 @@ public struct AgentStatusMachine: Sendable {
             if settled, current.turnStartedAt != nil { set(.working(tool: nil, detail: nil)) }
 
         case .permissionRequest:
-            // The request carries no tool_use_id: it belongs to the call PreToolUse just announced.
-            let tool = event.toolName ?? "a tool"
-            let call = current.recentToolCalls.last { call in
+            // Claude Code's request carries no tool_use_id: it belongs to the call PreToolUse just
+            // announced. Hermes's names the call but not its tool.
+            let named = event.toolUseID.flatMap { id in current.recentToolCalls.last { $0.id == id && $0.finishedAt == nil } }
+            let tool = event.toolName ?? named?.toolName ?? "a tool"
+            let call = named ?? current.recentToolCalls.last { call in
                 call.finishedAt == nil && call.toolName == tool && (event.summary == nil || call.summary == event.summary)
             }
             set(.needsPermission(tool: tool, detail: event.summary))

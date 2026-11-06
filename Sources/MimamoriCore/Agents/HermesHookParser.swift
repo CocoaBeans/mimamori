@@ -68,6 +68,12 @@ public enum HermesHookParser {
                                                 resolveRelativePaths: sessionDirectory != nil) else { return nil }
         event.rawName = rawName
         event.hermesTaskID = (extra["task_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        event.hermesSessionKey = (extra["session_key"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        // An approval hook names no tool; the command it asks about is in `extra`.
+        if rawName.contains("approval"), event.summary == nil {
+            event.summary = [extra["command"], extra["description"]].compactMap { $0 as? String }
+                .compactMap { $0.split(separator: "\n").first.map(String.init) }.first { !$0.isEmpty }
+        }
         // The tools `execute_code` runs are the calls that name their turn's task but no session.
         event.ranFromCode = event.sessionID == nil && event.hermesTaskID != nil && event.name == .preToolUse
         return event

@@ -199,6 +199,83 @@ struct HermesHookTests {
         #expect(machine.status?.activity.needsAttention == true)
     }
 
+    /// A request that comes to you, as Hermes sends it for a command `execute_code` ran: no
+    /// session id and no call id, only the session's key.
+    private func askedFromCode(_ name: String, choice: String? = nil) -> String {
+        let decided = choice.map { #","choice":"\#($0)""# } ?? ""
+        return #"{"hook_event_name":"\#(name)","session_id":"","cwd":"/Users/x/.hermes","tool_name":null,"tool_input":null,"extra":{"command":"cd /repo && rm -rf build\necho done","description":"recursive delete","session_key":"agent:main:local:dm:sess_1","surface":"cli","tool_call_id":"","turn_id":""\#(decided)}}"#
+    }
+
+    @Test func anApprovalNamesItsSessionKeyAndCommand() throws {
+        let asked = try #require(parse(askedFromCode("pre_approval_request")))
+        #expect(asked.name == .permissionRequest)
+        #expect(asked.sessionID == nil)
+        #expect(asked.hermesSessionKey == "agent:main:local:dm:sess_1")
+        #expect(asked.summary == "cd /repo && rm -rf build")
+        #expect(asked.absolutePathHints == ["/repo"])
+    }
+
+    @Test func aRequestFromExecuteCodeReachesItsSessionAndIsSettled() throws {
+        var keys = HermesSessionKeys()
+        var lookups: [String] = []
+        let lookup: (String) -> String? = { key in
+            lookups.append(key)
+            return key == "agent:main:local:dm:sess_1" ? "sess_1" : nil
+        }
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"execute_code","tool_input":{"code":"terminal('rm -rf build')"},"session_id":"sess_1","cwd":"/Users/x/.hermes","extra":{"task_id":"task_1","tool_call_id":"call_1"}}"#)))
+
+        var asked = try #require(parse(askedFromCode("pre_approval_request")))
+        keys.resolve(&asked, lookup: lookup)
+        #expect(asked.sessionID == "sess_1")
+        let notes = machine.apply(asked)
+        #expect(machine.status?.activity.needsAttention == true)
+        #expect(notes.contains { $0.kind == .needsPermission })
+
+        // The answer names no session either; the key is remembered, so Hermes's database isn't read again.
+        var answered = try #require(parse(askedFromCode("post_approval_response", choice: "once")))
+        keys.resolve(&answered, lookup: lookup)
+        #expect(answered.sessionID == "sess_1")
+        #expect(lookups == ["agent:main:local:dm:sess_1"])
+        _ = machine.apply(answered)
+        #expect(machine.status?.activity.needsAttention == false)
+        #expect(machine.status?.activity.isMidTurn == true)
+    }
+
+    @Test func sessionKeysAreLearnedAndMissesAskedAgain() throws {
+        var keys = HermesSessionKeys()
+        var lookups = 0
+        let start = Date(timeIntervalSince1970: 1_000)
+        // A request that names both teaches the key, with no need to read the database.
+        var direct = try #require(parse(approval("pre_approval_request", surface: "cli")))
+        keys.resolve(&direct, now: start) { _ in lookups += 1; return nil }
+        var fromCode = try #require(parse(askedFromCode("pre_approval_request")))
+        keys.resolve(&fromCode, now: start) { _ in lookups += 1; return nil }
+        #expect(fromCode.sessionID == "sess_1")
+        #expect(lookups == 0)
+
+        // A key Hermes hasn't written yet is asked again after a few seconds, not at once.
+        let unknown = #"{"hook_event_name":"pre_approval_request","session_id":"","cwd":"/Users/x/.hermes","extra":{"command":"ls","session_key":"agent:main:telegram:dm:42","surface":"gateway"}}"#
+        var first = try #require(parse(unknown))
+        keys.resolve(&first, now: start) { _ in lookups += 1; return nil }
+        var soon = try #require(parse(unknown))
+        keys.resolve(&soon, now: start.addingTimeInterval(1)) { _ in lookups += 1; return "sess_2" }
+        #expect(soon.sessionID == nil)
+        var later = try #require(parse(unknown))
+        keys.resolve(&later, now: start.addingTimeInterval(6)) { _ in lookups += 1; return "sess_2" }
+        #expect(later.sessionID == "sess_2")
+        #expect(lookups == 2)
+    }
+
+    @Test func aRequestNamingItsCallNamesTheTool() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"terminal","tool_input":{"command":"git push --force"},"session_id":"sess_1","cwd":"/Users/x/.hermes","extra":{"tool_call_id":"call_7"}}"#)))
+        let asked = #"{"hook_event_name":"pre_approval_request","session_id":"sess_1","cwd":"/Users/x/.hermes","tool_name":null,"tool_input":null,"extra":{"command":"git push --force","session_key":"agent:main:local:dm:sess_1","surface":"cli","tool_call_id":"call_7"}}"#
+        _ = machine.apply(try #require(parse(asked)))
+        #expect(machine.status?.activity == .needsPermission(tool: "terminal", detail: "git push --force"))
+        #expect(machine.status?.pendingPermission?.callID == "call_7")
+    }
+
     /// A tool `execute_code` runs, as Hermes's hook sends it: no session, no call id, the turn's task.
     private func kernelPatch(task: String = "task_1", path: String = "/repo/app/a.dart") -> String {
         #"{"hook_event_name":"pre_tool_call","tool_name":"patch","tool_input":{"path":"\#(path)","old_string":"a","new_string":"b"},"session_id":"","cwd":"/Users/x/.hermes","extra":{"task_id":"\#(task)","tool_call_id":"","turn_id":""}}"#
@@ -808,6 +885,27 @@ struct HermesSessionTests {
         }
         #expect(tool == "patch")
         #expect(status.turnToolCalls.map(\.toolName) == ["execute_code", "patch"])
+    }
+
+    @Test func findsASessionByItsKey() throws {
+        let url = try database([
+            "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, started_at REAL, session_key TEXT)",
+            "INSERT INTO sessions VALUES ('20260903_173947_d73992', 'tui', 100, 'agent:main:local:dm:20260903_173947_d73992')",
+            // A gateway chat reset twice keeps its key; the newest session is the one asking.
+            "INSERT INTO sessions VALUES ('chat-old', 'telegram', 100, 'agent:main:telegram:dm:42')",
+            "INSERT INTO sessions VALUES ('chat-new', 'telegram', 300, 'agent:main:telegram:dm:42')",
+            "INSERT INTO sessions VALUES ('chat-mid', 'telegram', 200, 'agent:main:telegram:dm:42')",
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(HermesSessions.session(forKey: "agent:main:local:dm:20260903_173947_d73992", in: url) == "20260903_173947_d73992")
+        #expect(HermesSessions.session(forKey: "agent:main:telegram:dm:42", in: url) == "chat-new")
+        #expect(HermesSessions.session(forKey: "agent:main:local:dm:new", in: url) == nil)
+        #expect(HermesSessions.session(forKey: "x' OR '1'='1", in: url) == nil)
+
+        // An older Hermes, without the column, reads as unknown.
+        let older = try database(["CREATE TABLE sessions (id TEXT PRIMARY KEY, started_at REAL)", "INSERT INTO sessions VALUES ('s', 1)"])
+        defer { try? FileManager.default.removeItem(at: older) }
+        #expect(HermesSessions.session(forKey: "agent:main:local:dm:s", in: older) == nil)
     }
 
     @Test func anUnexpectedDatabaseReadsAsUnknown() throws {

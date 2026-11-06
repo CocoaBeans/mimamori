@@ -209,6 +209,7 @@ final class AgentHub {
     @ObservationIgnored private var hermesTurns: [String: HermesTurn] = [:]
     /// The Hermes session of each turn's task, for the calls `execute_code` runs, which name no session.
     @ObservationIgnored private var hermesTaskSessions = HermesTaskSessions()
+    @ObservationIgnored private var hermesSessionKeys = HermesSessionKeys()
     /// Countdowns to answering a permission request by itself, by request id.
     @ObservationIgnored private var autoAnswerTasks: [String: Task<Void, Never>] = [:]
     /// Tests sent from Settings that have arrived, by token, until the test that sent them sees it.
@@ -329,6 +330,9 @@ final class AgentHub {
     private func handle(_ incoming: HookEvent) {
         var event = incoming
         hermesTaskSessions.resolve(&event)
+        hermesSessionKeys.resolve(&event) { key in
+            HermesSessions.session(forKey: key, in: HermesHookInstaller.stateDatabaseURL)
+        }
         eventsReceived += 1
         settlePermission(movedOnBy: event)
         lastEventAt = event.receivedAt

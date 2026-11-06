@@ -28,6 +28,23 @@ public enum HermesSessions {
         return nil
     }
 
+    /// The newest session Hermes files under `key` (its `session_key`, such as
+    /// `agent:main:local:dm:<id>`), according to `database`. A gateway chat keeps its key when you
+    /// reset it, so the key can name earlier sessions too. Nil when the database, the column or
+    /// the key is missing.
+    public static func session(forKey key: String, in database: URL) -> String? {
+        guard let db = openReadOnly(database) else { return nil }
+        defer { sqlite3_close(db) }
+        var statement: OpaquePointer?
+        let query = "SELECT id FROM sessions WHERE session_key = ? ORDER BY started_at DESC LIMIT 1"
+        guard sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, key, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))  // SQLITE_TRANSIENT
+        guard sqlite3_step(statement) == SQLITE_ROW, let text = sqlite3_column_text(statement, 0) else { return nil }
+        let id = String(cString: text)
+        return id.isEmpty ? nil : id
+    }
+
     /// Opens Hermes's database read-only, waiting a moment for a busy writer; nil when it is
     /// missing or will not open. The caller closes it.
     static func openReadOnly(_ database: URL) -> OpaquePointer? {
