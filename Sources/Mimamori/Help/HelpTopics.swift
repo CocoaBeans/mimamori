@@ -159,7 +159,7 @@ struct HelpTopic: Identifiable {
             - Settings › Agents › Notifications can tell you when an agent needs permission, asks a question or finishes a turn.
 
             ## Answer permission requests
-            When Claude Code asks permission for a tool call, **Allow** and **Deny** appear in the agent's banner, on its card in the Agents window and in the notification. Claude Code shows its own prompt at the same time and takes whichever answer comes first, so answer wherever you are. A deny rule in your Claude Code settings always wins.
+            When Claude Code asks permission for a tool call, **Allow** and **Deny** appear in the agent's banner, on its card in the Agents window and in the notification. Claude Code shows its own prompt at the same time and takes whichever answer comes first, so answer wherever you are. **Dismiss** takes the buttons away without answering, to answer in the agent's own prompt. A deny rule in your Claude Code settings always wins.
 
             In the Claude desktop app, Claude Code can wait for Mimamori's answer before its own prompt works, so Mimamori offers Allow and Deny for 20 seconds there, then leaves the request to the app.
 

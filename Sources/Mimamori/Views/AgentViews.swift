@@ -706,8 +706,8 @@ struct HookLogRow: View {
 }
 
 /// Answers an agent's permission request from Mimamori. Its own prompt stays open meanwhile, and
-/// whichever is answered first counts. With auto-answer on, a countdown says when Mimamori will
-/// answer by itself, and Wait stops it.
+/// whichever is answered first counts; Dismiss leaves it to that prompt. With auto-answer on, a
+/// countdown says when Mimamori will answer by itself, and Wait stops it.
 struct PermissionAnswerButtons: View {
     @Environment(AppModel.self) private var model
     let requestID: String
@@ -734,6 +734,11 @@ struct PermissionAnswerButtons: View {
                 }
                 .buttonStyle(.bordered)
                 .help("Tell the agent no; it carries on without this step")
+                Button("Dismiss") {
+                    model.agentHub.dismissPermission(requestID)
+                }
+                .buttonStyle(.borderless)
+                .help("Answer in the agent's own prompt instead: Allow and Deny go from Mimamori, and the request stays open there")
                 if let plan = pending?.autoAnswer {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text("\(plan.allow ? "Allowing" : "Denying") in \(Format.duration(max(0, plan.at.timeIntervalSince(context.date).rounded(.up))))")

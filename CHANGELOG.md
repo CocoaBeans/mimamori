@@ -8,6 +8,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Added
+
+- **Dismiss** beside a permission request's Allow and Deny takes them away without answering, leaving
+  the request to the agent's own prompt.
+
 ### Fixed
 
 - A permission request from the Claude desktop app no longer leaves the app's own Allow and Deny doing
