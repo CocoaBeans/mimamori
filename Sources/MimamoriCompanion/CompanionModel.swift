@@ -57,6 +57,7 @@ final class CompanionModel {
     @ObservationIgnored private var reader = CompanionLineReader()
     @ObservationIgnored private var timeout: Task<Void, Never>?
     @ObservationIgnored private var retry: Task<Void, Never>?
+    @ObservationIgnored private var restartBrowser: Task<Void, Never>?
     @ObservationIgnored private let keychain = CompanionKeychain.standard
     @ObservationIgnored private let defaults = UserDefaults.standard
 
@@ -79,6 +80,7 @@ final class CompanionModel {
     /// Starts browsing, which asks for local network access the first time.
     func start() {
         guard browser == nil else { return }
+        restartBrowser?.cancel()
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: CompanionMessage.serviceType, domain: nil), using: .tcp)
         // Handlers run on the main queue, where this object lives.
         browser.stateUpdateHandler = { [weak self] state in
@@ -95,6 +97,9 @@ final class CompanionModel {
     /// suspended the app may be dead without knowing it yet, showing old states as current.
     func resume() {
         attempts = 0
+        // What went wrong before the app left the front is old news.
+        if case .unavailable = status { status = chosen == nil ? .unpaired : .searching }
+        start()
         connectToChosen()
     }
 
@@ -103,6 +108,9 @@ final class CompanionModel {
     func suspend() {
         retry?.cancel()
         disconnect()
+        // A suspended app's link to Bonjour dies with it (DefunctConnection), and a browser on it
+        // finds nothing again: stop it now, and start a new one on return.
+        stopBrowsing()
         if case .connected = status { status = .searching }
     }
 
@@ -169,15 +177,43 @@ final class CompanionModel {
 
     // MARK: Browsing
 
+    private func stopBrowsing() {
+        restartBrowser?.cancel()
+        browser?.cancel()
+        browser = nil
+        foundMacs = [:]
+        allServices = []
+    }
+
     private func browserChanged(_ state: NWBrowser.State) {
         switch state {
-        case .waiting(let error), .failed(let error):
-            // Most often local network access turned off for the app in Settings.
-            status = .unavailable("Can't look for your Mac on this network (\(error.localizedDescription)). "
-                                  + "Check Settings › Privacy & Security › Local Network.")
+        case .waiting(let error):
+            if Self.isLocalNetworkDenied(error) { status = .unavailable(Self.localNetworkDenied) }
+        case .failed(let error):
+            // A failed browser finds nothing more, whatever went wrong: start another shortly.
+            status = .unavailable(Self.isLocalNetworkDenied(error) ? Self.localNetworkDenied
+                                  : "Lost track of the network (\(error.localizedDescription)). Looking again…")
+            stopBrowsing()
+            restartBrowser = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self else { return }
+                self.start()
+                self.connectToChosen()
+            }
+        case .ready:
+            if case .unavailable = status, connection == nil { connectToChosen() }
         default:
             break
         }
+    }
+
+    private static let localNetworkDenied = "Mimamori can't look for your Mac: turn it on in "
+        + "Settings › Privacy & Security › Local Network."
+
+    /// kDNSServiceErr_PolicyDenied: local network access is off for the app.
+    private static func isLocalNetworkDenied(_ error: NWError) -> Bool {
+        if case .dns(let code) = error { return code == -65570 }
+        return false
     }
 
     private func found(_ results: Set<NWBrowser.Result>) {

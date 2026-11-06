@@ -173,3 +173,26 @@ struct CompanionPairingsTests {
         #expect(partial.phones.map(\.id) == ["p1"])
     }
 }
+
+@Suite("Companion setting")
+struct CompanionSettingTests {
+    @Test func theSwitchSurvivesTheStateFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("companion-setting-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = StateFile(url: folder.appendingPathComponent("state.json"))
+        var state = PersistedState()
+        #expect(!state.settings.companionEnabled)
+        state.settings.companionEnabled = true
+        file.save(state)
+        let loaded = file.load()
+        #expect(loaded.problem == nil)
+        #expect(loaded.state.settings.companionEnabled)
+    }
+
+    @Test func aFileFromBeforeTheCompanionHasItOff() throws {
+        // A Mimamori without the companion writes no such key: reading its file leaves it off.
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"showTasksInWidgets": false}"#.utf8))
+        #expect(!settings.companionEnabled)
+        #expect(!settings.showTasksInWidgets)
+    }
+}
