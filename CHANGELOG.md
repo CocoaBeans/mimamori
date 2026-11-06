@@ -55,6 +55,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- A Claude Code subagent working in a worktree of its own no longer moves its parent's card to
+  that worktree and back with every step; it shows on its parent's card, with its worktree a click
+  away ([#70](https://github.com/CocoaBeans/mimamori/pull/70)).
 - A script run with Python, Node or the like no longer shows as a second agent in its worktree
   because one of its arguments mentions an agent, such as a path through a folder named
   `claude-profiles`. Mimamori now judges such a process by the program it runs alone

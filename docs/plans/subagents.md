@@ -1,9 +1,10 @@
 # Plan: seeing an agent's subagents
 
-> **Steps 1 to 4 done.** Real runs on 2026-11-05 confirmed that Claude Code tells Mimamori enough
+> **Done.** Real runs on 2026-11-05 confirmed that Claude Code tells Mimamori enough
 > to follow each subagent, from hooks it already installs: see "What we saw". The model, the Mac's
 > cards and banner, and the iPhone follow, and so do commands run in the background: listed, but
-> leaving the agent Ready. Next: step 5, subagents in a worktree of their own.
+> leaving the agent Ready. Step 5 too: a subagent in a worktree of its own is placed on its
+> parent's card, where before every step of it moved the parent's card into that worktree and back.
 
 ## The problem
 

@@ -179,6 +179,7 @@ Claude Code hands work to subagents (an Explore agent searching the code, a revi
 - An agent whose subagents are still running stays in **Working**, "waiting on 2 subagents", even after it stops itself, and "finished a turn" waits for the last of them. One silent for 10 minutes is taken to have finished.
 - The Agents window's detailed cards and the banner above the diff list them: each one's kind and task, its steps and time, and its latest step while it runs. A finished one stays a minute. Compact cards count them.
 - A subagent's steps are its own: one that works on after the agent's turn ended no longer starts a turn of its own.
+- A subagent Claude Code gives a worktree of its own (`.claude/worktrees/agent-…`) stays on its parent's card rather than showing as an agent of its own there; its line names that worktree, and a click opens it, where its changes are to review.
 - Commands an agent runs in the background are listed too, under **In the background**: what each is for, its command, how long it has run, and how it ended ("completed (exit 0)", "failed (exit 1)"). They don't keep the agent in Working, since it has handed the turn back to you; its status reads "ready · 2 running in the background" instead. When one ends, Claude Code tells the agent with a `<task-notification>`, which Mimamori reads as that task finishing, and shows as the turn's task in plain words.
 - On the iPhone, a detailed card lists the subagents and background commands the same way, and the list of actions marks each step a subagent took with its name.
 
