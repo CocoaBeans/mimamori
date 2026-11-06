@@ -483,13 +483,9 @@ final class AgentHub {
         if allow { noteApproved(in: pending.worktree, session: pending.session) }
     }
 
-    /// You'd rather answer in the agent's own prompt: the hook is let go with no decision, which
-    /// leaves the request to that prompt, and Allow and Deny go from Mimamori. The agent still
-    /// shows as needing permission until it moves on.
+    /// You'd rather answer in the agent's own prompt: the hook is let go with no decision.
     func dismissPermission(_ id: String) {
-        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
-        Log.agents.notice("Dismissed \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) request in Mimamori; its own prompt decides it")
-        settlePermission(for: pending.session)
+        stepBack(from: id, because: "dismissed in Mimamori")
     }
 
     /// Stops a request's countdown: it waits for you.
