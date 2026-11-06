@@ -721,6 +721,12 @@ struct DiffContentView: View {
     /// The change overview beside the diff, for diffs longer than a screen or so.
     private static let overviewWidth: CGFloat = 12
     private static let overviewMinimumRows = 50
+    /// Wrapped diffs up to this many lines are laid out in full rather than lazily.
+    private static let eagerLineLimit = 300
+    /// The diff's visible area, which hunk headers stick to the top of.
+    private static let viewportSpace = "diff-viewport"
+    /// A hunk's lines, which its header doesn't leave.
+    private static let hunkSpace = "diff-hunk"
 
     /// What part of the diff is on screen, for the overview's box. Kept out of this view's
     /// state so that scrolling redraws only the box, not the diff.
@@ -774,6 +780,11 @@ struct DiffContentView: View {
             let width = geometry.size.width - (showsOverview ? Self.overviewWidth : 0)
             let split = sideBySide && width >= Self.minimumSplitWidth
             let horizontal = !split && !wrap
+            // Wrapped rows differ in height, and a lazy stack only estimates the ones it hasn't
+            // built. Twice, after a Reviewed click while an agent rewrote the file, its estimates
+            // never settled: it placed its rows again on every pass and the app hung. A short
+            // diff costs little to lay out in full, so it is, and its headers stick by offset.
+            let eager = !horizontal && visible.lineCount <= Self.eagerLineLimit
             ScrollViewReader { proxy in
                 HStack(spacing: 0) {
                     ScrollView(horizontal ? [.vertical, .horizontal] : .vertical) {
@@ -781,16 +792,24 @@ struct DiffContentView: View {
                             // Each hunk's header stays at the top while its lines scroll under it.
                             if horizontal {
                                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                                    rows(visible: visible, wrap: false)
+                                    rows(visible: visible, wrap: false, pinned: true)
                                 }
                                 .frame(width: max(unwrappedWidth, width), alignment: .leading)
+                            } else if eager {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    if split {
+                                        splitRows(visible: visible, pinned: false)
+                                    } else {
+                                        rows(visible: visible, wrap: true, pinned: false)
+                                    }
+                                }
                             } else if split {
                                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                                    splitRows(visible: visible)
+                                    splitRows(visible: visible, pinned: true)
                                 }
                             } else {
                                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                                    rows(visible: visible, wrap: true)
+                                    rows(visible: visible, wrap: true, pinned: true)
                                 }
                             }
                         }
@@ -803,9 +822,7 @@ struct DiffContentView: View {
                                alignment: .topLeading)
                     }
                     // Sized outright, so the HStack doesn't ask it how wide it could be. Each
-                    // asking measured the rows again at widths they never show at, and wrapped
-                    // rows measured that way upset the lazy stack's estimates; once, after a
-                    // Reviewed click, its layout never settled again.
+                    // asking measured the rows again at widths they never show at.
                     .frame(width: max(0, width), height: geometry.size.height)
                     .onScrollGeometryChange(for: ClosedRange<Double>.self) { scroll in
                         let height = max(scroll.contentSize.height, 1)
@@ -837,6 +854,7 @@ struct DiffContentView: View {
                         .frame(width: Self.overviewWidth)
                     }
                 }
+                .coordinateSpace(.named(Self.viewportSpace))
             }
         }
     }
@@ -873,12 +891,12 @@ struct DiffContentView: View {
     // so after the diff reloads a line id can belong to another hunk, and a lazy stack kept
     // drawing a row's old content when its id moved to another section.
     @ViewBuilder
-    private func rows(visible: Visible, wrap: Bool) -> some View {
+    private func rows(visible: Visible, wrap: Bool, pinned: Bool) -> some View {
         notesAboveDiff
         let index = noteIndex(visible.hunks)
         ForEach(visible.hunks) { hunk in
             let onDiscard = discardAction(for: hunk)
-            Section {
+            hunkSection(pinned: pinned, header: HunkHeaderRow(hunk: hunk, fontSize: fontSize, onDiscard: onDiscard)) {
                 ForEach(hunk.lines) { line in
                     DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
                                 syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
@@ -889,20 +907,18 @@ struct DiffContentView: View {
                         .id(DiffRowKey(hunk: hunk.id, row: line.id))
                     noteRows(after: [line.id], index: index, inset: numberWidth * 2 + 20)
                 }
-            } header: {
-                HunkHeaderRow(hunk: hunk, fontSize: fontSize, onDiscard: onDiscard)
             }
         }
         truncationFooter(visible)
     }
 
     @ViewBuilder
-    private func splitRows(visible: Visible) -> some View {
+    private func splitRows(visible: Visible, pinned: Bool) -> some View {
         notesAboveDiff
         let index = noteIndex(visible.hunks)
         ForEach(visible.hunks) { hunk in
             let onDiscard = discardAction(for: hunk)
-            Section {
+            hunkSection(pinned: pinned, header: HunkHeaderRow(hunk: hunk, fontSize: fontSize, onDiscard: onDiscard)) {
                 ForEach(SideBySide.rows(for: hunk)) { row in
                     // Removed lines take notes on the left, the rest on the right.
                     let left = row.left?.kind == .deletion ? row.left : nil
@@ -917,11 +933,38 @@ struct DiffContentView: View {
                         .id(DiffRowKey(hunk: hunk.id, row: row.id))
                     noteRows(after: [left?.id, right?.id].compactMap { $0 }, index: index, inset: numberWidth + 8)
                 }
-            } header: {
-                HunkHeaderRow(hunk: hunk, fontSize: fontSize, onDiscard: onDiscard)
             }
         }
         truncationFooter(visible)
+    }
+
+    /// A hunk under its header: a lazy stack's section, which pins the header, or a plain stack
+    /// whose header is drawn over its lines, moved down to the top of the view as they scroll by.
+    /// The move only changes where the header is drawn, so it can't lay anything out again.
+    @ViewBuilder
+    private func hunkSection(pinned: Bool, header: HunkHeaderRow, @ViewBuilder lines: () -> some View) -> some View {
+        if pinned {
+            Section {
+                lines()
+            } header: {
+                header
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                header.hidden()
+                lines()
+            }
+            .overlay(alignment: .top) {
+                let viewport = Self.viewportSpace
+                let section = Self.hunkSpace
+                header.visualEffect { content, geometry in
+                    // At its lines' end it goes up with them, as a pinned header does.
+                    let end = (geometry.bounds(of: .named(section))?.maxY ?? 0) - geometry.size.height
+                    return content.offset(y: max(0, min(-geometry.frame(in: .named(viewport)).minY, end)))
+                }
+            }
+            .coordinateSpace(.named(Self.hunkSpace))
+        }
     }
 
     /// Asks to discard `hunk` whole: one cut short for display is still discarded as the

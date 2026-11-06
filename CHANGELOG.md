@@ -79,6 +79,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Mimamori busy until it was quit. The diff no longer measures its lines at widths it never shows
   them at, the work it was stuck repeating
   ([#52](https://github.com/CocoaBeans/mimamori/pull/52)).
+- That fix missed: a diff with wrapped lines could still stop responding after a click on
+  Reviewed while an agent was editing the file. Wrapped diffs of up to 300 lines are now laid out
+  in full rather than lazily, so their layout no longer goes round in circles
+  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
 - A closed main window, Agents window or pinned overview no longer keeps redrawing while agents
   work. With three agents busy and only the menu bar showing, Mimamori uses about two thirds less
   CPU ([#46](https://github.com/CocoaBeans/mimamori/pull/46)).
