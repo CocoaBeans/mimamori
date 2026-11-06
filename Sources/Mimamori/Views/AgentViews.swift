@@ -386,6 +386,11 @@ struct AgentStatusBanner: View {
                         SubagentsList(subagents: subagents, now: now, worktree: details.worktree)
                             .padding(.top, 4)
                     }
+                    let commands = presence.shownCommands(at: now)
+                    if !commands.isEmpty {
+                        BackgroundCommandsList(commands: commands, now: now)
+                            .padding(.top, 4)
+                    }
                 }
                 if !presence.others.isEmpty {
                     OtherAgentsList(others: presence.others, now: now, worktree: details?.worktree)

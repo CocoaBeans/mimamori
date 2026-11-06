@@ -166,6 +166,8 @@ struct HelpTopic: Identifiable {
             ## Subagents
             When Claude Code hands work to subagents, an agent stays in Working while any of them runs, "waiting on 2 subagents", and "finished a turn" waits for the last. Its card in the Agents window, and the banner above the diff, list its subagents: what kind each is, what it was asked, its steps and time, and its latest step.
 
+            Commands it runs in the background are listed under **In the background**, with how long each has run and how it ended. They leave the agent Ready, "ready · 2 running in the background", since the turn is yours again. The iPhone shows both lists on its cards.
+
             ## Several agents in one worktree
             Mimamori keeps each session apart. When two of them edit the same file, the banner warns you and names the files, since one may undo the other's work.
 

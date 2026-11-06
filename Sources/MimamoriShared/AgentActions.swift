@@ -26,12 +26,16 @@ public struct AgentActions: Codable, Sendable, Hashable {
     public var turns: [Turn]
     /// The step waiting for your permission.
     public var waitingCallID: String?
+    /// What each subagent is called, by `agent_id`, for the steps they took: "Explore".
+    public var subagentTitles: [String: String]?
 
-    public init(worktreePath: String, agent: String, turns: [Turn], waitingCallID: String? = nil) {
+    public init(worktreePath: String, agent: String, turns: [Turn], waitingCallID: String? = nil,
+                subagentTitles: [String: String]? = nil) {
         self.worktreePath = worktreePath
         self.agent = agent
         self.turns = turns
         self.waitingCallID = waitingCallID
+        self.subagentTitles = subagentTitles
     }
 
     /// A turn as it began: when, and with what prompt.

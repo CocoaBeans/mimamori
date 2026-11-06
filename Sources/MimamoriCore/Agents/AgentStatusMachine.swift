@@ -121,8 +121,10 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var subagents: [Subagent] = []
     /// Agent calls in the foreground whose subagent hasn't been heard from yet.
     public var pendingLaunches: [SubagentLaunchRecord] = []
-    /// Commands running in the background, as the last `background_tasks` counted them.
-    public var backgroundCommands = 0
+    /// Commands it runs in the background, running or lately finished.
+    public var commands: [BackgroundCommand] = []
+    /// How many of them run now.
+    public var backgroundCommands: Int { commands.filter(\.isRunning).count }
     /// The agent stopped while subagents ran: its turn ends when the last of them does.
     public var waitingOnSubagents = false
     /// How the agent's own stop went, kept for when the turn finally ends.
@@ -161,6 +163,8 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     mutating func forgetOldSubagents(now: Date) {
         subagents.removeAll { $0.finishedAt.map { now.timeIntervalSince($0) > 30 * 60 } ?? false }
         if subagents.count > 30 { subagents.removeFirst(subagents.count - 30) }
+        commands.removeAll { $0.finishedAt.map { now.timeIntervalSince($0) > 30 * 60 } ?? false }
+        if commands.count > 30 { commands.removeFirst(commands.count - 30) }
     }
 
     /// Ends the turn: Ready, nothing left running, and the note saying so. `failure` is a
@@ -262,7 +266,7 @@ public struct AgentStatusMachine: Sendable {
             current.lastTurnEndedAt = nil
             current.subagents = []
             current.pendingLaunches = []
-            current.backgroundCommands = 0
+            current.commands = []
             current.waitingOnSubagents = false
             current.deferredStopFailure = nil
         }
@@ -351,7 +355,29 @@ public struct AgentStatusMachine: Sendable {
                 let subagent = current.subagents[index]
                 if subagent.background, subagent.isRunning, !ids.contains(subagent.id) { current.subagents[index].finishedAt = now }
             }
-            current.backgroundCommands = tasks.filter { $0.type == "shell" && $0.isRunning }.count
+            let shells = tasks.filter { $0.type == "shell" && $0.isRunning }
+            for task in shells {
+                if let index = current.commands.firstIndex(where: { $0.id == task.id }) {
+                    if current.commands[index].description == nil { current.commands[index].description = task.description }
+                } else {
+                    current.commands.append(BackgroundCommand(id: task.id, description: task.description, startedAt: now))
+                }
+            }
+            let running = Set(shells.map(\.id))
+            for index in current.commands.indices where current.commands[index].isRunning && !running.contains(current.commands[index].id) {
+                current.commands[index].finishedAt = now
+            }
+        }
+        // Claude Code telling the agent a background task ended: that task is done, whatever it was.
+        if let notification = event.taskNotification {
+            if let index = current.commands.firstIndex(where: { $0.id == notification.taskID }) {
+                if current.commands[index].finishedAt == nil { current.commands[index].finishedAt = now }
+                current.commands[index].status = notification.status
+                current.commands[index].exitCode = notification.exitCode
+            }
+            if let index = current.subagents.firstIndex(where: { $0.id == notification.taskID }), current.subagents[index].isRunning {
+                current.subagents[index].finishedAt = now
+            }
         }
 
         switch event.name {
@@ -367,6 +393,9 @@ public struct AgentStatusMachine: Sendable {
             closeOpenCalls()
             for index in current.subagents.indices where current.subagents[index].isRunning {
                 current.subagents[index].finishedAt = now
+            }
+            for index in current.commands.indices where current.commands[index].isRunning {
+                current.commands[index].finishedAt = now
             }
             current.waitingOnSubagents = false
             current.deferredStopFailure = nil
@@ -460,6 +489,12 @@ public struct AgentStatusMachine: Sendable {
                 if current.subagents[index].description == nil { current.subagents[index].description = launch.description }
                 if launch.status == "async_launched" { current.subagents[index].background = true }
                 current.pendingLaunches.removeAll { $0.toolUseID != nil && $0.toolUseID == event.toolUseID }
+            }
+            if let launch = event.commandLaunch, let id = launch.taskID, event.name == .postToolUse,
+               !current.commands.contains(where: { $0.id == id }) {
+                let started = current.recentToolCalls.last { $0.id == finished }?.startedAt ?? now
+                current.commands.append(BackgroundCommand(id: id, description: launch.description, command: launch.command,
+                                                          startedAt: started))
             }
             if settlesPermission(endedCall: finished) {
                 if current.waitingOnSubagents {

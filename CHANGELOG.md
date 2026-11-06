@@ -37,6 +37,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
   subagents", and "finished a turn" waits for the last; its card and the banner list each one's
   kind, task, steps and latest step ([#67](https://github.com/CocoaBeans/mimamori/pull/67)).
 
+- Commands an agent runs in the background show under its subagents, with how long each has run
+  and how it ended; the agent reads "ready · 2 running in the background". The iPhone shows
+  subagents and background commands on its cards, and marks the steps subagents took
+  ([#68](https://github.com/CocoaBeans/mimamori/pull/68)).
+
 ### Changed
 
 - With git from Xcode or its Command Line Tools, Mimamori runs that git directly rather than

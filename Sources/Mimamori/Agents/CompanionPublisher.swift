@@ -317,7 +317,32 @@ extension AppModel {
             others: presence.others.map { other in
                 .init(agent: other.kind.displayName, symbol: other.kind.symbolName, state: other.widgetState,
                       status: AgentText.shortenPaths(other.statusText, in: worktree), since: other.since)
-            })
+            },
+            subagents: companionSubagents(presence, details: details, worktree: worktree),
+            commands: companionCommands(presence, details: details))
+    }
+
+    /// The card's subagents, as the Mac's card lists them; without `details`, their kind, steps and
+    /// times only.
+    private func companionSubagents(_ presence: AgentPresence, details: Bool, worktree: String) -> [AgentWidgetSnapshot.Card.Subagent] {
+        presence.shownSubagents(at: Date()).map { subagent in
+            let step = subagent.lastStep.map { step in
+                [step.toolName, step.summary.map { AgentText.shortenPaths($0, in: worktree) }].compactMap { $0 }.joined(separator: " ")
+            }
+            return AgentWidgetSnapshot.Card.Subagent(
+                id: subagent.id, title: subagent.title, description: details ? subagent.description : nil,
+                background: subagent.background, steps: subagent.steps, startedAt: subagent.startedAt,
+                finishedAt: subagent.finishedAt, lastStep: details ? step : nil)
+        }
+    }
+
+    private func companionCommands(_ presence: AgentPresence, details: Bool) -> [AgentWidgetSnapshot.Card.Command] {
+        presence.shownCommands(at: Date()).map { command in
+            AgentWidgetSnapshot.Card.Command(
+                id: command.id, description: details ? command.description : nil, command: details ? command.command : nil,
+                startedAt: command.startedAt, finishedAt: command.finishedAt, outcome: command.outcome,
+                failed: command.status == "failed" || (command.exitCode ?? 0) != 0)
+        }
     }
 }
 
@@ -349,6 +374,7 @@ extension AppModel {
             return copy
         }
         return AgentActions(worktreePath: worktree, agent: agent, turns: AgentActions.turns(calls: calls, starts: starts),
-                            waitingCallID: agentHub.presence(for: worktree)?.awaitingCallID)
+                            waitingCallID: agentHub.presence(for: worktree)?.awaitingCallID,
+                            subagentTitles: Dictionary(status.subagents.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first }))
     }
 }

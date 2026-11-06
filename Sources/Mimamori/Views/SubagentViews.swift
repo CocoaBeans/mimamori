@@ -90,3 +90,73 @@ extension AgentPresence {
         return running == 1 ? "1 subagent" : "\(running) subagents"
     }
 }
+
+/// Commands an agent runs in the background, under its subagents: each one's description, how
+/// long it has run or how it ended, and its command. A finished one stays a minute.
+struct BackgroundCommandsList: View {
+    let commands: [BackgroundCommand]
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("In the background")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(commands) { command in
+                BackgroundCommandLine(command: command, now: now)
+            }
+        }
+    }
+}
+
+struct BackgroundCommandLine: View {
+    let command: BackgroundCommand
+    let now: Date
+
+    private var failed: Bool { command.status == "failed" || (command.exitCode ?? 0) != 0 }
+
+    private var timing: String {
+        command.outcome ?? Format.duration(since: command.startedAt, to: now)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Image(systemName: command.isRunning ? AgentToolCategory.command.symbol : failed ? "xmark.circle" : "checkmark.circle")
+                    .foregroundStyle(command.isRunning ? AgentToolCategory.command.color : failed ? Color.red : Color.secondary)
+                    .frame(width: 14)
+                    .accessibilityHidden(true)
+                Text(command.description ?? command.command ?? "Command")
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 6)
+                Text(timing)
+                    .foregroundStyle(command.isRunning ? AnyShapeStyle(AgentToolCategory.command.color)
+                                     : failed ? AnyShapeStyle(.red) : AnyShapeStyle(.tertiary))
+                    .monospacedDigit()
+                    .fixedSize()
+            }
+            if let line = command.command, command.description != nil {
+                Text(line)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.leading, 20)
+            }
+        }
+        .font(.caption)
+        .opacity(command.isRunning ? 1 : 0.6)
+        .help([command.description, command.command, command.outcome].compactMap { $0 }.joined(separator: "\n"))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(command.description ?? "Command") in the background, \(command.outcome ?? "running")")
+    }
+}
+
+extension AgentPresence {
+    /// "2 in the background", for a compact card; nil with none running.
+    var runningCommandsSummary: String? {
+        backgroundCommands > 0 ? "\(backgroundCommands) in the background" : nil
+    }
+}

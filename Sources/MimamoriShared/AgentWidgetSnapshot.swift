@@ -147,10 +147,15 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         public var changes: Changes
         /// The other agents in the worktree.
         public var others: [Other]
+        /// Its subagents, running or finished in the last minute; nil from a Mac before them.
+        public var subagents: [Subagent]?
+        /// Commands it runs in the background, running or finished in the last minute.
+        public var commands: [Command]?
 
         public init(reportsSteps: Bool, turnUnderway: Bool, turnStartedAt: Date? = nil, calls: [AgentToolCall] = [],
                     callsThisTurn: Int = 0, waitingCallID: String? = nil, lastCall: AgentToolCall? = nil,
-                    files: [File] = [], changes: Changes = Changes(), others: [Other] = []) {
+                    files: [File] = [], changes: Changes = Changes(), others: [Other] = [],
+                    subagents: [Subagent]? = nil, commands: [Command]? = nil) {
             self.reportsSteps = reportsSteps
             self.turnUnderway = turnUnderway
             self.turnStartedAt = turnStartedAt
@@ -161,6 +166,59 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
             self.files = files
             self.changes = changes
             self.others = others
+            self.subagents = subagents
+            self.commands = commands
+        }
+
+        /// A subagent, in a line: what kind, what it was asked, how far it has got.
+        public struct Subagent: Codable, Sendable, Hashable, Identifiable {
+            public var id: String
+            /// Its kind: "Explore", "general-purpose".
+            public var title: String
+            /// What it was asked; nil when tasks are kept on the Mac.
+            public var description: String?
+            public var background: Bool
+            public var steps: Int
+            public var startedAt: Date
+            public var finishedAt: Date?
+            /// Its latest step, "Read Sources/App.swift"; nil when tasks are kept on the Mac.
+            public var lastStep: String?
+
+            public init(id: String, title: String, description: String? = nil, background: Bool = false, steps: Int = 0,
+                        startedAt: Date, finishedAt: Date? = nil, lastStep: String? = nil) {
+                self.id = id
+                self.title = title
+                self.description = description
+                self.background = background
+                self.steps = steps
+                self.startedAt = startedAt
+                self.finishedAt = finishedAt
+                self.lastStep = lastStep
+            }
+        }
+
+        /// A command run in the background.
+        public struct Command: Codable, Sendable, Hashable, Identifiable {
+            public var id: String
+            /// What it's for, and its first line; nil when tasks are kept on the Mac.
+            public var description: String?
+            public var command: String?
+            public var startedAt: Date
+            public var finishedAt: Date?
+            /// "completed (exit 0)", "failed (exit 1)"; nil while it runs.
+            public var outcome: String?
+            public var failed: Bool
+
+            public init(id: String, description: String? = nil, command: String? = nil, startedAt: Date, finishedAt: Date? = nil,
+                        outcome: String? = nil, failed: Bool = false) {
+                self.id = id
+                self.description = description
+                self.command = command
+                self.startedAt = startedAt
+                self.finishedAt = finishedAt
+                self.outcome = outcome
+                self.failed = failed
+            }
         }
 
         public struct File: Codable, Sendable, Hashable, Identifiable {

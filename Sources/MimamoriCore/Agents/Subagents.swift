@@ -64,3 +64,43 @@ public struct SubagentLaunchRecord: Sendable, Hashable, Codable {
         self.description = description
     }
 }
+
+/// A command an agent runs in the background (Claude Code's `run_in_background`): it hands the turn
+/// back to you while the command goes on, and is told when it ends.
+public struct BackgroundCommand: Sendable, Hashable, Codable, Identifiable {
+    /// Its task id (`backgroundTaskId`, the `id` in `background_tasks`).
+    public var id: String
+    public var description: String?
+    /// Its first line.
+    public var command: String?
+    public var startedAt: Date
+    public var finishedAt: Date?
+    /// `completed`, `failed`, `killed`, … once it ends; nil while it runs or when the end wasn't told.
+    public var status: String?
+    public var exitCode: Int?
+
+    public init(id: String, description: String? = nil, command: String? = nil, startedAt: Date, finishedAt: Date? = nil,
+                status: String? = nil, exitCode: Int? = nil) {
+        self.id = id
+        self.description = description
+        self.command = command
+        self.startedAt = startedAt
+        self.finishedAt = finishedAt
+        self.status = status
+        self.exitCode = exitCode
+    }
+
+    public var isRunning: Bool { finishedAt == nil }
+
+    /// "completed (exit 0)", "failed (exit 1)", "stopped"; nil while it runs.
+    public var outcome: String? {
+        guard finishedAt != nil else { return nil }
+        let word = status.map { $0 == "killed" ? "stopped" : $0 } ?? "ended"
+        return exitCode.map { "\(word) (exit \($0))" } ?? word
+    }
+
+    /// "ready · 2 running in the background"
+    public static func runningDetail(_ count: Int) -> String {
+        "\(count) running in the background"
+    }
+}

@@ -33,8 +33,16 @@ struct AgentPresence: Hashable {
     var collision: AgentCollision? = nil
     /// The subagents it started, running or lately finished.
     var subagents: [Subagent] = []
-    /// Commands it runs in the background.
-    var backgroundCommands = 0
+    /// Commands it runs in the background, running or lately finished.
+    var commands: [BackgroundCommand] = []
+    var backgroundCommands: Int { commands.filter(\.isRunning).count }
+
+    /// Its commands running, and those finished in the last minute, so their end shows.
+    func shownCommands(at now: Date) -> [BackgroundCommand] {
+        commands.filter { command in
+            command.finishedAt.map { now.timeIntervalSince($0) < Subagent.listedAfterFinishing } ?? true
+        }
+    }
 
     /// Its subagents running, and those finished in the last minute, so their end shows.
     func shownSubagents(at now: Date) -> [Subagent] {
@@ -58,6 +66,8 @@ struct AgentPresence: Hashable {
         case (.hooks, .askedQuestion(let detail)):
             return detail.map { "asks: \($0)" } ?? "has a question for you"
         case (.hooks, .ready):
+            // The turn is yours, while what it started in the background goes on.
+            if backgroundCommands > 0 { return "ready · " + BackgroundCommand.runningDetail(backgroundCommands) }
             return "ready for your next prompt"
         case (.hooks, .idle):
             return "session ended"
@@ -1000,7 +1010,7 @@ final class AgentHub {
                              processIDs: processIDs,
                              awaitingCallID: status.pendingPermission?.callID,
                              permissionRequestID: pendingPermissions[status.key]?.id,
-                             subagents: status.subagents, backgroundCommands: status.backgroundCommands)
+                             subagents: status.subagents, commands: status.commands)
     }
 
     private func processPresence(_ running: [AgentProcess]) -> AgentPresence {

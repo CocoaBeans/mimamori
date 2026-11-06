@@ -139,6 +139,12 @@ struct AgentCardView: View {
                 } else {
                     compactFooter
                 }
+                if detailed, let subagents = card?.subagents, !subagents.isEmpty {
+                    CardSubagents(subagents: subagents, now: now)
+                }
+                if detailed, let commands = card?.commands, !commands.isEmpty {
+                    CardCommands(commands: commands, now: now)
+                }
                 if let others = card?.others, !others.isEmpty {
                     OtherAgents(others: others)
                 }
@@ -197,6 +203,14 @@ struct AgentCardView: View {
                     .truncationMode(.middle)
             } else if let count = card?.callsThisTurn, card?.reportsSteps == true, count > 0 {
                 Text(count == 1 ? "1 tool call this turn" : "\(count) tool calls this turn")
+            }
+            if let running = card?.subagents?.filter({ $0.finishedAt == nil }).count, running > 0 {
+                Label(running == 1 ? "1 subagent" : "\(running) subagents", systemImage: AgentToolCategory.subagent.symbol)
+                    .foregroundStyle(AgentToolCategory.subagent.color)
+            }
+            if let running = card?.commands?.filter({ $0.finishedAt == nil }).count, running > 0 {
+                Label("\(running) in the background", systemImage: AgentToolCategory.command.symbol)
+                    .foregroundStyle(AgentToolCategory.command.color)
             }
             Spacer(minLength: 6)
             if let changes = card?.changes { WorktreeChangeSummary(changes: changes) }
@@ -365,5 +379,97 @@ struct AgentGroupHeader: View {
         .accessibilityLabel("\(group.title), \(agents.count == 1 ? "1 agent" : "\(agents.count) agents")")
         .accessibilityValue(collapsed ? "collapsed" : "expanded")
         .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The agent's subagents on its card: kind, task, steps and time, and while one runs its latest step.
+private struct CardSubagents: View {
+    let subagents: [AgentWidgetSnapshot.Card.Subagent]
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(subagents.count == 1 ? "Subagent" : "Subagents")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(subagents) { subagent in
+                let running = subagent.finishedAt == nil
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Image(systemName: running ? AgentToolCategory.subagent.symbol : "checkmark.circle")
+                            .foregroundStyle(running ? AgentToolCategory.subagent.color : Color.secondary)
+                            .frame(width: 14)
+                        Text(subagent.title)
+                            .fontWeight(.medium)
+                        if let description = subagent.description {
+                            Text(description)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 6)
+                        Text(subagent.steps == 1 ? "1 step" : "\(subagent.steps) steps")
+                            .foregroundStyle(.tertiary)
+                        Text(subagent.finishedAt.map { "done in \(Format.duration($0.timeIntervalSince(subagent.startedAt)))" }
+                             ?? Format.duration(since: subagent.startedAt, to: now))
+                            .foregroundStyle(running ? AnyShapeStyle(AgentToolCategory.subagent.color) : AnyShapeStyle(.tertiary))
+                            .monospacedDigit()
+                    }
+                    if running, let step = subagent.lastStep {
+                        Text(step)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .padding(.leading, 20)
+                    }
+                }
+                .font(.caption)
+                .opacity(running ? 1 : 0.6)
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+}
+
+/// The commands the agent runs in the background: what each is for, its time or how it ended.
+private struct CardCommands: View {
+    let commands: [AgentWidgetSnapshot.Card.Command]
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("In the background")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(commands) { command in
+                let running = command.finishedAt == nil
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Image(systemName: running ? AgentToolCategory.command.symbol : command.failed ? "xmark.circle" : "checkmark.circle")
+                            .foregroundStyle(running ? AgentToolCategory.command.color : command.failed ? Color.red : Color.secondary)
+                            .frame(width: 14)
+                        Text(command.description ?? command.command ?? "Command")
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        Spacer(minLength: 6)
+                        Text(command.outcome ?? Format.duration(since: command.startedAt, to: now))
+                            .foregroundStyle(running ? AnyShapeStyle(AgentToolCategory.command.color)
+                                             : command.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.tertiary))
+                            .monospacedDigit()
+                    }
+                    if let line = command.command, command.description != nil {
+                        Text(line)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .padding(.leading, 20)
+                    }
+                }
+                .font(.caption)
+                .opacity(running ? 1 : 0.6)
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }

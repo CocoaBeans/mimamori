@@ -62,6 +62,57 @@ public struct HookEvent: Sendable, Hashable {
     public var lastMessage: String? = nil
     /// The `Agent` (or `Task`) call that launches a subagent, and on its PostToolUse what came back.
     public var subagentLaunch: SubagentLaunch? = nil
+    /// A command run in the background (`run_in_background`), and on its PostToolUse its task id.
+    public var commandLaunch: CommandLaunch? = nil
+    /// A prompt that is Claude Code telling the agent a background task ended (`<task-notification>`).
+    public var taskNotification: TaskNotification? = nil
+
+    public struct CommandLaunch: Sendable, Hashable {
+        public var description: String?
+        /// Its first line.
+        public var command: String?
+        /// `tool_response.backgroundTaskId`, on PostToolUse.
+        public var taskID: String?
+
+        public init(description: String? = nil, command: String? = nil, taskID: String? = nil) {
+            self.description = description
+            self.command = command
+            self.taskID = taskID
+        }
+    }
+
+    /// `<task-notification><task-id>…</task-id><status>completed</status><summary>Background command
+    /// "Watch CI" completed (exit code 0)</summary>…`
+    public struct TaskNotification: Sendable, Hashable {
+        public var taskID: String
+        /// `completed`, `failed`, `killed`, …
+        public var status: String?
+        public var summary: String?
+
+        public init(taskID: String, status: String? = nil, summary: String? = nil) {
+            self.taskID = taskID
+            self.status = status
+            self.summary = summary
+        }
+
+        /// The exit code its summary gives: "… (exit code 1)".
+        public var exitCode: Int? {
+            guard let summary, let range = summary.range(of: "(exit code ") else { return nil }
+            return Int(summary[range.upperBound...].prefix { $0.isNumber || $0 == "-" })
+        }
+
+        /// The notification in a prompt, or nil for an ordinary prompt.
+        public static func parse(_ prompt: String) -> TaskNotification? {
+            guard prompt.hasPrefix("<task-notification>") else { return nil }
+            func value(_ tag: String) -> String? {
+                guard let open = prompt.range(of: "<\(tag)>"), let close = prompt.range(of: "</\(tag)>", range: open.upperBound..<prompt.endIndex)
+                else { return nil }
+                return String(prompt[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard let id = value("task-id"), !id.isEmpty else { return nil }
+            return TaskNotification(taskID: id, status: value("status"), summary: value("summary"))
+        }
+    }
 
     /// A task `background_tasks` lists.
     public struct BackgroundTask: Sendable, Hashable {
@@ -248,6 +299,18 @@ public enum HookEventParser {
                 return HookEvent.BackgroundTask(id: id, type: type, status: task["status"] as? String,
                                       description: task["description"] as? String, agentType: task["agent_type"] as? String)
             }
+        }
+        if let toolInput, toolInput["run_in_background"] as? Bool == true, toolName != "Agent", toolName != "Task" {
+            let response = object["tool_response"] as? [String: Any]
+            event.commandLaunch = HookEvent.CommandLaunch(
+                description: toolInput["description"] as? String, command: (toolInput["command"] as? String).map(firstLine),
+                taskID: response?["backgroundTaskId"] as? String)
+        }
+        if name == .userPromptSubmit, let prompt = object["prompt"] as? String,
+           let notification = HookEvent.TaskNotification.parse(prompt) {
+            event.taskNotification = notification
+            // The turn's task reads as what happened, not as the notification's markup.
+            event.message = notification.summary ?? event.message
         }
         if toolName == "Agent" || toolName == "Task", let toolInput {
             let response = object["tool_response"] as? [String: Any]

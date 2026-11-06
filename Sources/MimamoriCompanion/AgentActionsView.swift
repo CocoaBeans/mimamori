@@ -39,7 +39,8 @@ struct AgentActionsView: View {
                                     .foregroundStyle(.secondary)
                             }
                             ForEach(turn.calls) { call in
-                                ActionRow(call: call, waiting: call.id == actions.waitingCallID, now: context.date)
+                                ActionRow(call: call, waiting: call.id == actions.waitingCallID, now: context.date,
+                                          subagent: call.agentID.map { actions.subagentTitles?[$0] ?? "Subagent" })
                             }
                         } header: {
                             TurnHeader(turn: turn, current: index == 0 && agent.map { $0.state == .working || $0.state == .needsYou } == true)
@@ -94,6 +95,8 @@ private struct ActionRow: View {
     let call: AgentToolCall
     let waiting: Bool
     let now: Date
+    /// The subagent that took the step: "Explore"; nil for the agent itself.
+    var subagent: String? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -102,8 +105,19 @@ private struct ActionRow: View {
                 .frame(width: 18)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(call.toolName)
-                    .font(.subheadline.weight(.medium))
+                HStack(spacing: 6) {
+                    Text(call.toolName)
+                        .font(.subheadline.weight(.medium))
+                    if let subagent {
+                        Label(subagent, systemImage: AgentToolCategory.subagent.symbol)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(AgentToolCategory.subagent.color)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(AgentToolCategory.subagent.color.opacity(0.12), in: Capsule())
+                            .accessibilityLabel("by the \(subagent) subagent")
+                    }
+                }
                 if let target = call.summary, !target.isEmpty {
                     Text(target)
                         .font(.system(.caption, design: .monospaced))

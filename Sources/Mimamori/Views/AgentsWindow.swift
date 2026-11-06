@@ -364,6 +364,8 @@ struct AgentDashboardRow: View {
                 if detailed {
                     let subagents = presence.shownSubagents(at: now)
                     if !subagents.isEmpty { SubagentsList(subagents: subagents, now: now, worktree: row.session.id) }
+                    let commands = presence.shownCommands(at: now)
+                    if !commands.isEmpty { BackgroundCommandsList(commands: commands, now: now) }
                 }
                 // After this agent's own steps and files, so none of them reads as another's.
                 if !presence.others.isEmpty {
@@ -426,6 +428,11 @@ struct AgentDashboardRow: View {
                 Label(subagents, systemImage: AgentToolCategory.subagent.symbol)
                     .foregroundStyle(AgentToolCategory.subagent.color)
                     .help("Subagents it started are still running; the details show them")
+            }
+            if let commands = presence.runningCommandsSummary {
+                Label(commands, systemImage: AgentToolCategory.command.symbol)
+                    .foregroundStyle(AgentToolCategory.command.color)
+                    .help("Commands it runs in the background; the details show them")
             }
             Spacer(minLength: 6)
             ChangeSummary(session: row.session)
