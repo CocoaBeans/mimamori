@@ -29,8 +29,8 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=sleep                ask to put the selected worktree's agents to sleep (sleep:confirm: go
 ///                                               ahead 2 s later); wake wakes them once they sleep
 ///     MIMAMORI_DEBUG_FLAGS=about                open the About window
-///     MIMAMORI_DEBUG_FLAGS=companion            advertise over Bonjour and stream the agents to the iPhone companion,
-///                                               unencrypted and unpaired (docs/plans/iphone-companion.md, step 1)
+///     MIMAMORI_DEBUG_FLAGS=companion            turn the iPhone companion on, whatever Settings says
+///     MIMAMORI_DEBUG_FLAGS=companion:pair       and show a pairing code, its link in <dump>.companion-pairing.txt
 ///     MIMAMORI_DEBUG_FLAGS=permission:allow     answer a permission request once it has waited 5 s (or permission:deny)
 ///     MIMAMORI_DEBUG_FLAGS=hook-test            send a test event through the hook command once (result in the dump,
 ///                                               Copy Diagnostics' report in <dump>.diagnostics.txt)
@@ -76,6 +76,7 @@ enum DebugHooks {
         var openedAbout = false
         var askedSleep = false
         var woke = false
+        var startedPairing = false
         var renderedWidgets = false
         var openedCommit = false
         var openedMenuBar = false
@@ -126,6 +127,14 @@ enum DebugHooks {
                     woke = true
                     try? await Task.sleep(for: .seconds(3))
                     model.wake(in: session.id)
+                }
+                // "companion:pair": a pairing code, as Pair iPhone… makes, its link written for a script.
+                if model.debugFlags.contains("companion:pair"), !startedPairing, model.companion.isOn, let dump {
+                    startedPairing = true
+                    model.companion.startPairing()
+                    if let code = model.companion.pairingCode {
+                        try? (code.url.absoluteString + "\n").write(toFile: dump + ".companion-pairing.txt", atomically: true, encoding: .utf8)
+                    }
                 }
                 if model.debugFlags.contains("about"), !openedAbout {
                     openedAbout = true

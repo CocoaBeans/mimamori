@@ -1,19 +1,24 @@
-// Debug builds only, for now: the iPhone companion's first step (docs/plans/iphone-companion.md).
-#if DEBUG
 import Foundation
 import MimamoriCore
 import Network
 
-/// Advertises Mimamori over Bonjour and streams the agents to iPhones on the same network, as
-/// lines of JSON (`CompanionMessage`). With MIMAMORI_DEBUG_FLAGS=companion only.
+/// Advertises Mimamori over Bonjour and streams the agents to paired iPhones on the network, as
+/// lines of JSON (`CompanionMessage`), over TLS keyed by each pairing's secret: a phone without a
+/// paired key can't connect, and nobody else on the network can read what is sent.
 ///
-/// A spike: anything on the network can connect and read, with no pairing or encryption yet. It
-/// sends the snapshot the desktop widgets get, on their rules: at once when who needs you changes,
-/// otherwise at most every 10 s, and only when something shown changed. A phone that connects, or
-/// asks, gets what's current, which starts no polling.
+/// It sends the snapshot the desktop widgets get, on their rules: at once when who needs you
+/// changes, otherwise at most every 10 s, and only when something shown changed. A phone that
+/// connects, or asks, gets what's current, which starts no polling.
 @MainActor
 final class CompanionPublisher {
     private static let minimumInterval: TimeInterval = 10
+
+    /// A phone said who it is: which pairing it connected with, and its name.
+    var onHello: ((CompanionMessage.Hello) -> Void)?
+    /// A phone that had said hello went away, with its pairing's id.
+    var onGoodbye: ((String) -> Void)?
+    /// The listener's state, in a sentence for Settings; nil while all is well.
+    var onProblem: ((String?) -> Void)?
 
     private var listener: NWListener?
     private var phones: [ObjectIdentifier: Phone] = [:]
@@ -26,28 +31,60 @@ final class CompanionPublisher {
     private struct Phone {
         let connection: NWConnection
         var reader = CompanionLineReader()
+        /// The pairing it said hello with.
+        var pairingID: String?
     }
 
-    /// Starts listening on a port the system picks, advertised under the Mac's name.
-    func start() {
-        guard listener == nil else { return }
+    var isRunning: Bool { listener != nil }
+
+    /// Listens on a port the system picks, advertised under the Mac's name with `macID` in its
+    /// record, accepting phones that hold one of `keys`. Starting again with other keys drops the
+    /// phones connected so far, so a removed phone is cut off; the others reconnect at once.
+    func start(macID: String, keys: [CompanionKey]) {
+        stop()
         let listener: NWListener
         do {
-            listener = try NWListener(using: .tcp)
+            listener = try NWListener(using: CompanionTLS.parameters(keys: keys))
         } catch {
             Log.companion.error("Could not listen for the companion: \(error.localizedDescription, privacy: .public)")
+            onProblem?("Mimamori couldn't listen for your iPhone: \(error.localizedDescription)")
             return
         }
-        listener.service = NWListener.Service(type: CompanionMessage.serviceType)
+        listener.service = NWListener.Service(type: CompanionMessage.serviceType,
+                                              txtRecord: NWTXTRecord([CompanionBonjour.macIDKey: macID]))
         // Handlers run on the main queue, where this object lives.
-        listener.stateUpdateHandler = { state in
-            Log.companion.info("Companion listener: \(String(describing: state), privacy: .public)")
+        listener.stateUpdateHandler = { [weak self] state in
+            MainActor.assumeIsolated { self?.listenerChanged(state) }
         }
         listener.newConnectionHandler = { [weak self] connection in
             MainActor.assumeIsolated { self?.accept(connection) }
         }
         listener.start(queue: .main)
         self.listener = listener
+    }
+
+    /// Stops listening and advertising, and drops every phone.
+    func stop() {
+        listener?.cancel()
+        listener = nil
+        let gone = phones.values.compactMap(\.pairingID)
+        for phone in phones.values { phone.connection.cancel() }
+        phones.removeAll()
+        for id in gone { onGoodbye?(id) }
+    }
+
+    private func listenerChanged(_ state: NWListener.State) {
+        Log.companion.info("Companion listener: \(String(describing: state), privacy: .public)")
+        switch state {
+        case .ready:
+            onProblem?(nil)
+        case .waiting(let error), .failed(let error):
+            // Most often local network access turned off for Mimamori in System Settings.
+            onProblem?("Your iPhone can't reach Mimamori (\(error.localizedDescription)). "
+                       + "Check System Settings › Privacy & Security › Local Network.")
+        default:
+            break
+        }
     }
 
     /// The agents as they are now, the most pressing first.
@@ -98,11 +135,12 @@ final class CompanionPublisher {
     private func accept(_ connection: NWConnection) {
         let id = ObjectIdentifier(connection)
         phones[id] = Phone(connection: connection)
-        Log.companion.info("Companion connected: \(String(describing: connection.endpoint), privacy: .public)")
         connection.stateUpdateHandler = { [weak self] state in
             MainActor.assumeIsolated {
                 switch state {
                 case .ready:
+                    // TLS has checked the phone's key by now.
+                    Log.companion.info("Companion connected: \(String(describing: connection.endpoint), privacy: .public)")
                     if let line = self?.currentLine() { self?.send(line, to: connection) }
                 case .failed, .cancelled:
                     self?.drop(connection)
@@ -133,9 +171,14 @@ final class CompanionPublisher {
         let id = ObjectIdentifier(connection)
         guard var phone = phones[id] else { return }
         let lines = phone.reader.lines(adding: data)
+        for line in lines {
+            guard let message = try? CompanionMessage(line: line), let hello = message.hello else { continue }
+            phone.pairingID = hello.pairingID
+        }
         phones[id] = phone
         for line in lines {
             guard let message = try? CompanionMessage(line: line) else { continue }
+            if let hello = message.hello { onHello?(hello) }
             if message.wantsSnapshot == true, let reply = currentLine() { send(reply, to: connection) }
         }
     }
@@ -147,7 +190,8 @@ final class CompanionPublisher {
     }
 
     private func drop(_ connection: NWConnection) {
-        guard phones.removeValue(forKey: ObjectIdentifier(connection)) != nil else { return }
+        guard let phone = phones.removeValue(forKey: ObjectIdentifier(connection)) else { return }
+        if let id = phone.pairingID { onGoodbye?(id) }
         Log.companion.info("Companion disconnected: \(String(describing: connection.endpoint), privacy: .public)")
     }
 }
@@ -198,4 +242,3 @@ extension AppModel {
             })
     }
 }
-#endif

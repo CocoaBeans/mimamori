@@ -51,7 +51,7 @@ struct UninstallView: View {
             item($plan.data, available: true, "Settings and activity",
                  Persistence.isScratch
                     ? "This run's folder, \(Persistence.supportDirectory.path)."
-                    : "\(Format.abbreviate(path: Persistence.supportDirectory.path)) (watched repositories, reviews, the activity feed), preferences, caches and the widgets' data.")
+                    : "\(Format.abbreviate(path: Persistence.supportDirectory.path)) (watched repositories, reviews, the activity feed), paired iPhones and their keys, preferences, caches and the widgets' data.")
             item($plan.trashApp, available: leftovers.app != nil, "Move Mimamori to the Trash",
                  leftovers.app.map { Format.abbreviate(path: $0.path) } ?? "Not running from an app bundle.")
         }

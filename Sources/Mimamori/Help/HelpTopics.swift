@@ -14,6 +14,7 @@ struct HelpTopic: Identifiable {
         case commits
         case agents
         case menuBar = "menu-bar"
+        case iPhone = "iphone"
         case activity
         case snapshots
         case shortcuts
@@ -193,6 +194,29 @@ struct HelpTopic: Identifiable {
             """),
 
         HelpTopic(
+            id: .iPhone, title: "Your iPhone", symbol: "iphone",
+            summary: "See your agents on your iPhone, on the same network as your Mac.",
+            actions: [.settings(.companion, "iPhone Settings…")],
+            markdown: """
+            ## Pairing
+            1. Install Mimamori on your iPhone. It isn't on the App Store yet: it's built from Mimamori's source in Xcode, as the README describes.
+            2. In **Settings › iPhone**, turn on **Show agents on your iPhone**, then choose **Pair iPhone…**.
+            3. Point the iPhone's Camera at the code, and tap the link to open it in Mimamori.
+
+            The iPhone then shows your agents whenever it's on the same network as your Mac, grouped and drawn as the Agents window draws them. Tap **Details** for each agent's task, steps and files, or turn it off for one line each.
+
+            ## Who can see
+            Only paired iPhones: each connects with a key of its own, which only it and your Mac keep, in their Keychains, and everything sent is encrypted. Off, Mimamori doesn't listen on the network at all. Tasks and steps reach the iPhone only when **Show tasks and steps in widgets** is on, in Settings › Agents.
+
+            ## Removing an iPhone
+            **Remove…** beside it in Settings › iPhone deletes its key, and it's cut off at once. On the iPhone, **Forget** in the Mac menu does the same from that end.
+
+            ## If it doesn't connect
+            - The iPhone and the Mac need to be on the same network, and the iPhone unplugged from the Mac's cable works best.
+            - Both ask, the first time, to find devices on your local network. If you said no, turn Mimamori on in **Privacy & Security › Local Network**: System Settings on the Mac, Settings on the iPhone.
+            """),
+
+        HelpTopic(
             id: .activity, title: "Activity and summaries", symbol: "list.bullet.rectangle",
             summary: "What happened while you were away, and a write-up to share.",
             actions: [],
@@ -265,11 +289,15 @@ struct HelpTopic: Identifiable {
             ## What stays on your Mac
             Mimamori talks to nothing but your local git, and a socket only your own processes can reach. It has no telemetry. Agent events are kept in memory, and nothing about your code or your prompts leaves your Mac.
 
+            ## Your iPhone
+            With **Show agents on your iPhone** on (Settings › iPhone), Mimamori also listens on your local network, for the iPhones you paired and no others. What it sends them is encrypted with each one's own key. Off, the default, it doesn't listen at all.
+
             ## Updates
             The one exception: Mimamori asks GitHub whether there's a new version when you choose **Mimamori › Check for Updates…**, or once a day if you agreed to automatic checks (Settings › General). Nothing about you or your Mac goes with it, and a new version is checked against Mimamori's signing key before it's installed.
 
             ## What it writes
             - Its settings, the repositories you watch, your review marks and the activity feed, in `~/Library/Application Support/Mimamori/`.
+            - For each paired iPhone, its key in your login Keychain.
             - Snapshots, inside each repository under `refs/monitor/`.
             - Your files only when you discard a hunk or a file, which is off until you turn it on: that one file, after a snapshot, and never the index.
             - It stops an agent only when you put it to sleep, which is off until you turn it on, and Wake writes a short script to the temporary folder that removes itself as it runs.

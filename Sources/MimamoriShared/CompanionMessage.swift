@@ -2,8 +2,8 @@ import Foundation
 
 /// What the Mac and the iPhone companion say to each other: one JSON message per line.
 ///
-/// Mac to phone: the agents, the same snapshot the desktop widgets draw. Phone to Mac: "send me a
-/// fresh snapshot". Each message carries the version of the format it was written in, so the two
+/// Mac to phone: the agents, the same snapshot the desktop widgets draw. Phone to Mac: who it is,
+/// once connected, and "send me a fresh snapshot". Each message carries the version of the format it was written in, so the two
 /// apps can be updated at different times.
 public struct CompanionMessage: Codable, Sendable, Equatable {
     /// The Bonjour service the Mac advertises and the phone browses for.
@@ -17,11 +17,30 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
     public var snapshot: AgentWidgetSnapshot?
     /// Asks for a snapshot now rather than at the next change; phone to Mac.
     public var wantsSnapshot: Bool?
+    /// The phone introducing itself, first thing after connecting; phone to Mac.
+    public var hello: Hello?
 
-    public init(snapshot: AgentWidgetSnapshot? = nil, wantsSnapshot: Bool? = nil) {
+    /// What the Mac lists a paired phone by.
+    public struct Hello: Codable, Sendable, Equatable {
+        /// The pairing it connected with. TLS has already checked that the phone holds a paired
+        /// key; this says which, for the Mac's list.
+        public var pairingID: String
+        /// "iPhone", or the phone's own name where iOS shares it.
+        public var deviceName: String
+        public var model: String?
+
+        public init(pairingID: String, deviceName: String, model: String? = nil) {
+            self.pairingID = pairingID
+            self.deviceName = deviceName
+            self.model = model
+        }
+    }
+
+    public init(snapshot: AgentWidgetSnapshot? = nil, wantsSnapshot: Bool? = nil, hello: Hello? = nil) {
         self.version = Self.currentVersion
         self.snapshot = snapshot
         self.wantsSnapshot = wantsSnapshot
+        self.hello = hello
     }
 
     /// The message as one line, ending in a newline. JSON escapes newlines inside strings, so

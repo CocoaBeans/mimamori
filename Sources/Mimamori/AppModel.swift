@@ -123,10 +123,8 @@ final class AppModel {
     /// Repositories offered since launch, so each is offered once.
     @ObservationIgnored var offeredRepositories: Set<String> = []
     @ObservationIgnored private let widgets = WidgetPublisher()
-    #if DEBUG
-    /// The iPhone companion, with MIMAMORI_DEBUG_FLAGS=companion.
-    @ObservationIgnored private var companion: CompanionPublisher?
-    #endif
+    /// The iPhone companion: paired phones, and whether it's on.
+    let companion = CompanionController()
     @ObservationIgnored private var quitObserver: NSObjectProtocol?
 
     init() {
@@ -179,11 +177,8 @@ final class AppModel {
                                                               queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.widgets.appQuitting() }
         }
+        companion.setOn(companionWanted(settings))
         #if DEBUG
-        if debugFlags.contains("companion") {
-            companion = CompanionPublisher()
-            companion?.start()
-        }
         DebugHooks.start(model: self)
         #endif
         // Review marks and other edits are saved after a short delay; do not lose them on quit.
@@ -802,6 +797,10 @@ final class AppModel {
         if newValue.notificationsEnabled && !old.notificationsEnabled {
             Task { _ = await notifier.requestAuthorization() }
         }
+        if old.companionEnabled != newValue.companionEnabled {
+            companion.setOn(companionWanted(newValue))
+            publishWidgets()
+        }
         if old.showTasksInWidgets != newValue.showTasksInWidgets {
             publishWidgets()
         }
@@ -851,9 +850,12 @@ final class AppModel {
     func publishWidgets() {
         let agents = widgetAgents()
         widgets.update(agents)
-        #if DEBUG
-        companion?.update(companionAgents())
-        #endif
+        if companion.isOn { companion.update(companionAgents()) }
+    }
+
+    /// The companion is on when Settings says so, or in a debug run with MIMAMORI_DEBUG_FLAGS=companion.
+    private func companionWanted(_ settings: AppSettings) -> Bool {
+        settings.companionEnabled || debugFlags.contains("companion")
     }
 
     /// The agents as the widgets draw them. `details` adds each one's task and latest steps;

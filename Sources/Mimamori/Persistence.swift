@@ -19,6 +19,12 @@ enum Persistence {
     static var stateURL: URL { supportDirectory.appendingPathComponent("state.json") }
     static var shadowIndexDirectory: URL { supportDirectory.appendingPathComponent("index", isDirectory: true) }
     static var activityURL: URL { supportDirectory.appendingPathComponent("activity.jsonl") }
+    /// The iPhones paired with this Mac; their secrets are in the Keychain.
+    static var companionURL: URL { supportDirectory.appendingPathComponent("companion.json") }
+    /// Where pairing secrets are kept. A scripted run keeps its own, so testing never touches the
+    /// pairings of the Mimamori you use.
+    static let companionKeychain = CompanionKeychain(
+        service: isScratch ? "com.kevinross.Mimamori.companion.scratch" : CompanionKeychain.standard.service)
 
     static let state = StateFile(url: stateURL)
 }

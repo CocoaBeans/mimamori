@@ -281,11 +281,24 @@ Add the **Agents** widget from the desktop's **Edit Widgets** menu (or Notificat
 
 The widget is an app extension running sandboxed in its own process. Mimamori writes what it shows to `widgets.json` in the App Group container `~/Library/Group Containers/555LXJXR4U.com.kevinross.Mimamori/` and asks WidgetKit to reload: at once when an agent starts or stops needing you, otherwise at most every 10 seconds, plus every 15 minutes so the widget can tell a quiet Mimamori from one that has quit. When Mimamori quits, or has written nothing for 45 minutes, the widget says Mimamori isn't running rather than show stale states. Timers ("Waiting 2:03") tick on their own between reloads.
 
+## iPhone companion
+
+Mimamori on your iPhone shows your agents while it's on the same network as your Mac, grouped and drawn as the Agents window draws them, with **Details** for each one's task, steps and files.
+
+The iPhone app isn't on the App Store yet: build it from `Mimamori.xcodeproj` with the **MimamoriCompanion** scheme onto your iPhone (iOS 18 or later), signed with your own team. Then:
+
+1. In **Settings › iPhone**, turn on **Show agents on your iPhone**. Off, the default, Mimamori doesn't listen on the network at all.
+2. Choose **Pair iPhone…**, and point the iPhone's Camera at the code. The link opens the iPhone app, which keeps the pairing.
+3. The iPhone finds your Mac over Bonjour (`_mimamori._tcp`) whenever both are on the network, and the Mac sends what changes, on the widgets' rules.
+
+Each paired iPhone has a key of its own, a random 32 bytes that only it and the Mac keep, each in its Keychain. Connections are TLS with that key (TLS 1.2 with a pre-shared key), so only a paired iPhone gets in, and nobody else on the network can read what is sent. **Remove…** in Settings › iPhone deletes a phone's key and cuts it off. Tasks and steps reach the iPhone only when **Show tasks and steps in widgets** is on. The iPhone app is built from `Sources/MimamoriCompanion` in the same project; see the [plan](docs/plans/iphone-companion.md) for what comes next.
+
 ## Privacy and footprint
 
-Mimamori talks to nothing but your local `git`, and a Unix-domain socket that only your own processes can reach (the socket file is readable and writable by you alone). It has no telemetry. The one exception is updates, in release builds only: [Sparkle](https://sparkle-project.org) fetches the list of releases (`appcast.xml`) from GitHub when you choose Mimamori › Check for Updates, or once a day if you said yes when it asked, the second time you opened Mimamori. Nothing about you or your Mac goes with it. A new version is checked against Mimamori's signing key before it is installed. Builds you make yourself never check. On disk it writes:
+Mimamori talks to nothing but your local `git`, and a Unix-domain socket that only your own processes can reach (the socket file is readable and writable by you alone). It has no telemetry. With the [iPhone companion](#iphone-companion) on, it also listens on your local network for the iPhones you paired, and only those, over TLS keyed by each one's own key. The one exception is updates, in release builds only: [Sparkle](https://sparkle-project.org) fetches the list of releases (`appcast.xml`) from GitHub when you choose Mimamori › Check for Updates, or once a day if you said yes when it asked, the second time you opened Mimamori. Nothing about you or your Mac goes with it. A new version is checked against Mimamori's signing key before it is installed. Builds you make yourself never check. On disk it writes:
 
-- `~/Library/Application Support/Mimamori/`: settings, the list of watched repositories, review marks, the shadow index files, and `activity.jsonl`, the activity feed (one JSON entry per line, kept for the number of days you choose).
+- `~/Library/Application Support/Mimamori/`: settings, the list of watched repositories, review marks, the shadow index files, and `activity.jsonl`, the activity feed (one JSON entry per line, kept for the number of days you choose). With the iPhone companion, `companion.json` lists the paired iPhones.
+- For each paired iPhone, its key in your login Keychain (service `com.kevinross.Mimamori.companion`).
 - `refs/monitor/…` inside watched repositories, for snapshots (see above).
 - Your working tree only when you discard a hunk or a file, which is off until you turn it on: that one file, after a snapshot. A new file you discard goes to the Trash. Never the index.
 - `~/.claude/settings.json`, only when you connect Claude Code (Install Hooks, or Connect in the welcome window) or a newer Mimamori adds events to hooks you installed, with a backup beside it. For Hermes, `~/.hermes/agent-hooks/mimamori.sh` and a marked block in `~/.hermes/config.yaml`, likewise backed up. Mimamori keeps its newest five backups of each file; Settings › Agents › Hooks shows them.
@@ -297,7 +310,7 @@ macOS gives an app no word when it is deleted, so remove what Mimamori added fir
 
 - its hooks in Claude Code's and Hermes's settings (your own hooks stay, and each file is backed up first);
 - its snapshots, the refs under `refs/monitor/` in the repositories you watch (your branches and commits are untouched);
-- its settings folder, preferences, caches and the widgets' data;
+- its settings folder, paired iPhones and their keys, preferences, caches and the widgets' data;
 - and the app itself, to the Trash.
 
 Agent sessions already running keep the hooks until they restart; the commands fail silently in the meantime. If you deleted the app first, remove Mimamori's entries (the commands mentioning `mimamori.sock`) from `~/.claude/settings.json` or with an older copy's Settings › Agents › Hooks, then:
@@ -380,7 +393,8 @@ The switches in `MIMAMORI_DEBUG_FLAGS`. Renders are written next to the dump, in
 | `sleep` | Ask to put the selected worktree's agents to sleep; `sleep:confirm` goes ahead 2 s later |
 | `wake` | Wake the selected worktree's sleeping agents, 3 s after they sleep (opens a real terminal) |
 | `about` | Open the About window |
-| `companion` | Advertise Mimamori over Bonjour and stream the agents to the iPhone companion, unencrypted and unpaired, as step 1 of [its plan](docs/plans/iphone-companion.md) does. macOS asks for local network access the first time |
+| `companion` | Turn the iPhone companion on, whatever Settings › iPhone says |
+| `companion:pair` | With `companion`, make a pairing code as Pair iPhone… does, and write its link to `<dump>.companion-pairing.txt`, for a simulator to open (`xcrun simctl openurl booted <link>`). Use a scratch setup: the link holds the pairing's key |
 | `permission:allow` | Answer a waiting permission request once it has waited 5 s, as Allow does (`permission:deny` for Deny) |
 | `hook-test` | Send a test event through the hook command once, as Send Test Event does; the result and the recent events go in the dump, and Copy Diagnostics' report in `<dump>.diagnostics.txt` |
 | `sidebar:show` | Unfold the main window's sidebar at its usual width; the window remembers it folded across launches |

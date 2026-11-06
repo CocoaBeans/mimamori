@@ -10,7 +10,17 @@ struct MimamoriCompanionApp: App {
     var body: some Scene {
         WindowGroup {
             AgentsScreen(model: model)
-                .task { model.start() }
+                .task {
+                    model.start()
+                    #if DEBUG
+                    // For scripted runs: `-pairingLink <link>` pairs as opening the link does.
+                    if let link = UserDefaults.standard.string(forKey: "pairingLink"), let url = URL(string: link) {
+                        model.pair(with: url)
+                    }
+                    #endif
+                }
+                // The Mac's pairing code, opened from the Camera.
+                .onOpenURL { url in model.pair(with: url) }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { model.resume() }
                 }
@@ -65,6 +75,12 @@ struct AgentsScreen: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Agents")
+            .alert("Paired with \(model.justPaired?.name ?? "your Mac")", isPresented: Binding(
+                get: { model.justPaired != nil }, set: { if !$0 { model.dismissJustPaired() } })) {
+                Button("OK") { model.dismissJustPaired() }
+            } message: {
+                Text("Its agents show here whenever this iPhone is on the same network.")
+            }
             .refreshable { model.refresh() }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -98,13 +114,15 @@ private struct StatusRow: View {
 
     var body: some View {
         switch model.status {
+        case .unpaired:
+            PairingHelp()
         case .searching:
-            Label("Looking for a Mac running Mimamori…", systemImage: "magnifyingglass")
+            Label("Looking for \(model.chosen?.name ?? "your Mac") on this network…", systemImage: "magnifyingglass")
         case .connecting(let name):
             Label("Connecting to \(name)…", systemImage: "network")
         case .connected(let name):
             VStack(alignment: .leading, spacing: 2) {
-                Label(name, systemImage: "desktopcomputer")
+                Label(name, systemImage: "lock.desktopcomputer")
                 if let receivedAt = model.receivedAt, let delay = model.delay {
                     Text("Updated \(receivedAt.formatted(date: .omitted, time: .standard)), \(Self.milliseconds(delay)) after the Mac sent it")
                         .font(.caption)
@@ -122,30 +140,66 @@ private struct StatusRow: View {
     }
 }
 
-/// The Macs found on the network, to switch between.
+/// How to pair, before any Mac is.
+private struct PairingHelp: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Pair with your Mac", systemImage: "desktopcomputer.and.iphone")
+                .font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("1. On your Mac, open Mimamori › Settings › iPhone and turn on Show agents on your iPhone.")
+                Text("2. Choose Pair iPhone…")
+                Text("3. Point this iPhone's Camera at the code, and tap the link to open it here.")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            Text("Your iPhone and Mac need to be on the same network.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// The paired Macs, to switch between or forget.
 private struct MacPicker: View {
     let model: CompanionModel
+    @State private var forgetting: PairedMac?
 
     var body: some View {
         Menu {
-            if model.macs.isEmpty {
-                Text("No Macs found")
-            }
-            ForEach(model.macs) { mac in
+            ForEach(model.pairedMacs) { mac in
                 Button {
-                    model.connect(to: mac)
+                    model.choose(mac)
                 } label: {
-                    if mac.name == model.connectedMac {
+                    if mac.macID == model.chosen?.macID {
                         Label(mac.name, systemImage: "checkmark")
+                    } else if model.foundMacs[mac.macID] == nil {
+                        Text("\(mac.name) (not found)")
                     } else {
                         Text(mac.name)
                     }
                 }
             }
+            if let chosen = model.chosen {
+                Divider()
+                Button("Forget \(chosen.name)…", systemImage: "xmark.circle", role: .destructive) {
+                    forgetting = chosen
+                }
+            }
         } label: {
             Image(systemName: "desktopcomputer")
         }
+        .disabled(model.pairedMacs.isEmpty)
         .help("Choose a Mac")
         .accessibilityLabel("Choose a Mac")
+        .confirmationDialog("Forget \(forgetting?.name ?? "this Mac")?", isPresented: Binding(
+            get: { forgetting != nil }, set: { if !$0 { forgetting = nil } }), titleVisibility: .visible) {
+            Button("Forget", role: .destructive) {
+                if let forgetting { model.forget(forgetting) }
+                forgetting = nil
+            }
+        } message: {
+            Text("To see its agents again, pair again from the Mac. Remove this iPhone there too, in Mimamori › Settings › iPhone.")
+        }
     }
 }

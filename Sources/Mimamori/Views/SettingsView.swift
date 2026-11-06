@@ -3,7 +3,7 @@ import MimamoriCore
 
 /// The panes of the Settings window, so a button elsewhere can open the one it is about.
 enum SettingsTab: String, Hashable, CaseIterable {
-    case general, snapshots, attention, agents
+    case general, snapshots, attention, agents, companion
 }
 
 struct SettingsView: View {
@@ -16,6 +16,7 @@ struct SettingsView: View {
             Tab("Snapshots", systemImage: "camera", value: .snapshots) { SnapshotSettingsView() }
             Tab("Attention", systemImage: "exclamationmark.triangle", value: .attention) { AttentionSettingsView() }
             Tab("Agents", systemImage: "sparkles", value: .agents) { AgentSettingsView() }
+            Tab("iPhone", systemImage: "iphone", value: .companion) { CompanionSettingsView() }
         }
         .frame(width: 560, height: 560)
     }

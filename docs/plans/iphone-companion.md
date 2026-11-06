@@ -1,8 +1,10 @@
 # Plan: an iPhone companion
 
-> **Approved, not started.** Builds of your own come first: same network, then the silent-audio
-> keep-alive with "needs you" notifications, then Tailscale. CloudKit and a relay wait for an App
-> Store build. The Mac side stays on macOS 15 with `NWListener` (see "Decided").
+> **Under way.** Step 1 is done, and so is step 2's pairing: QR pairing, TLS with each phone's own
+> key, and Settings › iPhone, in release builds. Next in step 2: an agent's list of actions, then
+> Allow and Deny. Builds of your own come first: same network, then the silent-audio keep-alive
+> with "needs you" notifications, then Tailscale. CloudKit and a relay wait for an App Store build.
+> The Mac side stays on macOS 15 with `NWListener` (see "Decided").
 
 ## Goal
 

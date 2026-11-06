@@ -14,6 +14,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
   **Wake** opens a terminal in the worktree that resumes it. For Claude Code and Codex, off until
   you turn it on in Settings › General
   ([#53](https://github.com/CocoaBeans/mimamori/pull/53)).
+- Your agents on your iPhone: pair it in the new Settings › iPhone by scanning a code with its
+  Camera, and it shows your agents, as the Agents window does, whenever it's on the same network.
+  Off until you turn it on; each iPhone connects with a key of its own, encrypted. The iPhone app
+  is built from source for now
+  ([#57](https://github.com/CocoaBeans/mimamori/pull/57)).
 
 ### Changed
 

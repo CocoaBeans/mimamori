@@ -42,6 +42,9 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var notifyOnAgentCollision: Bool = true
     /// Whether desktop widgets may show agents' tasks and steps, which anyone near the screen can read.
     public var showTasksInWidgets: Bool = true
+    /// Show the agents on paired iPhones. Off until you turn it on: nothing listens on the network
+    /// or advertises itself before then.
+    public var companionEnabled: Bool = false
     public var customAgentNames: [String] = []
     public var agentsWindowFloats: Bool = false
     /// Rows show the task, recent steps and files; off for one-line-per-agent rows.
@@ -95,6 +98,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         autoAnswerSeconds = c.decode(.autoAnswerSeconds, or: defaults.autoAnswerSeconds)
         notifyOnAgentCollision = c.decode(.notifyOnAgentCollision, or: defaults.notifyOnAgentCollision)
         showTasksInWidgets = c.decode(.showTasksInWidgets, or: defaults.showTasksInWidgets)
+        companionEnabled = c.decode(.companionEnabled, or: defaults.companionEnabled)
         customAgentNames = c.decode(.customAgentNames, or: defaults.customAgentNames)
         agentsWindowFloats = c.decode(.agentsWindowFloats, or: defaults.agentsWindowFloats)
         agentsWindowDetailed = c.decode(.agentsWindowDetailed, or: defaults.agentsWindowDetailed)

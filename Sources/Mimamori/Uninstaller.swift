@@ -87,10 +87,12 @@ enum Uninstaller {
         }
         if plan.data {
             model.isUninstalling = true
+            // Stop serving paired phones, and delete their secrets from the Keychain.
+            model.companion.removeAll()
             removeData()
             report.append(Persistence.isScratch
                           ? "Deleted this run's settings and activity in \(Persistence.supportDirectory.path)."
-                          : "Deleted Mimamori's settings, activity, preferences and caches.")
+                          : "Deleted Mimamori's settings, activity, iPhone pairings, preferences and caches.")
         }
         if plan.trashApp, let app = leftovers.app {
             do {
