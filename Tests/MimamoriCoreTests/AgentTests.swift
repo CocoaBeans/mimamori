@@ -181,6 +181,7 @@ struct HermesHookTests {
         #expect(event.sessionID == nil)
         #expect(event.toolUseID == nil)
         #expect(event.hermesTaskID == "task_1")
+        #expect(event.ranFromCode)
         #expect(AgentStatus.key(session: event.sessionID, agent: .hermes) == "agent:hermes")
     }
 
@@ -189,6 +190,7 @@ struct HermesHookTests {
         var code = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"execute_code","tool_input":{"code":"from hermes_tools import patch"},"session_id":"sess_1","cwd":"/Users/x/.hermes","extra":{"task_id":"task_1","tool_call_id":"call_1"}}"#))
         tasks.resolve(&code)
         #expect(code.sessionID == "sess_1")
+        #expect(!code.ranFromCode)
 
         var patch = try #require(parse(kernelPatch()))
         tasks.resolve(&patch)
@@ -217,6 +219,7 @@ struct HermesHookTests {
     }
 
     /// One Hermes session edits a file itself, then again from `execute_code`: one agent, no collision.
+    /// Hermes reports the start of each tool the code runs, never its end.
     @Test func editsFromExecuteCodeAreNotASecondHermes() throws {
         let now = Date()
         var tasks = HermesTaskSessions()
@@ -226,21 +229,29 @@ struct HermesHookTests {
             tasks.resolve(&event)
             _ = machines[AgentStatus.key(session: event.sessionID, agent: .hermes), default: AgentStatusMachine()].apply(event)
         }
+        func open() -> [String] {
+            (machines["sess_1"]?.status?.recentToolCalls ?? []).filter { $0.finishedAt == nil }.map(\.toolName)
+        }
         try send(#"{"hook_event_name":"pre_llm_call","session_id":"sess_1","cwd":"/repo","extra":{"user_message":"fix the tests"}}"#, at: -60)
         try send(#"{"hook_event_name":"pre_tool_call","tool_name":"patch","tool_input":{"path":"/repo/app/a.dart","old_string":"a","new_string":"b"},"session_id":"sess_1","cwd":"/repo","extra":{"task_id":"task_1","tool_call_id":"call_1"}}"#, at: -50)
         try send(#"{"hook_event_name":"post_tool_call","tool_name":"patch","session_id":"sess_1","cwd":"/repo","extra":{"task_id":"task_1","tool_call_id":"call_1"}}"#, at: -49)
         try send(#"{"hook_event_name":"pre_tool_call","tool_name":"execute_code","tool_input":{"code":"from hermes_tools import patch"},"session_id":"sess_1","cwd":"/repo","extra":{"task_id":"task_1","tool_call_id":"call_2"}}"#, at: -40)
         try send(kernelPatch(), at: -39)
-        try send(#"{"hook_event_name":"post_tool_call","tool_name":"patch","session_id":"","cwd":"/Users/x/.hermes","extra":{"task_id":"task_1","tool_call_id":""}}"#, at: -38)
+        #expect(open() == ["execute_code", "patch"])
+        // The code's next tool starts: the one before it has ended.
+        try send(kernelPatch(path: "/repo/app/b.dart"), at: -38)
+        #expect(open() == ["execute_code", "patch"])
+        #expect(machines["sess_1"]?.status?.recentToolCalls.last?.filePath == "/repo/app/b.dart")
+        // execute_code ends, and the tools it ran with it.
+        try send(#"{"hook_event_name":"post_tool_call","tool_name":"execute_code","session_id":"sess_1","cwd":"/repo","extra":{"task_id":"task_1","tool_call_id":"call_2"}}"#, at: -30)
+        #expect(open().isEmpty)
 
         #expect(Set(machines.keys) == ["sess_1"])
         let here = WorktreeAgents(statuses: machines.values.compactMap(\.status), processes: [], established: [], now: now) { _ in nil }
         #expect(here.live.count == 1)
         #expect(here.collisions.isEmpty)
-        // The kernel's patch finished on its own, leaving execute_code running.
         let calls = try #require(machines["sess_1"]?.status?.recentToolCalls)
-        #expect(calls.map(\.toolName) == ["patch", "execute_code", "patch"])
-        #expect(calls.map { $0.finishedAt != nil } == [true, false, true])
+        #expect(calls.map(\.toolName) == ["patch", "execute_code", "patch", "patch"])
     }
 
     @Test func repeatedModelCallsDoNotRestartTheTurn() {

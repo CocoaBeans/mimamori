@@ -64,6 +64,8 @@ public enum HermesHookParser {
                                                 resolveRelativePaths: sessionDirectory != nil) else { return nil }
         event.rawName = rawName
         event.hermesTaskID = (extra["task_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        // The tools `execute_code` runs are the calls that name their turn's task but no session.
+        event.ranFromCode = event.sessionID == nil && event.hermesTaskID != nil && event.name == .preToolUse
         return event
     }
 }

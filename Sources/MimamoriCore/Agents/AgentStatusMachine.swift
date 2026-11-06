@@ -240,12 +240,15 @@ public struct AgentNote: Sendable, Hashable {
 public struct AgentStatusMachine: Sendable {
     public private(set) var status: AgentStatus?
     private let maxToolCalls = 200
+    /// Open calls Hermes's `execute_code` ran, which no end event will close.
+    private var codeCalls: Set<String> = []
 
     public init() {}
 
     public mutating func apply(_ event: HookEvent) -> [AgentNote] {
         let now = event.receivedAt
         var current = status ?? AgentStatus(agent: event.agent, activity: .idle, since: now, lastEventAt: now)
+        var codeCalls = self.codeCalls
         let otherSession = event.sessionID.flatMap { session in current.sessionID.map { $0 != session } } ?? false
         let heardBefore = status != nil && !otherSession && current.agent == event.agent
         if status != nil, otherSession || current.agent != event.agent {
@@ -307,6 +310,17 @@ public struct AgentStatusMachine: Sendable {
             for index in current.recentToolCalls.indices where current.recentToolCalls[index].finishedAt == nil {
                 current.recentToolCalls[index].finishedAt = now
             }
+            codeCalls.removeAll()
+        }
+
+        /// The tools `execute_code` ran have ended: it runs one at a time, and they end with it.
+        func finishCodeCalls() {
+            guard !codeCalls.isEmpty else { return }
+            for index in current.recentToolCalls.indices
+            where codeCalls.contains(current.recentToolCalls[index].id) && current.recentToolCalls[index].finishedAt == nil {
+                current.recentToolCalls[index].finishedAt = now
+            }
+            codeCalls.removeAll()
         }
 
         func subagentIndex(_ id: String) -> Int {
@@ -447,9 +461,11 @@ public struct AgentStatusMachine: Sendable {
                 current.toolCallsThisTurn = 0
             }
             if !subagentAfterTurn { current.toolCallsThisTurn += 1 }
+            if event.ranFromCode { finishCodeCalls() }
             let call = AgentToolCall(id: event.toolUseID ?? UUID().uuidString, toolName: tool, summary: event.summary,
                                      filePath: event.filePath, startedAt: now, agentID: event.agentID)
             current.recentToolCalls.append(call)
+            if event.ranFromCode { codeCalls.insert(call.id) }
             if current.recentToolCalls.count > maxToolCalls { current.recentToolCalls.removeFirst(current.recentToolCalls.count - maxToolCalls) }
             if let id = event.agentID {
                 let index = subagentIndex(id)
@@ -482,6 +498,7 @@ public struct AgentStatusMachine: Sendable {
 
         case .postToolUse, .postToolUseFailure, .permissionDenied:
             let finished = finish(id: event.toolUseID, tool: event.toolName, failed: event.name != .postToolUse)
+            if event.toolName == "execute_code" { finishCodeCalls() }
             // An Agent call ending says which subagent it started: at once for one sent to the
             // background (`async_launched`), when it finished for one in the foreground.
             if let launch = event.subagentLaunch, let id = launch.agentID {
@@ -588,6 +605,7 @@ public struct AgentStatusMachine: Sendable {
         }
 
         current.forgetOldSubagents(now: now)
+        self.codeCalls = codeCalls
         status = current
         return notes
     }

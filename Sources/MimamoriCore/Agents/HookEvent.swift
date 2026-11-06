@@ -77,6 +77,9 @@ public struct HookEvent: Sendable, Hashable {
     /// Hermes: the task of the turn that made the call. A tool run from `execute_code` names it but
     /// no session, so it tells which session the call belongs to (see `HermesTaskSessions`).
     public var hermesTaskID: String? = nil
+    /// Hermes: a tool `execute_code` ran, which reports its start and never its end. It ends when
+    /// the code's next tool starts, or when `execute_code` does.
+    public var ranFromCode = false
 
     public struct CommandLaunch: Sendable, Hashable {
         public var description: String?
