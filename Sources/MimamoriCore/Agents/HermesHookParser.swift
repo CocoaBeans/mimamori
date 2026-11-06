@@ -38,7 +38,8 @@ public enum HermesHookParser {
         var object = object
         guard let rawName = object["hook_event_name"] as? String else { return nil }
         let extra = object["extra"] as? [String: Any] ?? [:]
-        if let id = extra["tool_call_id"] as? String, object["tool_use_id"] == nil {
+        // Tools run from `execute_code` come with an empty call id, which would make them one call.
+        if let id = extra["tool_call_id"] as? String, !id.isEmpty, object["tool_use_id"] == nil {
             object["tool_use_id"] = id
         }
         if rawName == "pre_llm_call", let prompt = extra["user_message"] as? String {
@@ -62,6 +63,7 @@ public enum HermesHookParser {
         guard var event = HookEventParser.parse(object, receivedAt: receivedAt, agent: .hermes,
                                                 resolveRelativePaths: sessionDirectory != nil) else { return nil }
         event.rawName = rawName
+        event.hermesTaskID = (extra["task_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return event
     }
 }

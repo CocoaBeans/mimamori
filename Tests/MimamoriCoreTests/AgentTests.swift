@@ -171,6 +171,78 @@ struct HermesHookTests {
         #expect(scoped.cwd == "/Users/x/Projects/backend")
     }
 
+    /// A tool `execute_code` runs, as Hermes's hook sends it: no session, no call id, the turn's task.
+    private func kernelPatch(task: String = "task_1", path: String = "/repo/app/a.dart") -> String {
+        #"{"hook_event_name":"pre_tool_call","tool_name":"patch","tool_input":{"path":"\#(path)","old_string":"a","new_string":"b"},"session_id":"","cwd":"/Users/x/.hermes","extra":{"task_id":"\#(task)","tool_call_id":"","turn_id":""}}"#
+    }
+
+    @Test func callsFromExecuteCodeNameTheirTaskButNoSession() throws {
+        let event = try #require(parse(kernelPatch()))
+        #expect(event.sessionID == nil)
+        #expect(event.toolUseID == nil)
+        #expect(event.hermesTaskID == "task_1")
+        #expect(AgentStatus.key(session: event.sessionID, agent: .hermes) == "agent:hermes")
+    }
+
+    @Test func aTaskGivesItsCallsTheSessionThatRanThem() throws {
+        var tasks = HermesTaskSessions()
+        var code = try #require(parse(#"{"hook_event_name":"pre_tool_call","tool_name":"execute_code","tool_input":{"code":"from hermes_tools import patch"},"session_id":"sess_1","cwd":"/Users/x/.hermes","extra":{"task_id":"task_1","tool_call_id":"call_1"}}"#))
+        tasks.resolve(&code)
+        #expect(code.sessionID == "sess_1")
+
+        var patch = try #require(parse(kernelPatch()))
+        tasks.resolve(&patch)
+        #expect(patch.sessionID == "sess_1")
+
+        // A task no call has named stays without a session, as does another agent's event.
+        var unknown = try #require(parse(kernelPatch(task: "task_2")))
+        tasks.resolve(&unknown)
+        #expect(unknown.sessionID == nil)
+        var other = HookEvent(name: .preToolUse, rawName: "PreToolUse", agent: .claudeCode, cwd: "/repo", toolName: "Edit")
+        other.hermesTaskID = "task_1"
+        tasks.resolve(&other)
+        #expect(other.sessionID == nil)
+    }
+
+    @Test func tasksAreForgottenOldestFirst() {
+        var tasks = HermesTaskSessions()
+        for index in 0...HermesTaskSessions.capacity {
+            var event = HookEvent(name: .preToolUse, rawName: "pre_tool_call", agent: .hermes, sessionID: "sess", cwd: "/repo")
+            event.hermesTaskID = "task_\(index)"
+            tasks.resolve(&event)
+        }
+        #expect(tasks.session(forTask: "task_0") == nil)
+        #expect(tasks.session(forTask: "task_1") == "sess")
+        #expect(tasks.session(forTask: "task_\(HermesTaskSessions.capacity)") == "sess")
+    }
+
+    /// One Hermes session edits a file itself, then again from `execute_code`: one agent, no collision.
+    @Test func editsFromExecuteCodeAreNotASecondHermes() throws {
+        let now = Date()
+        var tasks = HermesTaskSessions()
+        var machines: [String: AgentStatusMachine] = [:]
+        func send(_ json: String, at offset: TimeInterval) throws {
+            var event = try #require(HermesHookParser.parse(Data(json.utf8), receivedAt: now.addingTimeInterval(offset)))
+            tasks.resolve(&event)
+            _ = machines[AgentStatus.key(session: event.sessionID, agent: .hermes), default: AgentStatusMachine()].apply(event)
+        }
+        try send(#"{"hook_event_name":"pre_llm_call","session_id":"sess_1","cwd":"/repo","extra":{"user_message":"fix the tests"}}"#, at: -60)
+        try send(#"{"hook_event_name":"pre_tool_call","tool_name":"patch","tool_input":{"path":"/repo/app/a.dart","old_string":"a","new_string":"b"},"session_id":"sess_1","cwd":"/repo","extra":{"task_id":"task_1","tool_call_id":"call_1"}}"#, at: -50)
+        try send(#"{"hook_event_name":"post_tool_call","tool_name":"patch","session_id":"sess_1","cwd":"/repo","extra":{"task_id":"task_1","tool_call_id":"call_1"}}"#, at: -49)
+        try send(#"{"hook_event_name":"pre_tool_call","tool_name":"execute_code","tool_input":{"code":"from hermes_tools import patch"},"session_id":"sess_1","cwd":"/repo","extra":{"task_id":"task_1","tool_call_id":"call_2"}}"#, at: -40)
+        try send(kernelPatch(), at: -39)
+        try send(#"{"hook_event_name":"post_tool_call","tool_name":"patch","session_id":"","cwd":"/Users/x/.hermes","extra":{"task_id":"task_1","tool_call_id":""}}"#, at: -38)
+
+        #expect(Set(machines.keys) == ["sess_1"])
+        let here = WorktreeAgents(statuses: machines.values.compactMap(\.status), processes: [], established: [], now: now) { _ in nil }
+        #expect(here.live.count == 1)
+        #expect(here.collisions.isEmpty)
+        // The kernel's patch finished on its own, leaving execute_code running.
+        let calls = try #require(machines["sess_1"]?.status?.recentToolCalls)
+        #expect(calls.map(\.toolName) == ["patch", "execute_code", "patch"])
+        #expect(calls.map { $0.finishedAt != nil } == [true, false, true])
+    }
+
     @Test func repeatedModelCallsDoNotRestartTheTurn() {
         var machine = AgentStatusMachine()
         func llm(_ t: TimeInterval) -> HookEvent {

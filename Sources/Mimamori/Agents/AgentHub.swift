@@ -207,6 +207,8 @@ final class AgentHub {
     @ObservationIgnored private var hermesDirectories: [String: (directory: String?, at: Date)] = [:]
     /// The Hermes turns running at the last scan, by session, from Hermes's leases on them.
     @ObservationIgnored private var hermesTurns: [String: HermesTurn] = [:]
+    /// The Hermes session of each turn's task, for the calls `execute_code` runs, which name no session.
+    @ObservationIgnored private var hermesTaskSessions = HermesTaskSessions()
     /// Countdowns to answering a permission request by itself, by request id.
     @ObservationIgnored private var autoAnswerTasks: [String: Task<Void, Never>] = [:]
     /// Tests sent from Settings that have arrived, by token, until the test that sent them sees it.
@@ -324,7 +326,9 @@ final class AgentHub {
 
     // MARK: Events
 
-    private func handle(_ event: HookEvent) {
+    private func handle(_ incoming: HookEvent) {
+        var event = incoming
+        hermesTaskSessions.resolve(&event)
         eventsReceived += 1
         settlePermission(movedOnBy: event)
         lastEventAt = event.receivedAt
@@ -343,7 +347,6 @@ final class AgentHub {
         // A subagent works for its session wherever it runs. One in a worktree of its own
         // (`.claude/worktrees/agent-<id>`) reports from there, but belongs on its parent's card: placed
         // by its folder, it moved the whole session there and back with every step.
-        var event = event
         let sessionKey = AgentStatus.key(session: event.sessionID, agent: event.agent)
         let parentWorktree = event.agentID == nil || event.sessionID == nil ? nil
             : machines.first(where: { $0.value[sessionKey] != nil })?.key

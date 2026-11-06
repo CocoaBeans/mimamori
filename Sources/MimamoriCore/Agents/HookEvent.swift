@@ -74,6 +74,9 @@ public struct HookEvent: Sendable, Hashable {
     /// The worktree a subagent works in, when it isn't its session's: one Claude Code made for it.
     /// Set by whoever places the event.
     public var subagentWorktree: String? = nil
+    /// Hermes: the task of the turn that made the call. A tool run from `execute_code` names it but
+    /// no session, so it tells which session the call belongs to (see `HermesTaskSessions`).
+    public var hermesTaskID: String? = nil
 
     public struct CommandLaunch: Sendable, Hashable {
         public var description: String?
@@ -300,7 +303,8 @@ public enum HookEventParser {
 
         var event = HookEvent(
             name: name, rawName: rawName, agent: agent,
-            sessionID: object["session_id"] as? String,
+            // Hermes sends "" when it has no session for a call.
+            sessionID: (object["session_id"] as? String).flatMap { $0.isEmpty ? nil : $0 },
             cwd: cwd,
             transcriptPath: object["transcript_path"] as? String,
             toolName: toolName,
