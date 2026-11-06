@@ -75,11 +75,14 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 
 <p align="center"><img src="docs/mimamori-agents.png" width="460" alt="The Agents window: Codex waiting for permission to run a migration, Claude Code working through its steps, Gemini CLI ready for its next prompt, and Cursor's ended session folded away, each card led by its project's icon, with its task, turn timeline, latest steps and files"></p>
 
+- **Follows subagents and background work.** When Claude Code hands work to subagents, its agent stays in Working, "waiting on 2 subagents", and "finished a turn" waits for the last. Its card and banner list each subagent's kind, task, steps and latest step, and commands it left running in the background, with how each ended. See [Subagents](#subagents).
+
 - **Puts idle agents to sleep, if you let it.** Off until you turn it on in Settings › General › Sleeping agents. An agent waiting for your next prompt still holds hundreds of megabytes; the moon in its banner, or **Put … to Sleep…** in the worktree's context menu, stops it and keeps its session.
   - It works for Claude Code and Codex, and only between turns: Mimamori refuses while an agent here is working or waiting on you, or can't say which session it runs, and looks again just before it stops anything. It sends the agent SIGTERM, as closing its terminal would, and checks each process is still the one it saw start.
   - A sleeping agent shows a moon in the sidebar and a card above the diff with its last task. **Wake** writes a short script that removes itself as it runs and opens it in your terminal: it changes to the worktree and runs `claude --resume <session>` or `codex resume <session>`, leaving a shell there when the agent quits. Copy the command instead to resume it wherever you like; Mimamori notices the session is awake either way.
 
 - **Lives in the menu bar.** A glance shows total changed and flagged files, and how many agents are waiting for you. Click it for a popover drawn like the desktop widget: each agent at work with a live timer, its task and latest steps, grouped under Needs you, Working, Ready and Ended as in the Agents window, then every repository and worktree with what changed. Click an agent or a worktree to open it in Mimamori. Fold the Agents or Worktrees section, or any of the agents' groups, away by its header, and pin the popover (the pin at its foot) to keep it open as a small window that floats above the others; it opens again at launch until you unpin it.
+- **Reaches your iPhone.** Pair an iPhone in Settings › iPhone and, on the same network, it shows your agents as the Agents window does, tells you when one needs you or finishes a turn, and lets you Allow or Deny Claude Code's permission requests, with Face ID before Allow. Off until you turn it on, and encrypted with a key of each phone's own. The iPhone app is built from source for now; see [iPhone companion](#iphone-companion).
 
 <p align="center"><img src="docs/mimamori-menu-bar.png" width="360" alt="The menu-bar popover: Codex under Needs you, Claude Code under Working, Gemini CLI under Ready and Cursor under Ended, each with its timer, task and latest steps, then the web shop's and the iPhone app's worktrees with what changed in each"></p>
 
@@ -454,10 +457,12 @@ Debug builds of the iPhone app take launch arguments too, for a simulator (`xcru
 
 ## What's next
 
-The [roadmap](ROADMAP.md) lists what is planned. The two larger pieces have plans of their own in [docs/plans](docs/plans):
+The [roadmap](ROADMAP.md) lists what is planned. The larger pieces have plans of their own in [docs/plans](docs/plans):
 
 - Reading an agent's transcript while its hooks are silent, opt-in, so a session without hooks still shows its task and steps ([transcript-adapter.md](docs/plans/transcript-adapter.md)). Its first step is built: a turn already under way when Mimamori starts shows its real start.
-- An iPhone companion: the agents at work, who needs you, and Allow or Deny from the phone ([iphone-companion.md](docs/plans/iphone-companion.md)).
+- The iPhone companion beyond your own network, through Tailscale, and a Live Activity ([iphone-companion.md](docs/plans/iphone-companion.md)). On the same network it's built.
+- Sending review notes to the agent, which picks them up through its hooks, rather than copying them as a prompt ([review-notes.md](docs/plans/review-notes.md)).
+- A history of agent sessions per worktree: what each was asked, what it changed, and a command to resume it ([session-history.md](docs/plans/session-history.md)).
 
 An idea not planned yet: a timeline scrubber across snapshots.
 

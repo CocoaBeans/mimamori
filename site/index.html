@@ -289,6 +289,10 @@
           <p>It shows which worktree each agent is in and, with hooks connected, each tool call, when a turn ends, and when one needs your permission.</p>
         </div>
         <div class="card">
+          <h3><span class="dot" style="background:var(--type)"></span>Follows subagents</h3>
+          <p>When Claude Code hands work to subagents, its card stays at work until the last one finishes, and lists each with its task and latest step. Commands left running in the background show too.</p>
+        </div>
+        <div class="card">
           <h3><span class="dot" style="background:var(--removed)"></span>Flags what deserves a look</h3>
           <p>Secrets and <code>.env</code> files, lockfiles, CI and agent instruction files, skipped or deleted tests, mass deletions, conflict markers, and edits outside your scope.</p>
         </div>
@@ -309,8 +313,16 @@
           <p>When Claude Code asks to run something, allow or deny it from Mimamori: the agent's banner, the Agents window or a notification.</p>
         </div>
         <div class="card">
+          <h3><span class="dot" style="background:var(--link)"></span>Reaches your iPhone</h3>
+          <p>Pair an iPhone on the same network to see your agents there, hear when one needs you, and allow or deny with Face ID. Encrypted, and off until you turn it on. The iPhone app is built from source for now.</p>
+        </div>
+        <div class="card">
           <h3><span class="dot" style="background:var(--ident)"></span>Throws a change away, if you let it</h3>
           <p>Discard a hunk or a whole file from an uncommitted diff. It's off until you turn it on, waits while an agent is mid-turn, and keeps a snapshot so Undo can put it back.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--ember)"></span>Puts idle agents to sleep</h3>
+          <p>An agent waiting for your next prompt still holds hundreds of megabytes. Put Claude Code or Codex to sleep between turns, and Wake resumes its session in your terminal.</p>
         </div>
         <div class="card">
           <h3><span class="dot" style="background:var(--keyword)"></span>Writes up a session</h3>
@@ -324,7 +336,7 @@
     <div class="wrap split">
       <div>
         <h2>Every agent, at a glance</h2>
-        <p class="lede">The Agents window lists each worktree with an agent in it, grouped under Needs you, Working, Ready and Ended. Each card shows the agent's task, its latest steps, the files it touched, and a strip of its tool calls over time. The menu bar's popover groups them the same way, and a desktop widget keeps the one that needs you in view.</p>
+        <p class="lede">The Agents window lists each worktree with an agent in it, grouped under Needs you, Working, Ready and Ended. Each card shows the agent's task, its latest steps, the files it touched, and a strip of its tool calls over time. The menu bar's popover groups them the same way, and a desktop widget keeps the one that needs you in view. A paired iPhone shows them too.</p>
         <ul class="agents" aria-label="Agents Mimamori recognises">
           <li>Claude Code</li><li>Codex</li><li>Gemini CLI</li><li>Cursor</li><li>Aider</li><li>Hermes</li><li>Goose</li><li>OpenCode</li><li>Amp</li>
         </ul>
@@ -340,7 +352,7 @@
       <p class="lede">Mimamori can watch any repository while another tool is busy in it, because it never gets in the way.</p>
       <ul class="checks">
         <li><strong>Leaves your work alone.</strong> It never stages, commits, checks out or takes the repository's <code>index.lock</code>. Your branches and index stay as they are, and so does your code, unless you turn on discarding a hunk or a file.</li>
-        <li><strong>Talks to nothing but your local git.</strong> No account and no telemetry. Agents reach it through a socket only your own processes can use.</li>
+        <li><strong>Stays on your Mac.</strong> No account and no telemetry. Agents reach it through a socket only your own processes can use. If you pair an iPhone, Mimamori talks to it over your own network, encrypted with a key that phone alone holds; it's off until you turn it on.</li>
         <li><strong>Automatic updates.</strong> Official release builds ask GitHub for the list of releases when you check for updates, or once a day if you agree. Nothing about you or your Mac goes with it.</li>
         <li><strong>Open source.</strong> MIT licensed, so you can read every line or build it yourself.</li>
       </ul>
