@@ -91,14 +91,19 @@ final class CompanionModel {
         self.browser = browser
     }
 
-    /// The app came back to the front: reconnect if the connection was lost, else ask for
-    /// what's current.
+    /// The app came back to the front: connect afresh. A connection kept from before iOS
+    /// suspended the app may be dead without knowing it yet, showing old states as current.
     func resume() {
-        if connection == nil {
-            connectToChosen()
-        } else {
-            refresh()
-        }
+        attempts = 0
+        connectToChosen()
+    }
+
+    /// The app went to the background, where iOS suspends it: say goodbye, so the Mac lets go at
+    /// once rather than when TCP notices.
+    func suspend() {
+        retry?.cancel()
+        disconnect()
+        if case .connected = status { status = .searching }
     }
 
     /// Asks the Mac for a snapshot now.

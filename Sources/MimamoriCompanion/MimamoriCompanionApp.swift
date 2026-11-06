@@ -22,7 +22,11 @@ struct MimamoriCompanionApp: App {
                 // The Mac's pairing code, opened from the Camera.
                 .onOpenURL { url in model.pair(with: url) }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { model.resume() }
+                    switch phase {
+                    case .active: model.resume()
+                    case .background: model.suspend()
+                    default: break
+                    }
                 }
         }
     }
@@ -50,9 +54,11 @@ struct AgentsScreen: View {
                                 .foregroundStyle(.secondary)
                                 .padding(.top, 8)
                         }
-                        // Steps' ages and the timeline's end move with the clock.
+                        // Steps' ages and the timeline's end move with the clock. A plain stack, and
+                        // cards keyed by group too: a lazy stack kept showing a card in the group it
+                        // had left, under that group's old count.
                         TimelineView(.periodic(from: .now, by: 5)) { context in
-                            LazyVStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 ForEach(AgentGroup.group(snapshot.agents), id: \.group) { entry in
                                     let collapsed = isCollapsed(entry.group)
                                     AgentGroupHeader(group: entry.group, agents: entry.agents, collapsed: collapsed) {
@@ -62,6 +68,7 @@ struct AgentsScreen: View {
                                     if !collapsed {
                                         ForEach(entry.agents) { agent in
                                             AgentCardView(agent: agent, detailed: detailed, now: context.date)
+                                                .id("\(entry.group.rawValue) \(agent.id)")
                                         }
                                     }
                                 }
