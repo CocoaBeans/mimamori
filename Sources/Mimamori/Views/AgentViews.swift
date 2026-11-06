@@ -202,6 +202,15 @@ struct AgentPresenceBadge: View {
     }
 }
 
+extension AgentPresence {
+    /// The agent, then in a quieter style the session's title, so it reads apart from the status
+    /// that follows: "Claude Code · Weekly disk cleanup check".
+    var labelText: Text {
+        guard let title else { return Text(kind.displayName) }
+        return Text(kind.displayName) + Text(" · \(title)").foregroundStyle(.secondary)
+    }
+}
+
 /// The full status line shown in a worktree header.
 struct AgentStatusLine: View {
     let presence: AgentPresence
@@ -210,14 +219,16 @@ struct AgentStatusLine: View {
     var body: some View {
         HStack(spacing: 6) {
             AgentGlyph(presence: presence)
-            Text(presence.label)
+            presence.labelText
                 .fontWeight(.medium)
                 .lineLimit(1)
             Text("·").foregroundStyle(.tertiary)
+            // What it's doing matters more than its title: the title gives way first.
             Text(presence.statusText)
                 .foregroundStyle(presence.needsAttention ? presence.tint : .secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .layoutPriority(1)
             Spacer(minLength: 6)
             if presence.source == .hooks, presence.toolCallsThisTurn > 0, case .working = presence.activity {
                 Text("\(presence.toolCallsThisTurn) tools")
@@ -614,7 +625,7 @@ struct OtherAgentLine: View {
         HStack(spacing: 6) {
             AgentGlyph(presence: presence)
                 .frame(width: 14)
-            Text(presence.label)
+            presence.labelText
                 .fontWeight(.medium)
                 .lineLimit(1)
             Text("·").foregroundStyle(.tertiary)
@@ -622,6 +633,7 @@ struct OtherAgentLine: View {
                 .foregroundStyle(presence.needsAttention ? presence.tint : .secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .layoutPriority(1)
             Spacer(minLength: 6)
             Text(presence.timing(now: now))
                 .foregroundStyle(.tertiary)

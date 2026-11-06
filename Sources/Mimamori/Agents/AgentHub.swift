@@ -408,7 +408,7 @@ final class AgentHub {
             for earlier in held { notes += machine.apply(Self.anchored(earlier, in: worktree)) }
         }
         notes += machine.apply(Self.anchored(event, in: worktree))
-        refreshTitle(of: &machine, key: key, after: event)
+        refreshTitle(of: key, after: event)
         if let status = machine.status, let start = recordedTurnStart(for: status) { machine.backdateTurn(to: start) }
         machines[worktree, default: [:]][key] = machine
         if let id = event.permissionRequestID {
@@ -695,18 +695,29 @@ final class AgentHub {
         publishStatuses()
     }
 
-    /// Reads a Claude Code session's title from its transcript: at its first event, when a turn
-    /// starts or ends or it asks permission (the moments a title is written, or matters), and
-    /// otherwise every few minutes. A read is of the transcript's end only.
-    private func refreshTitle(of machine: inout AgentStatusMachine, key: String, after event: HookEvent) {
+    /// When Claude Code writes a session's title: as a session or a turn starts, and as a turn ends.
+    private static let titleMoments: Set<HookEvent.Name> = [.sessionStart, .userPromptSubmit, .stop]
+
+    /// Reads a Claude Code session's title from its transcript: at its first event, at the moments
+    /// a title is written, and otherwise every few minutes. A read is of the transcript's end only,
+    /// and runs off the main thread, since it takes a few milliseconds. A permission request finds
+    /// the title its turn's prompt read.
+    private func refreshTitle(of key: String, after event: HookEvent) {
         guard event.agent == .claudeCode, event.agentID == nil, let path = event.transcriptPath else { return }
         let now = Date()
-        let moments: Set<HookEvent.Name> = [.sessionStart, .userPromptSubmit, .stop, .permissionRequest]
-        if let last = titleReads[key], now.timeIntervalSince(last) < (moments.contains(event.name) ? 5 : 300) { return }
+        if let last = titleReads[key], now.timeIntervalSince(last) < (Self.titleMoments.contains(event.name) ? 5 : 300) { return }
         titleReads[key] = now
         if titleReads.count > 200 { titleReads = titleReads.filter { now.timeIntervalSince($0.value) < 3600 } }
-        // A turn with a lot of output can push the title out of the end that's read: keep the last one.
-        if let title = ClaudeSessionTitle.read(transcript: URL(fileURLWithPath: path)) { machine.setTitle(title) }
+        let transcript = URL(fileURLWithPath: path)
+        Task { [weak self] in
+            let title = await Task.detached(priority: .utility) { ClaudeSessionTitle.read(transcript: transcript) }.value
+            // A turn with a lot of output can push the title out of the end that's read: keep the last one.
+            guard let title, let self,
+                  let worktree = self.machines.first(where: { $0.value[key] != nil })?.key,
+                  var machine = self.machines[worktree]?[key], machine.setTitle(title) else { return }
+            self.machines[worktree]?[key] = machine
+            self.schedulePublish(urgent: false)
+        }
     }
 
     /// The directory Hermes records for the event's session. A session's row is written when its

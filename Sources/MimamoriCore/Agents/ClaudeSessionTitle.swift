@@ -29,10 +29,9 @@ public enum ClaudeSessionTitle {
         if !fromStart, !lines.isEmpty { lines.removeFirst() }
         var automatic: String?
         for line in lines.reversed() {
-            // A cheap look first: most lines are messages, and some are long.
-            guard line.count < 4096, let text = String(data: line, encoding: .utf8),
-                  text.contains("-title\"") else { continue }
-            guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
+            // A cheap look at the bytes first: most lines are messages, and some are long.
+            guard line.count < 4096, line.range(of: titleMarker) != nil,
+                  let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
             switch object["type"] as? String {
             case "custom-title":
                 if let title = cleaned(object["customTitle"]) { return title }
@@ -44,6 +43,9 @@ public enum ClaudeSessionTitle {
         }
         return automatic
     }
+
+    /// Part of both title lines' types, `"custom-title"` and `"ai-title"`.
+    private static let titleMarker = Data(#"-title""#.utf8)
 
     private static func cleaned(_ value: Any?) -> String? {
         guard let text = value as? String else { return nil }

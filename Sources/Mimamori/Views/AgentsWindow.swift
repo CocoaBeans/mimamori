@@ -335,7 +335,7 @@ struct AgentDashboardRow: View {
                     }
                     AgentTimerPill(presence: presence, now: now)
                 }
-                Text("\(presence.label) · \(statusText)")
+                (presence.labelText + Text(" · \(statusText)"))
                     .foregroundStyle(presence.source == .hooks && presence.activity.needsAttention ? presence.tint : .primary)
                     .lineLimit(2)
                     .truncationMode(.tail)
