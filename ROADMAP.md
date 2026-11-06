@@ -101,6 +101,9 @@ state, never on a loop.
 - [ ] On the iPhone companion, an agent's changed files and their diffs: the list as the Mac shows
       it, with flags and review state, and a diff to read on the phone. A large piece, still to be
       planned.
+- [ ] A "Last turn" baseline: everything an agent's turn changed, as one diff, however many
+      commits it made along the way. A snapshot when the turn starts, from its hooks, is the
+      baseline, and earlier turns can be picked the same way.
 - [x] See an agent's subagents: keep its card active while they run, and show each one's kind,
       task, time and latest step, on the Mac and the iPhone; and the commands it runs in the
       background ([docs/plans/subagents.md](docs/plans/subagents.md)).
