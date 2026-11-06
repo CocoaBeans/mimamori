@@ -1,6 +1,7 @@
 # Plan: review notes the agent reads
 
-> **Proposed; spike done.** Nothing is built yet. A spike on Claude Code 2.1.318 (see "Spike
+> **Step 2 built; step 3 next.** Notes in the diff are built, with Copy as Prompt (see "Steps");
+> sending them to the agent through its hooks is not. A spike on Claude Code 2.1.318 (see "Spike
 > results") showed that a `Stop` hook with `asyncRewake` can wait on Mimamori after a turn and
 > wake the session when notes arrive, at an idle prompt or after a running turn. Opus 5.5 and
 > Haiku 5.5 both acted on realistic notes. The one real risk is how Claude Code labels what the

@@ -89,19 +89,26 @@ state, never on a loop.
       ([docs/plans/desktop-widgets.md](docs/plans/desktop-widgets.md)).
 - [x] Discard a hunk or a whole file from an uncommitted diff: off until you turn it on, refused
       while an agent is mid-turn, after a snapshot, with Undo.
-- [ ] An iPhone companion: the agents at work, who needs you, and Allow or Deny from the phone, on
-      the same network first, then over cellular
-      ([docs/plans/iphone-companion.md](docs/plans/iphone-companion.md)).
-- [ ] On the iPhone companion, tap an agent's card for its list of actions: each step of its turn,
+- [x] An iPhone companion on the same network: the agents at work, who needs you, and Allow or
+      Deny from the phone, paired with a key of its own; notifications while it's in your pocket,
+      in builds of your own ([docs/plans/iphone-companion.md](docs/plans/iphone-companion.md)).
+- [x] On the iPhone companion, tap an agent's card for its list of actions: each step of its turn,
       then the turns before it, with what each acted on and whether it failed
       ([An agent's actions](docs/plans/iphone-companion.md#an-agents-actions)).
-- [ ] See an agent's subagents: keep its card active while they run, and show each one's kind,
-      task, time and latest step, on the Mac and the iPhone
-      ([docs/plans/subagents.md](docs/plans/subagents.md)).
-- [ ] Review notes: comment on lines in the diff and send the notes to the agent, which picks
-      them up through its hooks ([docs/plans/review-notes.md](docs/plans/review-notes.md)).
-- [ ] Read an agent's transcript while its hooks are silent, opt-in, and give a turn already under
-      way at launch its real start ([docs/plans/transcript-adapter.md](docs/plans/transcript-adapter.md)).
+- [ ] The iPhone companion over cellular, through Tailscale, and a Live Activity; later,
+      notifications through CloudKit for an App Store build
+      ([Steps](docs/plans/iphone-companion.md#steps)).
+- [x] See an agent's subagents: keep its card active while they run, and show each one's kind,
+      task, time and latest step, on the Mac and the iPhone; and the commands it runs in the
+      background ([docs/plans/subagents.md](docs/plans/subagents.md)).
+- [x] Review notes in the diff: comment on lines or a whole file, follow them as the file changes,
+      and copy them as one prompt for the agent.
+- [ ] Send review notes to the agent, which picks them up through its hooks, Claude Code first
+      ([docs/plans/review-notes.md](docs/plans/review-notes.md)).
+- [x] Give a turn already under way at launch its real start, for Claude Code and Hermes, from
+      their own records and without reading transcripts.
+- [ ] Read an agent's transcript while its hooks are silent, opt-in
+      ([docs/plans/transcript-adapter.md](docs/plans/transcript-adapter.md)).
 - [ ] A history of agent sessions per worktree: what each was asked, what it changed, its notes
       and pull request, with a command to resume it or a prompt to hand it on
       ([docs/plans/session-history.md](docs/plans/session-history.md)).
