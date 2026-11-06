@@ -329,9 +329,13 @@ Open `Mimamori.xcodeproj` in Xcode to build, run and sign the app: the **Mimamor
 ```bash
 Scripts/make-app.sh             # build/Mimamori.app via xcodebuild, team-signed (debug|release)
 MIMAMORI_SIGN=adhoc Scripts/make-app.sh   # signed ad hoc, for a Mac without the team's certificate
+Scripts/make-apps.sh            # the Mac app as above, plus the iPhone companion installed on your iPhone; opens both
+Scripts/make-apps.sh --list     # the iPhones it can install on (--device <name or id> picks one of several)
 swift test                      # parsers, rules, differ, plus integration tests against real git
 swift build                     # the same app as a Swift package, for `swift run` and the debug hooks
 ```
+
+`make-apps.sh` installs the companion on the one iPhone that's ready: Developer Mode on, unlocked, and on the cable or the same Wi-Fi. The first build registers the iPhone and the app's ID with the team, which an iPhone app needs; it can't be signed ad hoc. `--no-mac`, `--no-phone` and `--no-launch` leave out a part.
 
 `make-app.sh` stamps the commit it builds from into the app (`MimamoriCommit` in Info.plist, passed to `xcodebuild` as `MIMAMORI_COMMIT`), with `-dirty` when tracked files have uncommitted changes. **About Mimamori** shows it under the version, linked to the commit, and Copy Diagnostics includes it. A build made straight from Xcode has none.
 

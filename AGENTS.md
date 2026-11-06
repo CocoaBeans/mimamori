@@ -12,6 +12,8 @@ agent working here, often alongside other sessions.
   A DerivedData folder of your own keeps you out of other builds running at the same time.
 - `Scripts/make-app.sh` builds `build/Mimamori.app`, the copy the maintainer runs. Run it only when
   the task is to rebuild that copy. `MIMAMORI_SIGN=adhoc` signs without the project's team.
+  `Scripts/make-apps.sh` does the same and installs the iPhone companion on the maintainer's iPhone,
+  so the same rule holds; `--list` shows the iPhones it would use, and builds nothing.
 - **CI compiles with Xcode 16.4 and Swift 6.1**, older than a current Mac's toolchain. Code that
   builds locally can fail there:
   - long expressions built from many `+` or chained calls fail with "unable to type-check this
