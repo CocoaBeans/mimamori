@@ -1,7 +1,43 @@
 import Foundation
 
+/// Which pairing a connection is, once its phone has proved it: the challenge's nonce, and the
+/// pairing whose secret answered it. TLS lets in any phone holding a paired key, so without this
+/// one paired phone could answer under another's name.
+public struct CompanionConnectionIdentity: Sendable {
+    public enum Outcome: Equatable, Sendable {
+        case verified(String)
+        /// The same pairing proved again: nothing changes.
+        case alreadyVerified
+        /// Proved one pairing already; a connection is only ever one.
+        case conflicting
+        /// No paired phone has that id.
+        case unknownPairing
+        /// The MAC isn't that pairing's for this nonce.
+        case mismatch
+    }
+
+    /// What the phone signs; sent in the connection's challenge.
+    public let nonce: Data
+    public private(set) var verifiedPairingID: String?
+
+    public init(nonce: Data = CompanionProof.newNonce()) {
+        self.nonce = nonce
+    }
+
+    /// Checks `proof` against `secret`, the secret paired under `proof.pairingID`, if any.
+    public mutating func check(_ proof: CompanionMessage.Proof, secret: Data?) -> Outcome {
+        if let verifiedPairingID {
+            return proof.pairingID == verifiedPairingID ? .alreadyVerified : .conflicting
+        }
+        guard let secret else { return .unknownPairing }
+        guard CompanionProof.isValid(proof.mac, secret: secret, nonce: nonce, pairingID: proof.pairingID) else { return .mismatch }
+        verifiedPairingID = proof.pairingID
+        return .verified(proof.pairingID)
+    }
+}
+
 /// Whether Allow or Deny from an iPhone may settle a permission request. Allow runs a command on
-/// the Mac, so it counts only from a phone that is paired and said which pairing it is, while
+/// the Mac, so it counts only from a phone that is paired and proved which pairing it is, while
 /// Mimamori answers requests at all, and only for a request that still waits. Anything else, such
 /// as an answer to a request already answered on the Mac, is turned down and changes nothing.
 public enum CompanionAnswerCheck {
@@ -13,13 +49,14 @@ public enum CompanionAnswerCheck {
     }
 
     /// - Parameters:
-    ///   - pairingID: the pairing the connection said hello with; nil before it has.
+    ///   - pairingID: the pairing the connection proved it is (`CompanionConnectionIdentity`), not
+    ///     the one its hello claims; nil before it has.
     ///   - phones: paired phones' names, by pairing id.
     ///   - answering: "Answer permission requests in Mimamori" is on.
     ///   - pending: the ids of the requests waiting for an answer now.
     public static func verdict(for answer: CompanionMessage.Answer, pairingID: String?, phones: [String: String],
                                answering: Bool, pending: Set<String>) -> Verdict {
-        guard let pairingID else { return .refuse("This iPhone hasn't said who it is yet. Try again in a moment.") }
+        guard let pairingID else { return .refuse("This iPhone hasn't proved which pairing it is yet. Try again in a moment.") }
         guard let phone = phones[pairingID] else { return .refuse("This iPhone isn't paired with the Mac any more.") }
         guard answering else {
             return .refuse("Mimamori on the Mac doesn't answer permission requests now. Answer in the agent's own prompt.")

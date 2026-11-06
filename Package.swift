@@ -11,7 +11,8 @@ let package = Package(
     ],
     targets: [
         // What the Mac and the iPhone companion share: the agents snapshot, repository colors and
-        // the companion's messages. Foundation only, so it builds for both.
+        // the companion's messages, TLS and proofs. Foundation, Network, Security and CryptoKit only,
+        // so it builds for both.
         .target(name: "MimamoriShared"),
 
         // Everything that knows about git, the file system and change analysis.

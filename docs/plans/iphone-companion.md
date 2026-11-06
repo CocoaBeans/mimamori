@@ -5,7 +5,9 @@
 > notifications came next, ahead of the rest of step 2. Then Allow and Deny, on the cards and on
 > the notifications, with Face ID before Allow and the auto-answer countdown: the snapshot's
 > `permissionRequest`, and the phone's `answer`, which the Mac acts on only from a paired phone for
-> a request still waiting (`CompanionAnswerCheck`). Next: an agent's list of actions. Builds of
+> a request still waiting (`CompanionAnswerCheck`). Which paired phone is proved per connection:
+> the Mac's `challenge` nonce, answered by an HMAC under the pairing's secret (`CompanionProof`),
+> since TLS alone shows only that a phone holds one of the keys. Next: an agent's list of actions. Builds of
 > your own come first: same network, then the silent-audio keep-alive with "needs you"
 > notifications, then Tailscale. CloudKit and a relay wait for an App Store build.
 > The Mac side stays on macOS 15 with `NWListener` (see "Decided").

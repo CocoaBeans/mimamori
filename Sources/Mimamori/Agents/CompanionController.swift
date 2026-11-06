@@ -36,6 +36,7 @@ final class CompanionController {
         self.keychain = keychain
         pairings = CompanionPairings.load(from: url)
         publisher.onHello = { [weak self] hello in self?.said(hello) }
+        publisher.secret = { [weak self] pairingID in self?.secret(for: pairingID) }
         publisher.onAnswer = { [weak self] answer, pairingID in
             self?.answered(answer, pairingID: pairingID)
                 ?? CompanionMessage.AnswerResult(requestID: answer.requestID, accepted: false)
@@ -160,8 +161,16 @@ final class CompanionController {
         save()
     }
 
-    /// A phone's Allow or Deny: settled only if it comes from a paired phone, for a request that
-    /// still waits (`CompanionAnswerCheck`).
+    /// The secret a phone proves `pairingID` with: a paired phone's, or the code's on show. Nil for
+    /// any other id, such as a phone removed here whose key is gone.
+    private func secret(for pairingID: String) -> Data? {
+        let paired = pairings.phones.contains { $0.id == pairingID }
+        guard paired || pairingCode?.key.identity == pairingID else { return nil }
+        return keychain.key(for: pairingID)?.secret
+    }
+
+    /// A phone's Allow or Deny: settled only if it comes from a phone that proved it's paired, for
+    /// a request that still waits (`CompanionAnswerCheck`).
     private func answered(_ answer: CompanionMessage.Answer, pairingID: String?) -> CompanionMessage.AnswerResult {
         let requests = permissionRequests()
         let phones = Dictionary(pairings.phones.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })

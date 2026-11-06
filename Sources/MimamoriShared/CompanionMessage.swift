@@ -2,11 +2,12 @@ import Foundation
 
 /// What the Mac and the iPhone companion say to each other: one JSON message per line.
 ///
-/// Mac to phone: the agents, the same snapshot the desktop widgets draw, and what became of an
-/// answer. Phone to Mac: who it is, once connected, "send me a fresh snapshot", and Allow or Deny
-/// for a permission request. Each message carries the version of the format it was written in, so
-/// the two apps can be updated at different times: an older Mac ignores an answer it doesn't know,
-/// and an older phone the request it can't answer.
+/// Mac to phone: a challenge, first thing; the agents, the same snapshot the desktop widgets draw;
+/// and what became of an answer. Phone to Mac: who it is, once connected, its proof of that, "send
+/// me a fresh snapshot", and Allow or Deny for a permission request. Each message carries the
+/// version of the format it was written in, so the two apps can be updated at different times: an
+/// older Mac ignores an answer or a proof it doesn't know, and an older phone a challenge or a
+/// request it can't answer.
 public struct CompanionMessage: Codable, Sendable, Equatable {
     /// The Bonjour service the Mac advertises and the phone browses for.
     public static let serviceType = "_mimamori._tcp"
@@ -25,6 +26,30 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
     public var answer: Answer?
     /// What the Mac did with an answer; Mac to phone.
     public var answerResult: AnswerResult?
+    /// A fresh nonce for the phone to prove its pairing with, first thing on a connection; Mac to phone.
+    public var challenge: Challenge?
+    /// The phone's proof of which pairing it is (`CompanionProof`); phone to Mac.
+    public var proof: Proof?
+
+    /// Base64 in the JSON, as `Data` is by default.
+    public struct Challenge: Codable, Sendable, Equatable {
+        public var nonce: Data
+
+        public init(nonce: Data) {
+            self.nonce = nonce
+        }
+    }
+
+    public struct Proof: Codable, Sendable, Equatable {
+        public var pairingID: String
+        /// HMAC-SHA256 of the challenge's nonce and `pairingID`, under the pairing's secret.
+        public var mac: Data
+
+        public init(pairingID: String, mac: Data) {
+            self.pairingID = pairingID
+            self.mac = mac
+        }
+    }
 
     /// Allow or Deny for one request, by its id. The Mac acts on it only while that request still
     /// waits, so an answer that arrives late, or names something else, does nothing.
@@ -68,13 +93,15 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
     }
 
     public init(snapshot: AgentWidgetSnapshot? = nil, wantsSnapshot: Bool? = nil, hello: Hello? = nil,
-                answer: Answer? = nil, answerResult: AnswerResult? = nil) {
+                answer: Answer? = nil, answerResult: AnswerResult? = nil, challenge: Challenge? = nil, proof: Proof? = nil) {
         self.version = Self.currentVersion
         self.snapshot = snapshot
         self.wantsSnapshot = wantsSnapshot
         self.hello = hello
         self.answer = answer
         self.answerResult = answerResult
+        self.challenge = challenge
+        self.proof = proof
     }
 
     /// The message as one line, ending in a newline. JSON escapes newlines inside strings, so

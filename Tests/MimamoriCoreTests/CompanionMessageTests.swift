@@ -127,6 +127,28 @@ struct CompanionMessageTests {
         #expect(before.answer == nil && before.answerResult == nil)
     }
 
+    @Test func aChallengeAndProofSurviveTheTripAndOlderAppsIgnoreThem() throws {
+        var reader = CompanionLineReader()
+        let challenge = CompanionMessage(challenge: .init(nonce: Data(repeating: 3, count: 32)))
+        let proof = CompanionMessage(proof: .init(pairingID: "pairing-1", mac: Data(repeating: 4, count: 32)))
+        let lines = reader.lines(adding: try challenge.line() + proof.line())
+        #expect(try CompanionMessage(line: lines[0]) == challenge)
+        #expect(try CompanionMessage(line: lines[1]) == proof)
+        // Base64 in the JSON.
+        #expect(String(decoding: lines[0], as: UTF8.self).contains(Data(repeating: 3, count: 32).base64EncodedString()))
+
+        // An older phone reads a challenge, and an older Mac a proof, as nothing to act on.
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        for line in lines {
+            let old = try decoder.decode(OldMessage.self, from: line)
+            #expect(old.snapshot == nil && old.wantsSnapshot == nil && old.hello == nil)
+        }
+        // And a newer phone or Mac reads the other's older messages without either.
+        let hello = try CompanionMessage(line: line(#"{"version":1,"hello":{"pairingID":"p","deviceName":"iPhone"}}"#))
+        #expect(hello.challenge == nil && hello.proof == nil && hello.hello?.pairingID == "p")
+    }
+
     @Test func fieldsFromANewerVersionAreIgnored() throws {
         let message = try CompanionMessage(line: line(#"{"version":2,"wantsSnapshot":true,"somethingNew":[1,2]}"#))
         #expect(message.version == 2)

@@ -33,12 +33,8 @@ struct CompanionAnswerTests {
         }
     }
 
-    @Test func onlyAPairedPhoneThatSaidWhoItIsCanAnswer() {
-        guard case .refuse = verdict(allow, pairingID: nil) else {
-            Issue.record("A phone that hadn't said hello answered")
-            return
-        }
-        // Holds a key TLS took, but names a pairing that's gone, such as one removed on the Mac.
+    @Test func onlyAPairingStillListedCanAnswer() {
+        // Proved a pairing that's gone since, such as one removed on the Mac.
         guard case .refuse(let reason) = verdict(allow, pairingID: "pairing-removed") else {
             Issue.record("An unpaired phone answered")
             return
@@ -52,6 +48,72 @@ struct CompanionAnswerTests {
             return
         }
         #expect(reason.contains("own prompt"))
+    }
+
+    @Test func anUnprovedConnectionCantAnswer() {
+        // Nil is what the publisher passes until the connection's proof holds, whatever its hello claimed.
+        guard case .refuse(let reason) = verdict(allow, pairingID: nil) else {
+            Issue.record("An unproved connection answered")
+            return
+        }
+        #expect(reason.contains("hasn't proved"))
+    }
+
+    // MARK: Proving the pairing
+
+    private let secret = Data(repeating: 7, count: 32)
+    private let otherSecret = Data(repeating: 9, count: 32)
+    private let nonce = Data((0..<32).map { UInt8($0) })
+
+    private func proof(_ pairingID: String = "pairing-1", secret: Data? = nil, nonce: Data? = nil,
+                       claiming claimed: String? = nil) -> CompanionMessage.Proof {
+        let mac = CompanionProof.mac(secret: secret ?? self.secret, nonce: nonce ?? self.nonce, pairingID: pairingID)
+        return CompanionMessage.Proof(pairingID: claimed ?? pairingID, mac: mac)
+    }
+
+    @Test func aCorrectProofVerifiesTheConnection() {
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.verifiedPairingID == nil)
+        #expect(identity.check(proof(), secret: secret) == .verified("pairing-1"))
+        #expect(identity.verifiedPairingID == "pairing-1")
+        #expect(identity.check(proof(), secret: secret) == .alreadyVerified)
+    }
+
+    @Test func aProofUnderAnotherSecretFails() {
+        // Another paired phone's key, which TLS would let in, can't prove this pairing.
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.check(proof(secret: otherSecret), secret: secret) == .mismatch)
+        #expect(identity.verifiedPairingID == nil)
+    }
+
+    @Test func aMACForOnePairingDoesntProveAnother() {
+        // Right for pairing-2's id under pairing-2's secret, sent as pairing-1.
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.check(proof("pairing-2", secret: otherSecret, claiming: "pairing-1"), secret: secret) == .mismatch)
+        #expect(!CompanionProof.isValid(proof("pairing-2").mac, secret: secret, nonce: nonce, pairingID: "pairing-1"))
+        #expect(identity.verifiedPairingID == nil)
+    }
+
+    @Test func aProofForAnotherConnectionsNonceFails() {
+        // Replayed from an earlier connection, whose nonce was different.
+        let earlier = Data(repeating: 1, count: 32)
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.check(proof(nonce: earlier), secret: secret) == .mismatch)
+        #expect(!CompanionProof.isValid(proof().mac, secret: secret, nonce: Data(nonce.prefix(16)), pairingID: "pairing-1"))
+    }
+
+    @Test func anUnknownPairingAndASecondPairingAreRefused() {
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.check(proof("pairing-removed"), secret: nil) == .unknownPairing)
+        #expect(identity.check(proof(), secret: secret) == .verified("pairing-1"))
+        // Verified once, a connection stays that pairing, even with a good proof for another.
+        #expect(identity.check(proof("pairing-2", secret: otherSecret), secret: otherSecret) == .conflicting)
+        #expect(identity.verifiedPairingID == "pairing-1")
+    }
+
+    @Test func eachConnectionGetsAFreshNonce() {
+        #expect(CompanionProof.newNonce().count == CompanionProof.nonceLength)
+        #expect(CompanionConnectionIdentity().nonce != CompanionConnectionIdentity().nonce)
     }
 
     @Test func aLongCommandIsCutForThePhone() {

@@ -16,9 +16,12 @@ final class CompanionPublisher {
 
     /// A phone said who it is: which pairing it connected with, and its name.
     var onHello: ((CompanionMessage.Hello) -> Void)?
-    /// A phone answered a permission request, with the pairing it said hello with, if it has:
-    /// what became of it goes back to that phone.
+    /// A phone answered a permission request, with the pairing it proved it is, if it has: what
+    /// became of it goes back to that phone.
     var onAnswer: ((CompanionMessage.Answer, _ pairingID: String?) -> CompanionMessage.AnswerResult)?
+    /// The secret paired under a pairing id, to check a phone's proof with; nil for an id that
+    /// isn't paired.
+    var secret: ((String) -> Data?)?
     /// A phone that had said hello went away, with its pairing's id.
     var onGoodbye: ((String) -> Void)?
     /// The listener's state, in a sentence for Settings; nil while all is well.
@@ -35,8 +38,10 @@ final class CompanionPublisher {
     private struct Phone {
         let connection: NWConnection
         var reader = CompanionLineReader()
-        /// The pairing it said hello with.
+        /// The pairing it said hello with: a claim, good for the paired phones' list.
         var pairingID: String?
+        /// The pairing it proved it is, against this connection's own nonce: what answers go by.
+        var identity = CompanionConnectionIdentity()
     }
 
     var isRunning: Bool { listener != nil }
@@ -139,8 +144,13 @@ final class CompanionPublisher {
             MainActor.assumeIsolated {
                 switch state {
                 case .ready:
-                    // TLS has checked the phone's key by now.
+                    // TLS has checked the phone's key by now, but not which pairing's: the
+                    // challenge asks it to prove that.
                     Log.companion.notice("Companion connected: \(String(describing: connection.endpoint), privacy: .public)")
+                    if let nonce = self?.phones[id]?.identity.nonce,
+                       let challenge = try? CompanionMessage(challenge: .init(nonce: nonce)).line() {
+                        self?.send(challenge, to: connection)
+                    }
                     if let line = self?.currentLine() { self?.send(line, to: connection) }
                 case .failed, .cancelled:
                     self?.drop(connection)
@@ -169,23 +179,40 @@ final class CompanionPublisher {
 
     private func read(_ data: Data, from connection: NWConnection) {
         let id = ObjectIdentifier(connection)
-        guard var phone = phones[id] else { return }
-        let lines = phone.reader.lines(adding: data)
+        guard var reader = phones[id]?.reader else { return }
+        let lines = reader.lines(adding: data)
+        phones[id]?.reader = reader
+        // In order, so a proof counts for an answer that follows it in the same piece.
         for line in lines {
-            guard let message = try? CompanionMessage(line: line), let hello = message.hello else { continue }
-            phone.pairingID = hello.pairingID
-        }
-        phones[id] = phone
-        for line in lines {
-            guard let message = try? CompanionMessage(line: line) else { continue }
-            if let hello = message.hello { onHello?(hello) }
+            guard phones[id] != nil, let message = try? CompanionMessage(line: line) else { continue }
+            if let hello = message.hello {
+                phones[id]?.pairingID = hello.pairingID
+                onHello?(hello)
+            }
+            if let proof = message.proof { check(proof, from: id) }
             if message.wantsSnapshot == true, let reply = currentLine() { send(reply, to: connection) }
-            // Only a phone connected with a paired key gets this far; which pairing it said it is
-            // decides whether the answer counts.
-            if let answer = message.answer, let result = onAnswer?(answer, phone.pairingID),
+            // Only a phone connected with a paired key gets this far; the pairing it proved it is,
+            // not the one it claims, decides whether the answer counts.
+            if let answer = message.answer, let result = onAnswer?(answer, phones[id]?.identity.verifiedPairingID),
                let reply = try? CompanionMessage(answerResult: result).line() {
                 send(reply, to: connection)
             }
+        }
+    }
+
+    /// A proof that doesn't hold is logged and leaves the connection unverified, but open: it
+    /// still gets snapshots, and the answer check turns down its answers.
+    private func check(_ proof: CompanionMessage.Proof, from id: ObjectIdentifier) {
+        guard var identity = phones[id]?.identity else { return }
+        let outcome = identity.check(proof, secret: secret?(proof.pairingID))
+        phones[id]?.identity = identity
+        switch outcome {
+        case .verified(let pairing):
+            Log.companion.notice("A companion proved it is pairing \(pairing, privacy: .public)")
+        case .alreadyVerified:
+            break
+        case .conflicting, .unknownPairing, .mismatch:
+            Log.companion.error("Turned down a companion's proof for pairing \(proof.pairingID, privacy: .public): \(String(describing: outcome), privacy: .public)")
         }
     }
 

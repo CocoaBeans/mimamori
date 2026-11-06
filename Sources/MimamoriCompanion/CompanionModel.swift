@@ -382,6 +382,7 @@ final class CompanionModel {
     private func read(_ data: Data) {
         for line in reader.lines(adding: data) {
             guard let message = try? CompanionMessage(line: line) else { continue }
+            if let challenge = message.challenge { prove(challenge) }
             if let result = message.answerResult { answerResultArrived(result) }
             guard let snapshot = message.snapshot else { continue }
             let now = Date()
@@ -391,6 +392,24 @@ final class CompanionModel {
             delay = now.timeIntervalSince(snapshot.writtenAt)
             settleAnswers(with: snapshot)
         }
+    }
+
+    /// Answers the Mac's challenge with an HMAC of its nonce under this pairing's secret, so the Mac
+    /// knows which paired phone this is before it takes an answer from it. A Mac from before
+    /// challenges sends none, and goes by the hello alone.
+    private func prove(_ challenge: CompanionMessage.Challenge) {
+        guard let mac = chosen, let key = keychain.key(for: mac.pairingID) else { return }
+        #if DEBUG
+        // For scripted runs: `-debugProof withhold` sends no proof, and `-debugProof other` one for
+        // another pairing id, so the Mac's refusal of an unproved phone's answers can be shown.
+        let debugProof = UserDefaults.standard.string(forKey: "debugProof")
+        if debugProof == "withhold" { return }
+        let pairingID = debugProof == "other" ? UUID().uuidString : mac.pairingID
+        #else
+        let pairingID = mac.pairingID
+        #endif
+        let code = CompanionProof.mac(secret: key.secret, nonce: challenge.nonce, pairingID: pairingID)
+        send(CompanionMessage(proof: .init(pairingID: pairingID, mac: code)))
     }
 
     /// "iPhone14,7": the model, for the Mac's list.
