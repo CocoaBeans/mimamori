@@ -51,6 +51,16 @@ final class CompanionModel {
     private(set) var justPaired: PairedMac?
     /// The Mac a pairing link named, until this phone first reaches it with the new key.
     private(set) var pairing: PairedMac?
+    /// Allow and Deny sent from this phone, by request id, until the snapshot settles them.
+    var answers: [String: AnswerState] = [:]
+    /// Answers waiting for the Mac to say what became of them, by request id.
+    @ObservationIgnored var answerWaiters: [String: [CheckedContinuation<CompanionMessage.AnswerResult?, Never>]] = [:]
+    /// What the Mac said of an answer before anything waited for it.
+    @ObservationIgnored var earlyAnswerResults: [String: CompanionMessage.AnswerResult] = [:]
+    #if DEBUG
+    /// Requests the `-debugAnswer` launch argument has answered already.
+    @ObservationIgnored var debugAnswered: Set<String> = []
+    #endif
 
     @ObservationIgnored private var browser: NWBrowser?
     @ObservationIgnored private var connection: NWConnection?
@@ -77,6 +87,9 @@ final class CompanionModel {
         }
         chosen = pairedMacs.first { $0.macID == defaults.string(forKey: Self.chosenMacKey) } ?? pairedMacs.first
         status = chosen == nil ? .unpaired : .searching
+        notifier.answer = { [weak self] requestID, allow in
+            await self?.answerFromNotification(requestID: requestID, allow: allow) ?? "Mimamori wasn't ready to answer."
+        }
     }
 
     /// Starts browsing, which asks for local network access the first time.
@@ -340,6 +353,18 @@ final class CompanionModel {
         connection.send(content: line, completion: .contentProcessed { _ in })
     }
 
+    /// Sends `message` on the open connection, if there is one that's up; false if not, or if it
+    /// couldn't be sent, so nothing claims an answer went that didn't.
+    func sendNow(_ message: CompanionMessage) async -> Bool {
+        guard let connection, connection.state == .ready, case .connected = status,
+              let line = try? message.line() else { return false }
+        return await withCheckedContinuation { continuation in
+            connection.send(content: line, completion: .contentProcessed { error in
+                continuation.resume(returning: error == nil)
+            })
+        }
+    }
+
     private func receive(on connection: NWConnection) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
             MainActor.assumeIsolated {
@@ -356,12 +381,15 @@ final class CompanionModel {
 
     private func read(_ data: Data) {
         for line in reader.lines(adding: data) {
-            guard let message = try? CompanionMessage(line: line), let snapshot = message.snapshot else { continue }
+            guard let message = try? CompanionMessage(line: line) else { continue }
+            if let result = message.answerResult { answerResultArrived(result) }
+            guard let snapshot = message.snapshot else { continue }
             let now = Date()
             self.snapshot = snapshot
             notifier.update(snapshot)
             receivedAt = now
             delay = now.timeIntervalSince(snapshot.writtenAt)
+            settleAnswers(with: snapshot)
         }
     }
 

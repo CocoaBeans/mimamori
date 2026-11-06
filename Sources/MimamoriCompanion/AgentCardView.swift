@@ -47,6 +47,10 @@ struct AgentCardView: View {
     let agent: AgentWidgetSnapshot.Agent
     let detailed: Bool
     let now: Date
+    /// What this phone sent for the agent's permission request, if anything.
+    var answer: AnswerState? = nil
+    /// Allow (true) or Deny (false) for the agent's permission request.
+    var onAnswer: ((Bool) -> Void)? = nil
 
     /// A working agent this long without a tool call is probably stuck, or thinking hard.
     private static let quietAfter: TimeInterval = 3 * 60
@@ -89,6 +93,22 @@ struct AgentCardView: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            summary
+                .accessibilityElement(children: .combine)
+            // Outside the combined element, so VoiceOver reaches its buttons one by one.
+            if let request = agent.permissionRequest, let onAnswer {
+                PermissionRequestPanel(request: request, agent: agent.agent, answer: answer, onAnswer: onAnswer)
+                    .padding(.leading, 38)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, detailed ? 10 : 8)
+        .background(agent.state.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(agent.state.tint.opacity(0.22)))
+    }
+
+    private var summary: some View {
         HStack(alignment: .top, spacing: 10) {
             StateBadge(state: agent.state, symbol: agent.symbol, collision: agent.collision != nil, size: 28)
             VStack(alignment: .leading, spacing: detailed ? 5 : 3) {
@@ -124,11 +144,6 @@ struct AgentCardView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, detailed ? 10 : 8)
-        .background(agent.state.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(agent.state.tint.opacity(0.22)))
-        .accessibilityElement(children: .combine)
     }
 
     /// The project and how long it has been at it, then the worktree on a line of its own: a

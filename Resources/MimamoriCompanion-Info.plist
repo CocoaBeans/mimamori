@@ -17,6 +17,8 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Mimamori asks for Face ID before letting an agent on your Mac do what it asked permission for.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_mimamori._tcp</string>

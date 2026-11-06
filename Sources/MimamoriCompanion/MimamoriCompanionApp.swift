@@ -93,8 +93,13 @@ struct AgentsScreen: View {
                                     .padding(.top, 6)
                                     if !collapsed {
                                         ForEach(entry.agents) { agent in
-                                            AgentCardView(agent: agent, detailed: detailed, now: context.date)
-                                                .id("\(entry.group.rawValue) \(agent.id)")
+                                            AgentCardView(agent: agent, detailed: detailed, now: context.date,
+                                                          answer: agent.permissionRequest.flatMap { model.answers[$0.id] }) { allow in
+                                                if let request = agent.permissionRequest {
+                                                    Task { await model.answer(request, allow: allow) }
+                                                }
+                                            }
+                                            .id("\(entry.group.rawValue) \(agent.id)")
                                         }
                                     }
                                 }
