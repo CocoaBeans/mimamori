@@ -417,7 +417,7 @@ enum DebugHooks {
         lines.append("agents: socket=\(hub.isListening ? "listening" : "down") path=\(hub.socketPath) error=\(hub.socketError ?? "-") events=\(hub.eventsReceived) unmatched=\(hub.eventsUnmatched) hooksInstalled=\(HookInstaller.isInstalled()) hubSeesHooks=\(hub.claudeHooksInstalled)")
         for pending in hub.pendingPermissions.values {
             let plan = pending.autoAnswer.map { "\($0.allow ? "allow" : "deny") in \(Int($0.at.timeIntervalSinceNow.rounded()))s" } ?? "waits"
-            lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent) auto=\(plan) askRule=\(pending.waitsForAskRule ?? "-") id=\(pending.id)")
+            lines.append("  permission pending: \(pending.agent.id) \(pending.tool) \(pending.detail ?? "-") in \((pending.worktree as NSString).lastPathComponent) auto=\(plan) askRule=\(pending.waitsForAskRule ?? "-") longCommand=\(pending.waitsForLongCommand) id=\(pending.id)")
         }
         let companion = model.companion
         lines.append("companion: on=\(companion.isOn) paired=\(companion.pairings.phones.map(\.name)) connected=\(companion.connected.count) problem=\(companion.problem ?? "-")")

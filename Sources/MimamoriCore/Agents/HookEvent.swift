@@ -53,6 +53,11 @@ public struct HookEvent: Sendable, Hashable {
     public var permissionRequestID: String? = nil
     /// A shell tool's whole command (`summary` has its first line), for matching permission rules.
     public var command: String? = nil
+    /// The command was longer than `commandLimit`, so `command` is cut short and can't be checked
+    /// in full against ask rules.
+    public var commandTruncated = false
+    /// How much of a command is kept: far more than a real one, short of a runaway heredoc.
+    public static let commandLimit = 64 * 1024
     /// The subagent's kind (`agent_type`, such as `Explore`) when one sent the event.
     public var agentType: String? = nil
     /// What's still in flight (`background_tasks`, on Stop and SubagentStop): running subagents and
@@ -220,6 +225,22 @@ public struct HookEvent: Sendable, Hashable {
 }
 
 public enum HookEventParser {
+    /// Names of tool inputs never shown as a summary: file contents, edits, credentials.
+    static let privateInputNames = ["content", "string", "text", "body", "data", "patch", "diff", "token", "password",
+                                    "secret", "key", "credential", "auth", "cookie"]
+
+    /// A text input to describe an unknown tool by: the first, by name, that isn't private, so
+    /// the same call reads the same each time and nothing secret or bulky is shown.
+    static func describingValue(in input: [String: Any]) -> String? {
+        for name in input.keys.sorted() {
+            let lower = name.lowercased()
+            guard !privateInputNames.contains(where: { lower.contains($0) }),
+                  let value = input[name] as? String, !value.isEmpty else { continue }
+            return value
+        }
+        return nil
+    }
+
     public static func parse(_ data: Data, receivedAt: Date = Date(), agent: AgentKind = .claudeCode) -> HookEvent? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return parse(object, receivedAt: receivedAt, agent: agent)
@@ -263,7 +284,7 @@ public enum HookEventParser {
                 summary = description
             } else if let prompt = toolInput["prompt"] as? String {
                 summary = firstLine(prompt)
-            } else if let first = toolInput.values.first(where: { $0 is String }) as? String {
+            } else if let first = HookEventParser.describingValue(in: toolInput) {
                 summary = firstLine(first)
             }
         }
@@ -293,7 +314,12 @@ public enum HookEventParser {
             isInterrupt: object["is_interrupt"] as? Bool ?? false,
             batchToolUseIDs: batch,
             receivedAt: receivedAt)
-        event.command = (toolInput?["command"] as? String).map { String($0.prefix(8000)) }
+        // Whole, up to a limit: ask rules are matched against it, and a part cut off could be the
+        // part a rule is about. Longer than that, it's flagged, and never allowed by itself.
+        if let command = toolInput?["command"] as? String {
+            event.command = String(command.prefix(HookEvent.commandLimit))
+            event.commandTruncated = command.count > HookEvent.commandLimit
+        }
         event.agentType = object["agent_type"] as? String
         event.lastMessage = (object["last_assistant_message"] as? String).map { String(firstLine($0).prefix(300)) }
         if let tasks = object["background_tasks"] as? [[String: Any]] {

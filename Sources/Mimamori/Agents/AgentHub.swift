@@ -117,6 +117,8 @@ struct PermissionRequest: Hashable, Identifiable {
     var autoAnswer: AutoAnswer? = nil
     /// The Claude Code ask rule that keeps an auto-allow from applying to this call.
     var waitsForAskRule: String? = nil
+    /// Its command was too long to check whole against the ask rules, so it's never allowed by itself.
+    var waitsForLongCommand = false
 
     struct AutoAnswer: Hashable {
         var allow: Bool
@@ -395,9 +397,12 @@ final class AgentHub {
                                             since: event.receivedAt, call: call)
             if settings.autoAnswerPermissions {
                 let allow = settings.autoAnswer == .allow
-                // A call you asked Claude Code to always ask about is never allowed by itself.
+                // A call you asked Claude Code to always ask about is never allowed by itself, nor one
+                // whose command was too long to check against those rules in full.
                 if allow, let rule = askRules(cwd: event.cwd, worktree: worktree).matchingAskRule(tool: pending.tool, command: event.command) {
                     pending.waitsForAskRule = rule
+                } else if allow, event.commandTruncated {
+                    pending.waitsForLongCommand = true
                 } else {
                     pending.autoAnswer = .init(allow: allow, at: event.receivedAt.addingTimeInterval(TimeInterval(settings.autoAnswerSeconds)))
                 }

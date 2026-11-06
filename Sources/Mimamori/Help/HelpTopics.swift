@@ -161,7 +161,7 @@ struct HelpTopic: Identifiable {
             ## Answer permission requests
             When Claude Code asks permission for a tool call, **Allow** and **Deny** appear in the agent's banner, on its card in the Agents window and in the notification. Claude Code shows its own prompt at the same time and takes whichever answer comes first, so answer wherever you are. A deny rule in your Claude Code settings always wins.
 
-            Settings › Agents › Hooks can also answer by itself after a wait you choose, but never for a call that matches one of your ask rules.
+            Settings › Agents › Hooks can also answer by itself after a wait you choose, but never allows a call that matches one of your ask rules, or a command too long (over 64 KB) to check against them.
 
             ## Subagents
             When Claude Code hands work to subagents, an agent stays in Working while any of them runs, "waiting on 2 subagents", and "finished a turn" waits for the last. Its card in the Agents window, and the banner above the diff, list its subagents: what kind each is, what it was asked, its steps and time, and its latest step.

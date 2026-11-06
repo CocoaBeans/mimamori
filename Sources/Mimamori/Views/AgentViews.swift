@@ -747,6 +747,13 @@ struct PermissionAnswerButtons: View {
                 }
             }
             .controlSize(.small)
+            if pending?.waitsForLongCommand == true {
+                Text("Waits for you: its command is too long to check against your ask rules")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help("Mimamori never allows a command by itself that it can't check in full")
+            }
             if let rule = pending?.waitsForAskRule {
                 Text("Waits for you: it matches your ask rule \(rule)")
                     .font(.caption)

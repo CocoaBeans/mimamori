@@ -55,6 +55,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- Answering by itself checks a Claude Code command against your ask rules whole, up to 64 KB,
+  instead of its first 8000 characters, where a rule about its end could be missed; a longer
+  command waits for you. A tool Mimamori doesn't know is described by a harmless field, never by
+  its content or anything named like a token, password or key
+  ([#71](https://github.com/CocoaBeans/mimamori/pull/71)).
 - A Claude Code subagent working in a worktree of its own no longer moves its parent's card to
   that worktree and back with every step; it shows on its parent's card, with its worktree a click
   away ([#70](https://github.com/CocoaBeans/mimamori/pull/70)).

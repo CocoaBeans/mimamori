@@ -827,6 +827,42 @@ struct PermissionRequestTests {
         #expect(denied.name == .permissionDenied)
     }
 
+    private func permissionRequest(command: String) throws -> HookEvent {
+        let object: [String: Any] = ["hook_event_name": "PermissionRequest", "cwd": "/repo", "tool_name": "Bash",
+                                     "tool_input": ["command": command]]
+        return try #require(HookEventParser.parse(try JSONSerialization.data(withJSONObject: object)))
+    }
+
+    @Test func aLongCommandIsKeptWholeForTheAskRules() throws {
+        // A rule about the end of a long command still sees it: nothing near the old 8000-character cut is lost.
+        let long = String(repeating: "echo filler; ", count: 1500) + "git push --force"
+        let event = try permissionRequest(command: long)
+        #expect(event.command == long)
+        #expect(!event.commandTruncated)
+        #expect(event.summary == String(long.prefix(event.summary?.count ?? 0)))
+    }
+
+    @Test func aCommandTooLongToCheckIsFlagged() throws {
+        let runaway = String(repeating: "x", count: HookEvent.commandLimit) + "\ngit push --force"
+        let event = try permissionRequest(command: runaway)
+        #expect(event.commandTruncated)
+        #expect(event.command?.count == HookEvent.commandLimit)
+        #expect(try !permissionRequest(command: "swift test").commandTruncated)
+    }
+
+    @Test func anUnknownToolIsSummarizedByAHarmlessFieldTheSameWayEachTime() throws {
+        let json = #"{"hook_event_name":"PreToolUse","cwd":"/repo","tool_name":"mcp__notes__save","tool_use_id":"m1","#
+            + #""tool_input":{"content":"private notes","api_token":"sk-123","title":"Weekly notes","body":"more"}}"#
+        for _ in 0..<5 {
+            let event = try #require(HookEventParser.parse(Data(json.utf8)))
+            #expect(event.summary == "Weekly notes")
+        }
+        // With nothing harmless to show, no summary at all.
+        let secret = #"{"hook_event_name":"PreToolUse","cwd":"/repo","tool_name":"mcp__vault__put","tool_use_id":"m2","#
+            + #""tool_input":{"secret_value":"hunter2","password":"pw","new_string":"x","data":"y"}}"#
+        #expect(try #require(HookEventParser.parse(Data(secret.utf8))).summary == nil)
+    }
+
     @Test func aRequestBelongsToTheCallThatAskedForIt() throws {
         let machine = waitingMachine()
         let status = try #require(machine.status)
