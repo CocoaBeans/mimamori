@@ -8,6 +8,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-05
+
 ### Added
 
 - Put an agent to sleep between turns: Mimamori stops its process and keeps its session, and
@@ -29,14 +31,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
   notification, with the exact command, the Mac's countdown, and Face ID before Allow. Needs
   "Answer permission requests in Mimamori" on, and the activity feed says which iPhone answered
   ([#61](https://github.com/CocoaBeans/mimamori/pull/61)).
-
 - Tap an agent on the iPhone for its list of actions: every step of its turn, newest first, then
   the turns before it under their prompts, with when each ran, how long it took and whether it
   failed ([#64](https://github.com/CocoaBeans/mimamori/pull/64)).
 - Claude Code's subagents: an agent stays in Working while its subagents run, "waiting on 2
   subagents", and "finished a turn" waits for the last; its card and the banner list each one's
   kind, task, steps and latest step ([#67](https://github.com/CocoaBeans/mimamori/pull/67)).
-
 - Commands an agent runs in the background show under its subagents, with how long each has run
   and how it ended; the agent reads "ready · 2 running in the background". The iPhone shows
   subagents and background commands on its cards, and marks the steps subagents took
@@ -75,13 +75,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
   because one of its arguments mentions an agent, such as a path through a folder named
   `claude-profiles`. Mimamori now judges such a process by the program it runs alone
   ([#63](https://github.com/CocoaBeans/mimamori/pull/63)).
-- A diff with wrapped lines could stop responding, once right after a click on Reviewed, and keep
-  Mimamori busy until it was quit. The diff no longer measures its lines at widths it never shows
-  them at, the work it was stuck repeating
-  ([#52](https://github.com/CocoaBeans/mimamori/pull/52)).
-- That fix missed: a diff with wrapped lines could still stop responding after a click on
-  Reviewed while an agent was editing the file. Wrapped diffs of up to 300 lines are now laid out
-  in full rather than lazily, so their layout no longer goes round in circles
+- A diff with wrapped lines could stop responding, right after a click on Reviewed while an agent
+  was editing the file, and keep Mimamori busy until it was quit. The diff no longer measures its
+  lines at widths it never shows them at
+  ([#52](https://github.com/CocoaBeans/mimamori/pull/52)), and wrapped diffs of up to 300 lines
+  are laid out in full rather than lazily, so their layout can't go round in circles
   ([#62](https://github.com/CocoaBeans/mimamori/pull/62)).
 - A closed main window, Agents window or pinned overview no longer keeps redrawing while agents
   work. With three agents busy and only the menu bar showing, Mimamori uses about two thirds less
@@ -187,7 +185,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Markdown.
 - Automatic updates through Sparkle.
 
-[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/CocoaBeans/mimamori/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/CocoaBeans/mimamori/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/CocoaBeans/mimamori/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/CocoaBeans/mimamori/releases/tag/v1.0.0
