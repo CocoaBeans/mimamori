@@ -1,8 +1,8 @@
 # Plan: seeing an agent's subagents
 
-> **Step 1 done.** Real runs on 2026-11-05 confirmed that Claude Code tells Mimamori enough to
-> follow each subagent, from hooks it already installs: see "What we saw". The design below is
-> simplified to match. Next: step 2, the model.
+> **Steps 1 to 3 done.** Real runs on 2026-11-05 confirmed that Claude Code tells Mimamori enough
+> to follow each subagent, from hooks it already installs: see "What we saw". The model and the
+> Mac's cards and banner follow. Next: step 4, the iPhone.
 
 ## The problem
 

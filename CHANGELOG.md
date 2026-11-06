@@ -33,6 +33,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Tap an agent on the iPhone for its list of actions: every step of its turn, newest first, then
   the turns before it under their prompts, with when each ran, how long it took and whether it
   failed ([#64](https://github.com/CocoaBeans/mimamori/pull/64)).
+- Claude Code's subagents: an agent stays in Working while its subagents run, "waiting on 2
+  subagents", and "finished a turn" waits for the last; its card and the banner list each one's
+  kind, task, steps and latest step ([#67](https://github.com/CocoaBeans/mimamori/pull/67)).
 
 ### Changed
 

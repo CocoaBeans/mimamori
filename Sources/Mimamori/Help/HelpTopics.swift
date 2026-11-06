@@ -163,6 +163,9 @@ struct HelpTopic: Identifiable {
 
             Settings › Agents › Hooks can also answer by itself after a wait you choose, but never for a call that matches one of your ask rules.
 
+            ## Subagents
+            When Claude Code hands work to subagents, an agent stays in Working while any of them runs, "waiting on 2 subagents", and "finished a turn" waits for the last. Its card in the Agents window, and the banner above the diff, list its subagents: what kind each is, what it was asked, its steps and time, and its latest step.
+
             ## Several agents in one worktree
             Mimamori keeps each session apart. When two of them edit the same file, the banner warns you and names the files, since one may undo the other's work.
 

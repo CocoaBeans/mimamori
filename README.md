@@ -172,6 +172,14 @@ Hooks only report what happens while Mimamori runs: a session sitting at its pro
 - Hermes's hooks report the gateway's own directory, not the project, so Mimamori reads where each session works from Hermes's `~/.hermes/state.db` (read only) and shows the session there from its first event; a file it changes in another worktree moves it there.
 - Hermes keeps a lease in the same database on each turn while it runs, naming the session and when the turn began, and nothing of what it says or does. So a turn under way when Mimamori starts shows as working at once, timed from its real start, until the session's first hook event takes over; the steps before Mimamori started don't show. It shows that way even while Hermes's hooks wait for approval, until the turn ends.
 
+### Subagents
+
+Claude Code hands work to subagents (an Explore agent searching the code, a reviewer, a fetcher), often in the background. Its hooks say which subagent took each step and what each was asked, so Mimamori follows them:
+
+- An agent whose subagents are still running stays in **Working**, "waiting on 2 subagents", even after it stops itself, and "finished a turn" waits for the last of them. One silent for 10 minutes is taken to have finished.
+- The Agents window's detailed cards and the banner above the diff list them: each one's kind and task, its steps and time, and its latest step while it runs. A finished one stays a minute. Compact cards count them.
+- A subagent's steps are its own: one that works on after the agent's turn ended no longer starts a turn of its own.
+
 ### Several agents in one worktree
 
 Two agents working in the same folder can undo each other's work. Mimamori keeps each session apart, by the `session_id` its hooks send (subagents share their parent's), and counts an agent process that no session accounts for once two scans have seen it and no other agent there started it. A session counts while it is live: it has not ended, and it reported in the last 10 minutes or its process still runs. A session that ended still accounts for the process it ran in, so that process isn't counted as another agent while it keeps running.
