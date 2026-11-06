@@ -24,6 +24,8 @@ struct AgentPresence: Hashable {
     var awaitingCallID: String? = nil
     /// A permission request you can answer in Mimamori, with `AgentHub.answerPermission`.
     var permissionRequestID: String? = nil
+    /// Mimamori left its permission request to the agent's own prompt.
+    var answersInOwnPrompt = false
     /// For a process-only presence: whether this agent's hooks are installed, or nil for an
     /// agent Mimamori has no hooks for.
     var hooksInstalled: Bool? = nil
@@ -61,8 +63,9 @@ struct AgentPresence: Hashable {
             // "working · waiting on 2 subagents"
             return detail.map { "working · \($0)" } ?? "working"
         case (.hooks, .needsPermission(let tool, let detail)):
-            if tool.isEmpty { return "needs permission" }
-            return detail.map { "needs permission · \(tool) \($0)" } ?? "needs permission · \(tool)"
+            let asks = answersInOwnPrompt ? "needs permission in its own prompt" : "needs permission"
+            if tool.isEmpty { return asks }
+            return detail.map { "\(asks) · \(tool) \($0)" } ?? "\(asks) · \(tool)"
         case (.hooks, .askedQuestion(let detail)):
             return detail.map { "asks: \($0)" } ?? "has a question for you"
         case (.hooks, .ready):
@@ -209,6 +212,8 @@ final class AgentHub {
     @ObservationIgnored private var hermesTurns: [String: HermesTurn] = [:]
     /// The Hermes session of each turn's task, for the calls `execute_code` runs, which name no session.
     @ObservationIgnored private var hermesTaskSessions = HermesTaskSessions()
+    /// Sessions whose permission request Mimamori left to the agent's own prompt, while it waits.
+    @ObservationIgnored private var steppedBack: Set<String> = []
     @ObservationIgnored private var hermesSessionKeys = HermesSessionKeys()
     /// Countdowns to answering a permission request by itself, by request id.
     @ObservationIgnored private var autoAnswerTasks: [String: Task<Void, Never>] = [:]
@@ -415,11 +420,13 @@ final class AgentHub {
                 }
             }
             pendingPermissions[key] = pending
+            steppedBack.remove(key)
             scheduleAutoAnswer(pending)
             Log.agents.notice("\(event.agent.displayName, privacy: .public) asks to use \(pending.tool, privacy: .public); waiting for an answer here or in its own prompt")
             onPermissionRequest(pending)
             onPermissionsChange()
         }
+        if case .needsPermission = machine.status?.activity {} else { steppedBack.remove(key) }
         if moved || before == nil { attributeProcesses() }
         schedulePublish(urgent: !Self.sameState(before, machine.status?.activity))
         if !notes.isEmpty { onNotes(worktree, event.agent, notes) }
@@ -463,7 +470,7 @@ final class AgentHub {
     /// You answered a permission request in Mimamori, on a paired iPhone (`phone`, its name), or
     /// its countdown did: the hook hands the agent the decision.
     func answerPermission(_ id: String, allow: Bool, automatically: Bool = false, phone: String? = nil) {
-        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
+        guard let pending = pendingPermission(withID: id) else { return }
         pendingPermissions.removeValue(forKey: pending.session)
         autoAnswerTasks.removeValue(forKey: id)?.cancel()
         server?.permissions.answer(id, allow ? .allow : .deny)
@@ -478,7 +485,7 @@ final class AgentHub {
 
     /// Stops a request's countdown: it waits for you.
     func stopAutoAnswer(_ id: String) {
-        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
+        guard let pending = pendingPermission(withID: id) else { return }
         autoAnswerTasks.removeValue(forKey: id)?.cancel()
         pendingPermissions[pending.session]?.autoAnswer = nil
         onPermissionsChange()
@@ -609,7 +616,7 @@ final class AgentHub {
     /// shows up running (or finishes) in a moment; said no, nothing more comes, and the agent
     /// waits for you to say what to do instead.
     private func permissionAnsweredElsewhere(_ id: String) {
-        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
+        guard let pending = pendingPermission(withID: id) else { return }
         Log.agents.notice("\(pending.agent.displayName, privacy: .public) stopped waiting on its \(pending.tool, privacy: .public) request: it was answered in its own prompt")
         settlePermission(for: pending.session)
         Task { [weak self] in
@@ -630,12 +637,23 @@ final class AgentHub {
     }
 
     /// The hook stopped waiting for an answer from Mimamori: its time was up, which for the Claude
-    /// desktop app comes after a short hold. The agent's own prompt decides now, so Allow and Deny
-    /// go here, while the agent still shows as needing permission until it moves on.
+    /// desktop app comes after a short hold.
     private func permissionHoldEnded(_ id: String) {
-        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
-        Log.agents.notice("Stopped holding \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) request; its own prompt decides it")
+        stepBack(from: id, because: "its hold ended")
+    }
+
+    /// Leaves request `id` to the agent's own prompt: Allow and Deny go from Mimamori, and the
+    /// agent shows as needing permission in that prompt until it moves on.
+    private func stepBack(from id: String, because reason: String) {
+        guard let pending = pendingPermission(withID: id) else { return }
+        Log.agents.notice("Left \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) request to its own prompt: \(reason, privacy: .public)")
+        steppedBack.insert(pending.session)
         settlePermission(for: pending.session)
+        schedulePublish(urgent: true)
+    }
+
+    private func pendingPermission(withID id: String) -> PermissionRequest? {
+        pendingPermissions.values.first { $0.id == id }
     }
 
     private func noteApproved(in worktree: String, session key: String) {
@@ -646,6 +664,7 @@ final class AgentHub {
     }
 
     private func remove(session key: String, from worktree: String) {
+        steppedBack.remove(key)
         machines[worktree]?.removeValue(forKey: key)
         if machines[worktree]?.isEmpty == true { machines.removeValue(forKey: worktree) }
     }
@@ -1043,6 +1062,7 @@ final class AgentHub {
                              processIDs: processIDs,
                              awaitingCallID: status.pendingPermission?.callID,
                              permissionRequestID: pendingPermissions[status.key]?.id,
+                             answersInOwnPrompt: steppedBack.contains(status.key) && pendingPermissions[status.key] == nil,
                              subagents: status.subagents, commands: status.commands)
     }
 

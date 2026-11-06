@@ -22,11 +22,12 @@ public struct HookCaller: Sendable, Hashable {
     }
 
     /// Looks the caller up while it is still connected, and so still running.
-    public static func identify(pid: Int32, classifier: AgentClassifier) -> HookCaller {
+    /// - Parameter withPath: also find the agent's executable, which only a permission request needs.
+    public static func identify(pid: Int32, classifier: AgentClassifier, withPath: Bool = false) -> HookCaller {
         let ancestor = ProcessInspector.agentAncestor(of: pid, classifier: classifier)
+        let path = withPath ? ancestor.flatMap { ProcessInspector.executablePath(of: $0.pid) } : nil
         return HookCaller(pid: pid, directory: ProcessInspector.currentDirectory(of: pid),
-                          agent: ancestor?.kind, agentPID: ancestor?.pid,
-                          agentPath: ancestor.flatMap { ProcessInspector.executablePath(of: $0.pid) })
+                          agent: ancestor?.kind, agentPID: ancestor?.pid, agentPath: path)
     }
 
     /// Claude Code run by the Claude desktop app, which keeps its own copy in Application Support.
@@ -411,7 +412,7 @@ public final class HookSocketServer: @unchecked Sendable {
         case ("POST", "/permission"):
             // A permission request whose hook waits for an answer: reported like any event, then
             // held until answered here, let go, or timed out. No decision answers 204, empty.
-            let caller = peer.map { HookCaller.identify(pid: $0, classifier: classifier) }
+            let caller = peer.map { HookCaller.identify(pid: $0, classifier: classifier, withPath: true) }
             guard var event = AgentEventTranslator.translate(body, agent: query["agent"].flatMap(AgentKind.named) ?? .claudeCode,
                                                              caller: caller, eventName: query["event"]) else {
                 note(.rejected(HookRejection(status: 400, reason: "not a hook event", target: target, keys: HookRejection.keys(of: body))))
