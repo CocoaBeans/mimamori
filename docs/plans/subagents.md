@@ -70,8 +70,9 @@ in a worktree of its own.
   `agent_id`. A command run in the background is `type: "shell"`. So every `SubagentStop`, and
   `Stop`, gives the whole list of running subagents, with what each was asked.
 - **A subagent in a worktree of its own** works in
-  `<repository>/.claude/worktrees/agent-<agent_id>`, in the repository's main checkout, even when the session is in another worktree. Its steps and
-  its `SubagentStop` carry that folder as `cwd`, which is why it shows as a separate agent there.
+  `<repository>/.claude/worktrees/agent-<agent_id>`, in the repository's main checkout, even when
+  the session is in another worktree. Its steps and its `SubagentStop` carry that folder as `cwd`,
+  which is why it shows as a separate agent there.
 - **`SubagentStart`** wasn't seen: Mimamori doesn't install it. It isn't needed for any of this.
 
 ## What Mimamori does now
@@ -111,10 +112,10 @@ the ones we know started and haven't stopped), the activity becomes *working on 
 A subagent's step while the main agent is Ready no longer flips the whole card; it's the
 subagent's.
 
-**Subagents in their own worktree.** A worktree at
-`<repository>/.claude/worktrees/agent-<id>`, where `<id>` is a running subagent's `agent_id`, is shown as that subagent, inside its parent's card, not
-as an agent of its own. Its events are placed by `cwd` in that worktree today, so they need routing
-to the parent session by `session_id`. Its files stay reviewable in that worktree as now.
+**Subagents in their own worktree.** A worktree at `<repository>/.claude/worktrees/agent-<id>`,
+where `<id>` is a running subagent's `agent_id`, is shown as that subagent, inside its parent's
+card, not as an agent of its own. Its events are placed by `cwd` in that worktree today, so they
+need routing to the parent session by `session_id`. Its files stay reviewable in that worktree.
 
 **Showing them.**
 
