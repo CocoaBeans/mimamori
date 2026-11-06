@@ -149,6 +149,7 @@ public final class HookSocketServer: @unchecked Sendable {
         set { lock.lock(); rawLogURL = newValue; lock.unlock() }
     }
     private var rawLogURL: URL?
+    private let rawLogLock = NSLock()
 
     private func logRaw(_ body: Data, target: String) {
         guard let url = rawLog else { return }
@@ -156,6 +157,9 @@ public final class HookSocketServer: @unchecked Sendable {
         line["body"] = (try? JSONSerialization.jsonObject(with: body)) ?? String(decoding: body, as: UTF8.self)
         guard var data = try? JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]) else { return }
         data.append(0x0A)
+        // Requests are handled at the same time; one write at a time keeps each line whole.
+        rawLogLock.lock()
+        defer { rawLogLock.unlock() }
         if let handle = try? FileHandle(forWritingTo: url) {
             handle.seekToEndOfFile()
             handle.write(data)

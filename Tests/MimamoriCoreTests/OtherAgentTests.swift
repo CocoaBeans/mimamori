@@ -299,6 +299,18 @@ struct OtherAgentServerTests {
         // A body that isn't JSON is kept as text.
         let second = try #require(try JSONSerialization.jsonObject(with: Data(lines[1].utf8)) as? [String: Any])
         #expect(second["body"] as? String == "not json")
+
+        // Requests arriving together still leave one whole line each.
+        try await withThrowingTaskGroup(of: String.self) { group in
+            for index in 0..<12 {
+                group.addTask { try await self.post(#"{"hook_event_name":"PreToolUse","session_id":"s\#(index)","cwd":"/repo","tool_name":"Read"}"#,
+                                                     to: "http://mimamori/event", socket: path) }
+            }
+            for try await _ in group {}
+        }
+        let all = try String(contentsOf: log, encoding: .utf8).split(separator: "\n")
+        #expect(all.count == 14)
+        #expect(all.allSatisfy { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) != nil })
     }
 
     @Test func namesTheAgentThatCalled() async throws {
