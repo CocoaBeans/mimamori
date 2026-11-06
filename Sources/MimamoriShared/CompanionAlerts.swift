@@ -15,6 +15,11 @@ public enum CompanionAlerts {
         public var body: String
         /// The worktree, to group its alerts.
         public var thread: String
+        /// The permission request the notification's Allow and Deny answer; nil for anything the
+        /// phone can't answer, such as another agent's prompt or a question.
+        public var requestID: String? = nil
+        /// Replaces an alert already shown, to add or drop Allow and Deny, without sounding again.
+        public var quiet = false
     }
 
     public struct Changes: Sendable, Equatable {
@@ -41,6 +46,12 @@ public enum CompanionAlerts {
             let old = previous[agent.id]
             if agent.state == .needsYou, old?.state != .needsYou || old?.since != agent.since {
                 changes.post.append(needsYou(agent))
+            } else if agent.state == .needsYou, old?.permissionRequest?.id != agent.permissionRequest?.id {
+                // The request to answer came after the agent started waiting, or was settled while
+                // it still waits: the same alert, with or without Allow and Deny.
+                var alert = needsYou(agent)
+                alert.quiet = true
+                changes.post.append(alert)
             } else if agent.state != .needsYou, old?.state == .needsYou {
                 changes.withdraw.append(needsYouID(agent.id))
             }
@@ -59,6 +70,15 @@ public enum CompanionAlerts {
     /// "Claude Code needs permission: Bash", "Codex has a question for you", from the status line.
     private static func needsYou(_ agent: AgentWidgetSnapshot.Agent) -> Alert {
         let status = agent.status
+        if let request = agent.permissionRequest {
+            var result = alert(.needsYou, agent, title: "\(agent.agent) needs permission: \(request.tool)", detail: request.detail)
+            result.requestID = request.id
+            if let plan = request.autoAnswer {
+                let wait = max(0, Int(plan.at.timeIntervalSince(request.since).rounded()))
+                result.body += "\n\(plan.allow ? "Allowing" : "Denying") in \(duration(wait)) unless you answer."
+            }
+            return result
+        }
         if status.hasPrefix("needs permission") {
             let rest = status.dropFirst("needs permission".count).drop { $0 == " " || $0 == "·" }
             let tool = rest.split(separator: " ").first.map(String.init)
@@ -76,5 +96,12 @@ public enum CompanionAlerts {
         let id = kind == .needsYou ? needsYouID(agent.id) : "\(kind.rawValue):\(agent.id)"
         let body = [detail, "\(agent.repository) › \(agent.worktree)"].compactMap { $0 }.joined(separator: " · ")
         return Alert(kind: kind, id: id, title: title, body: body, thread: agent.id)
+    }
+
+    /// "45 s", "2 min": how long the Mac waits before answering by itself.
+    public static func duration(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds) s" }
+        let minutes = seconds / 60, rest = seconds % 60
+        return rest == 0 ? "\(minutes) min" : "\(minutes) min \(rest) s"
     }
 }

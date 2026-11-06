@@ -2,9 +2,11 @@ import Foundation
 
 /// What the Mac and the iPhone companion say to each other: one JSON message per line.
 ///
-/// Mac to phone: the agents, the same snapshot the desktop widgets draw. Phone to Mac: who it is,
-/// once connected, and "send me a fresh snapshot". Each message carries the version of the format it was written in, so the two
-/// apps can be updated at different times.
+/// Mac to phone: the agents, the same snapshot the desktop widgets draw, and what became of an
+/// answer. Phone to Mac: who it is, once connected, "send me a fresh snapshot", and Allow or Deny
+/// for a permission request. Each message carries the version of the format it was written in, so
+/// the two apps can be updated at different times: an older Mac ignores an answer it doesn't know,
+/// and an older phone the request it can't answer.
 public struct CompanionMessage: Codable, Sendable, Equatable {
     /// The Bonjour service the Mac advertises and the phone browses for.
     public static let serviceType = "_mimamori._tcp"
@@ -19,6 +21,35 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
     public var wantsSnapshot: Bool?
     /// The phone introducing itself, first thing after connecting; phone to Mac.
     public var hello: Hello?
+    /// Allow or Deny for a permission request the snapshot showed; phone to Mac.
+    public var answer: Answer?
+    /// What the Mac did with an answer; Mac to phone.
+    public var answerResult: AnswerResult?
+
+    /// Allow or Deny for one request, by its id. The Mac acts on it only while that request still
+    /// waits, so an answer that arrives late, or names something else, does nothing.
+    public struct Answer: Codable, Sendable, Equatable {
+        public var requestID: String
+        public var allow: Bool
+
+        public init(requestID: String, allow: Bool) {
+            self.requestID = requestID
+            self.allow = allow
+        }
+    }
+
+    /// Whether an answer settled its request, and if not, why, in a sentence for the phone.
+    public struct AnswerResult: Codable, Sendable, Equatable {
+        public var requestID: String
+        public var accepted: Bool
+        public var reason: String?
+
+        public init(requestID: String, accepted: Bool, reason: String? = nil) {
+            self.requestID = requestID
+            self.accepted = accepted
+            self.reason = reason
+        }
+    }
 
     /// What the Mac lists a paired phone by.
     public struct Hello: Codable, Sendable, Equatable {
@@ -36,11 +67,14 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
         }
     }
 
-    public init(snapshot: AgentWidgetSnapshot? = nil, wantsSnapshot: Bool? = nil, hello: Hello? = nil) {
+    public init(snapshot: AgentWidgetSnapshot? = nil, wantsSnapshot: Bool? = nil, hello: Hello? = nil,
+                answer: Answer? = nil, answerResult: AnswerResult? = nil) {
         self.version = Self.currentVersion
         self.snapshot = snapshot
         self.wantsSnapshot = wantsSnapshot
         self.hello = hello
+        self.answer = answer
+        self.answerResult = answerResult
     }
 
     /// The message as one line, ending in a newline. JSON escapes newlines inside strings, so

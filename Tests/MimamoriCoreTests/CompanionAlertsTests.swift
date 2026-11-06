@@ -68,4 +68,40 @@ struct CompanionAlertsTests {
         #expect(changes.post.first?.kind == .collision)
         #expect(CompanionAlerts.changes(from: [colliding], to: [colliding]).post.isEmpty)
     }
+
+    private func asking(_ request: AgentWidgetSnapshot.PermissionRequest?, since offset: TimeInterval = 5) -> AgentWidgetSnapshot.Agent {
+        var waiting = agent(.needsYou, status: "needs permission · Bash make", since: offset)
+        waiting.permissionRequest = request
+        return waiting
+    }
+
+    @Test func aRequestToAnswerGivesTheAlertItsIDAndCommand() throws {
+        let request = AgentWidgetSnapshot.PermissionRequest(id: "req-1", tool: "Bash", detail: "make deploy\nmake tag",
+                                                            since: now.addingTimeInterval(5),
+                                                            autoAnswer: .init(allow: false, at: now.addingTimeInterval(35)))
+        let alert = try #require(CompanionAlerts.changes(from: [agent(.working)], to: [asking(request)]).post.first)
+        #expect(alert.requestID == "req-1")
+        #expect(!alert.quiet)
+        #expect(alert.title == "Claude Code needs permission: Bash")
+        #expect(alert.body == "make deploy\nmake tag · shop › main\nDenying in 30 s unless you answer.")
+        // Without a request, nothing on the notification can answer.
+        let plain = CompanionAlerts.changes(from: [agent(.working)], to: [asking(nil)]).post.first
+        #expect(plain?.requestID == nil)
+    }
+
+    @Test func aRequestArrivingOrSettledLaterUpdatesTheAlertQuietly() throws {
+        let request = AgentWidgetSnapshot.PermissionRequest(id: "req-1", tool: "Bash", detail: "make", since: now)
+        let added = try #require(CompanionAlerts.changes(from: [asking(nil)], to: [asking(request)]).post.first)
+        #expect(added.quiet && added.requestID == "req-1" && added.id == "needs:/repo/main")
+        // Settled while the agent still waits (on its own prompt): Allow and Deny go.
+        let settled = try #require(CompanionAlerts.changes(from: [asking(request)], to: [asking(nil)]).post.first)
+        #expect(settled.quiet && settled.requestID == nil)
+        #expect(CompanionAlerts.changes(from: [asking(request)], to: [asking(request)]).post.isEmpty)
+    }
+
+    @Test func autoAnswerWaitsAreWordedShortly() {
+        #expect(CompanionAlerts.duration(45) == "45 s")
+        #expect(CompanionAlerts.duration(120) == "2 min")
+        #expect(CompanionAlerts.duration(90) == "1 min 30 s")
+    }
 }

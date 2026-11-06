@@ -61,13 +61,16 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         public var collision: String?
         /// What the Agents window's card adds, for the iPhone companion; nil in the widgets' snapshot.
         public var card: Card?
+        /// The permission request you can answer from the iPhone, for the companion only: nil in the
+        /// widgets' snapshot, which can't answer, and while Mimamori doesn't answer requests.
+        public var permissionRequest: PermissionRequest?
 
         public var id: String { worktreePath }
 
         public init(worktreePath: String, repository: String, repositoryColor: RepositoryColor? = nil, worktree: String,
                     agent: String, symbol: String? = nil,
                     state: State, status: String, since: Date, task: String? = nil, steps: [Step] = [], others: Int = 0,
-                    collision: String? = nil, card: Card? = nil) {
+                    collision: String? = nil, card: Card? = nil, permissionRequest: PermissionRequest? = nil) {
             self.worktreePath = worktreePath
             self.repository = repository
             self.repositoryColor = repositoryColor
@@ -82,10 +85,42 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
             self.others = others
             self.collision = collision
             self.card = card
+            self.permissionRequest = permissionRequest
         }
 
         /// Opens Mimamori on this agent's worktree.
         public var link: URL { AgentWidgetSnapshot.link(to: worktreePath) }
+    }
+
+    /// A Claude Code permission request waiting on you, which an answer from the phone settles as
+    /// Mimamori's own Allow and Deny do. Only Claude Code hands Mimamori its prompts.
+    public struct PermissionRequest: Codable, Sendable, Hashable, Identifiable {
+        /// What the phone's answer names, so an answer can only settle this request.
+        public var id: String
+        public var tool: String
+        /// The exact command or file, so you know what you allow.
+        public var detail: String?
+        public var since: Date
+        /// When Mimamori answers by itself, and how; nil while it waits for you.
+        public var autoAnswer: AutoAnswer?
+
+        public struct AutoAnswer: Codable, Sendable, Hashable {
+            public var allow: Bool
+            public var at: Date
+
+            public init(allow: Bool, at: Date) {
+                self.allow = allow
+                self.at = at
+            }
+        }
+
+        public init(id: String, tool: String, detail: String? = nil, since: Date, autoAnswer: AutoAnswer? = nil) {
+            self.id = id
+            self.tool = tool
+            self.detail = detail
+            self.since = since
+            self.autoAnswer = autoAnswer
+        }
     }
 
     /// An agent's card as the Agents window draws it: the turn's steps along its time, the files

@@ -1,0 +1,58 @@
+import Foundation
+
+/// Whether Allow or Deny from an iPhone may settle a permission request. Allow runs a command on
+/// the Mac, so it counts only from a phone that is paired and said which pairing it is, while
+/// Mimamori answers requests at all, and only for a request that still waits. Anything else, such
+/// as an answer to a request already answered on the Mac, is turned down and changes nothing.
+public enum CompanionAnswerCheck {
+    public enum Verdict: Equatable, Sendable {
+        /// Settle the request, recording it as answered on `phone`.
+        case answer(requestID: String, allow: Bool, phone: String)
+        /// Leave everything as it is, telling the phone why in a sentence.
+        case refuse(String)
+    }
+
+    /// - Parameters:
+    ///   - pairingID: the pairing the connection said hello with; nil before it has.
+    ///   - phones: paired phones' names, by pairing id.
+    ///   - answering: "Answer permission requests in Mimamori" is on.
+    ///   - pending: the ids of the requests waiting for an answer now.
+    public static func verdict(for answer: CompanionMessage.Answer, pairingID: String?, phones: [String: String],
+                               answering: Bool, pending: Set<String>) -> Verdict {
+        guard let pairingID else { return .refuse("This iPhone hasn't said who it is yet. Try again in a moment.") }
+        guard let phone = phones[pairingID] else { return .refuse("This iPhone isn't paired with the Mac any more.") }
+        guard answering else {
+            return .refuse("Mimamori on the Mac doesn't answer permission requests now. Answer in the agent's own prompt.")
+        }
+        guard pending.contains(answer.requestID) else {
+            return .refuse("That request no longer waits: it was answered, or the agent moved on.")
+        }
+        return .answer(requestID: answer.requestID, allow: answer.allow, phone: phone)
+    }
+
+    /// The longest detail sent to the phone. A command longer than this is cut, and the phone says so.
+    public static let detailLimit = 2_000
+
+    /// `detail` as the phone shows it: whole, unless it's longer than `detailLimit`.
+    public static func clipped(_ detail: String?) -> String? {
+        guard let detail, detail.count > detailLimit else { return detail }
+        return String(detail.prefix(detailLimit)) + "…"
+    }
+}
+
+extension CompanionMessage {
+    /// What makes a snapshot worth sending to the phones at once rather than within 10 s: an agent
+    /// that needs you or collides, and each request waiting for an answer, so the phone's Allow and
+    /// Deny appear, and go, as soon as the Mac's do. Its countdown too: stopped on the Mac, the
+    /// phone mustn't go on saying it will answer by itself.
+    public static func urgentKeys(_ agents: [AgentWidgetSnapshot.Agent]) -> Set<String> {
+        var keys: Set<String> = []
+        for agent in agents {
+            if agent.state == .needsYou || agent.collision != nil { keys.insert(agent.id) }
+            if let request = agent.permissionRequest {
+                keys.insert("request:" + request.id + (request.autoAnswer == nil ? "" : ":countdown"))
+            }
+        }
+        return keys
+    }
+}

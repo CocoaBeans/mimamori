@@ -69,6 +69,64 @@ struct CompanionMessageTests {
         #expect(decoded.agents[0].card == nil)
     }
 
+    @Test func aPermissionRequestSurvivesTheTripButNeverReachesTheWidget() throws {
+        let request = AgentWidgetSnapshot.PermissionRequest(
+            id: "req-1", tool: "Bash", detail: "rm -rf build &&\nmake", since: now,
+            autoAnswer: .init(allow: true, at: now.addingTimeInterval(60)))
+        let agent = AgentWidgetSnapshot.Agent(worktreePath: "/repo", repository: "shop", worktree: "main", agent: "Claude Code",
+                                              state: .needsYou, status: "needs permission · Bash rm -rf build &&", since: now,
+                                              permissionRequest: request)
+        var reader = CompanionLineReader()
+        let lines = reader.lines(adding: try CompanionMessage(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [agent])).line())
+        let decoded = try #require(try CompanionMessage(line: lines[0]).snapshot?.agents.first)
+        #expect(decoded.permissionRequest == request)
+
+        // The widgets' copy is made without it, so their file never holds a command to allow.
+        var widget = agent
+        widget.permissionRequest = nil
+        let json = String(decoding: try AgentWidgetSnapshot(writtenAt: now, agents: [widget]).encoded(), as: UTF8.self)
+        #expect(!json.contains("permissionRequest"))
+    }
+
+    @Test func anAnswerAndWhatBecameOfItSurviveTheTrip() throws {
+        var reader = CompanionLineReader()
+        let answer = CompanionMessage(answer: .init(requestID: "req-1", allow: false))
+        let result = CompanionMessage(answerResult: .init(requestID: "req-1", accepted: false, reason: "Too late."))
+        let lines = reader.lines(adding: try answer.line() + result.line())
+        #expect(try CompanionMessage(line: lines[0]) == answer)
+        #expect(try CompanionMessage(line: lines[1]) == result)
+        #expect(try CompanionMessage(line: lines[0]).snapshot == nil)
+    }
+
+    /// What a Mac or phone from before answers existed reads: the fields it knew then.
+    private struct OldMessage: Decodable {
+        var version: Int
+        var snapshot: AgentWidgetSnapshot?
+        var wantsSnapshot: Bool?
+        var hello: CompanionMessage.Hello?
+    }
+
+    @Test func olderAppsIgnoreAnswersAndRequestsTheyDontKnow() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        // An older Mac reads an answer as a message with nothing in it for it to act on.
+        let answer = try decoder.decode(OldMessage.self, from: try CompanionMessage(answer: .init(requestID: "r", allow: true)).line())
+        #expect(answer.snapshot == nil && answer.wantsSnapshot == nil && answer.hello == nil)
+        // An older phone reads the snapshot and draws the card without Allow and Deny.
+        let agent = AgentWidgetSnapshot.Agent(worktreePath: "/repo", repository: "shop", worktree: "main", agent: "Claude Code",
+                                              state: .needsYou, status: "needs permission · Bash", since: now,
+                                              permissionRequest: .init(id: "r", tool: "Bash", since: now))
+        let encoded = try CompanionMessage(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [agent])).line()
+        let old = try decoder.decode(OldMessage.self, from: encoded)
+        #expect(old.snapshot?.agents.first?.status == "needs permission · Bash")
+        // And a newer phone reads an older Mac's snapshot, which has no request, as nothing to answer.
+        let before = try CompanionMessage(line: line(#"{"version":1,"snapshot":{"writtenAt":1800000000,"mimamoriRunning":true,"#
+            + #""agents":[{"worktreePath":"/repo","repository":"shop","worktree":"main","agent":"Claude Code","#
+            + #""state":"needsYou","status":"needs permission","since":1800000000,"steps":[],"others":0}]}}"#))
+        #expect(before.snapshot?.agents.first?.permissionRequest == nil)
+        #expect(before.answer == nil && before.answerResult == nil)
+    }
+
     @Test func fieldsFromANewerVersionAreIgnored() throws {
         let message = try CompanionMessage(line: line(#"{"version":2,"wantsSnapshot":true,"somethingNew":[1,2]}"#))
         #expect(message.version == 2)
