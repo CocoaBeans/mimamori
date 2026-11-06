@@ -24,7 +24,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
   ([#58](https://github.com/CocoaBeans/mimamori/pull/58)).
 - "Keep the screen on" in the iPhone's settings stops it dimming and locking while Mimamori is
   open, so your agents stay in view on a stand; by default only while it's charging
-  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
+  ([#60](https://github.com/CocoaBeans/mimamori/pull/60)).
 
 ### Changed
 
