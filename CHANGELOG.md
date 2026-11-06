@@ -19,6 +19,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Off until you turn it on; each iPhone connects with a key of its own, encrypted. The iPhone app
   is built from source for now
   ([#57](https://github.com/CocoaBeans/mimamori/pull/57)).
+- The iPhone tells you when an agent needs you, finishes a turn or collides with another, as the
+  Mac does, and with "Stay connected in the background" on, it does while it isn't open
+  ([#58](https://github.com/CocoaBeans/mimamori/pull/58)).
 
 ### Changed
 
