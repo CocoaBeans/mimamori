@@ -271,6 +271,36 @@ struct OtherAgentServerTests {
         return result.stdoutText
     }
 
+    @Test func writesEveryRequestAsItCameWhenAskedTo() async throws {
+        let path = NSTemporaryDirectory() + "mimamori-test-\(UUID().uuidString.prefix(8)).sock"
+        let log = URL(fileURLWithPath: NSTemporaryDirectory() + "mimamori-raw-\(UUID().uuidString.prefix(8)).jsonl")
+        defer { try? FileManager.default.removeItem(at: log) }
+        let received = Received()
+        let server = HookSocketServer(path: path) { received.append($0) }
+        try server.start()
+        defer { server.stop() }
+
+        // Off, as normally: nothing is written.
+        let subagentStart = #"{"hook_event_name":"SubagentStart","session_id":"s1","cwd":"/repo","agent_id":"a1","agent_type":"Explore"}"#
+        #expect(try await post(subagentStart, to: "http://mimamori/event", socket: path) == "204")
+        #expect(!FileManager.default.fileExists(atPath: log.path))
+
+        server.rawLog = log
+        #expect(try await post(subagentStart, to: "http://mimamori/event", socket: path) == "204")
+        #expect(try await post("not json", to: "http://mimamori/event?agent=aider", socket: path) == "400")
+        let lines = try String(contentsOf: log, encoding: .utf8).split(separator: "\n")
+        #expect(lines.count == 2)
+        let first = try #require(try JSONSerialization.jsonObject(with: Data(lines[0].utf8)) as? [String: Any])
+        #expect(first["target"] as? String == "/event")
+        let body = try #require(first["body"] as? [String: Any])
+        // Every field as sent, including ones Mimamori doesn't read yet.
+        #expect(body["agent_type"] as? String == "Explore")
+        #expect(body["agent_id"] as? String == "a1")
+        // A body that isn't JSON is kept as text.
+        let second = try #require(try JSONSerialization.jsonObject(with: Data(lines[1].utf8)) as? [String: Any])
+        #expect(second["body"] as? String == "not json")
+    }
+
     @Test func namesTheAgentThatCalled() async throws {
         let path = NSTemporaryDirectory() + "mimamori-test-\(UUID().uuidString.prefix(8)).sock"
         let received = Received()

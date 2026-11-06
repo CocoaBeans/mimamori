@@ -141,6 +141,30 @@ public final class HookSocketServer: @unchecked Sendable {
 
     private func note(_ note: Note) { onNote?(note) }
 
+    /// A file to append every request's body to, as it came, one JSON line each with the time and
+    /// the address it was posted to; nil, as normally, writes nothing. For looking at what agents
+    /// actually send (MIMAMORI_DEBUG_FLAGS=hooks:raw in a debug build).
+    public var rawLog: URL? {
+        get { lock.lock(); defer { lock.unlock() }; return rawLogURL }
+        set { lock.lock(); rawLogURL = newValue; lock.unlock() }
+    }
+    private var rawLogURL: URL?
+
+    private func logRaw(_ body: Data, target: String) {
+        guard let url = rawLog else { return }
+        var line: [String: Any] = ["at": Date().timeIntervalSince1970, "target": target]
+        line["body"] = (try? JSONSerialization.jsonObject(with: body)) ?? String(decoding: body, as: UTF8.self)
+        guard var data = try? JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]) else { return }
+        data.append(0x0A)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+
     /// Whether `/permission` waits for an answer from Mimamori. Off, it reports the request like
     /// any other event and answers at once with no decision.
     public var answersPermissions: Bool {
@@ -355,6 +379,7 @@ public final class HookSocketServer: @unchecked Sendable {
     }
 
     private func handle(method: String, target: String, body: Data, peer: pid_t?, fd: Int32) -> (Int, String, String) {
+        if method == "POST" { logRaw(body, target: target) }
         let url = URLComponents(string: target)
         let query = Dictionary((url?.queryItems ?? []).compactMap { item in item.value.map { (item.name, $0) } },
                                uniquingKeysWith: { first, _ in first })

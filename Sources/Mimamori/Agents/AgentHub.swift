@@ -161,6 +161,10 @@ final class AgentHub {
     /// Which worktree each agent session works in, for events that carry no usable directory.
     @ObservationIgnored private var placement = SessionPlacement()
     @ObservationIgnored private var server: HookSocketServer?
+    /// Where the hook socket writes every request's body as it came (debug builds' `hooks:raw`).
+    @ObservationIgnored var rawHookLog: URL? {
+        didSet { server?.rawLog = rawHookLog }
+    }
     @ObservationIgnored private let scanner = AgentScanner()
     /// The last scan, before its processes are attributed to the worktrees their sessions work in.
     @ObservationIgnored private var lastScan = AgentScan()
@@ -254,6 +258,7 @@ final class AgentHub {
         do {
             try server.start()
             self.server = server
+        server.rawLog = rawHookLog
             if server.state == .deferring {
                 socketError = Self.deferringMessage
                 Log.hooks.notice("Another copy of Mimamori is listening for hook events at \(self.socketPath); this one takes over when it quits")

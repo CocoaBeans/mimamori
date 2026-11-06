@@ -40,6 +40,7 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=appearance:light     draw every window light (appearance:dark: dark), whatever the system's setting
 ///     MIMAMORI_DEBUG_FLAGS=resize:1000/600/1000 drag the window's width through these sizes, holding at each (the window
 ///                                               MIMAMORI_SCREENSHOT_WINDOW names; captures as <screenshot>.resize-<n><a|b>.png)
+///     MIMAMORI_DEBUG_FLAGS=hooks:raw            write every hook request's body as it came to <dump>.hooks.jsonl
 ///     MIMAMORI_DEBUG_FLAGS=uninstall:run        run Uninstall's default choices, app kept out of the Trash
 ///                                               (report in <dump>.uninstall.txt; use a scratch setup)
 ///
@@ -54,6 +55,10 @@ enum DebugHooks {
             return raw
         }
         let screenshot = value("MIMAMORI_SCREENSHOT")
+        // "hooks:raw": every hook request's body, as it came, to <dump>.hooks.jsonl.
+        if model.debugFlags.contains("hooks:raw") {
+            model.agentHub.rawHookLog = URL(fileURLWithPath: (value("MIMAMORI_DEBUG_DUMP") ?? (NSTemporaryDirectory() + "mimamori")) + ".hooks.jsonl")
+        }
         let dump = value("MIMAMORI_DEBUG_DUMP")
         let select = value("MIMAMORI_DEBUG_SELECT")
         var toReview = Set((value("MIMAMORI_DEBUG_REVIEW") ?? "").split(separator: ",").map(String.init))
