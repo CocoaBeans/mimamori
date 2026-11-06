@@ -15,6 +15,8 @@ struct AgentPresence: Hashable {
     var toolCallsThisTurn: Int
     /// The prompt behind the current turn, or the last one once it ended.
     var task: String? = nil
+    /// The session's title, such as the Claude desktop app shows it.
+    var title: String? = nil
     /// That turn's tool calls, oldest first.
     var turnSteps: [AgentToolCall] = []
     var turnStartedAt: Date? = nil
@@ -54,6 +56,9 @@ struct AgentPresence: Hashable {
     }
 
     var needsAttention: Bool { source == .hooks && activity.needsAttention || collision != nil }
+
+    /// The agent, and the session's title when it has one: "Claude Code · Weekly disk cleanup".
+    var label: String { title.map { "\(kind.displayName) · \($0)" } ?? kind.displayName }
     var agentCount: Int { 1 + others.count }
 
     var statusText: String {
@@ -110,6 +115,8 @@ struct PermissionRequest: Hashable, Identifiable {
     var agent: AgentKind
     var tool: String
     var detail: String?
+    /// The session's title, which tells it from others in the same folder.
+    var sessionTitle: String? = nil
     /// A shell tool's whole command, where `detail` has its first line: what the iPhone shows.
     var command: String? = nil
     var since: Date
@@ -214,6 +221,8 @@ final class AgentHub {
     @ObservationIgnored private var hermesTaskSessions = HermesTaskSessions()
     /// Sessions whose permission request Mimamori left to the agent's own prompt, while it waits.
     @ObservationIgnored private var steppedBack: Set<String> = []
+    /// When each session's title was last read from its transcript.
+    @ObservationIgnored private var titleReads: [String: Date] = [:]
     @ObservationIgnored private var hermesSessionKeys = HermesSessionKeys()
     /// Countdowns to answering a permission request by itself, by request id.
     @ObservationIgnored private var autoAnswerTasks: [String: Task<Void, Never>] = [:]
@@ -399,13 +408,15 @@ final class AgentHub {
             for earlier in held { notes += machine.apply(Self.anchored(earlier, in: worktree)) }
         }
         notes += machine.apply(Self.anchored(event, in: worktree))
+        refreshTitle(of: &machine, key: key, after: event)
         if let status = machine.status, let start = recordedTurnStart(for: status) { machine.backdateTurn(to: start) }
         machines[worktree, default: [:]][key] = machine
         if let id = event.permissionRequestID {
             // The status matched the request to the call that asked, which tells what settles it.
             let call = machine.status?.pendingPermission ?? PendingPermission(callID: event.toolUseID, agentID: event.agentID)
             var pending = PermissionRequest(id: id, session: key, worktree: worktree, agent: event.agent,
-                                            tool: event.toolName ?? "", detail: event.summary, command: event.command,
+                                            tool: event.toolName ?? "", detail: event.summary,
+                                            sessionTitle: machine.status?.title, command: event.command,
                                             since: event.receivedAt, call: call)
             if settings.autoAnswerPermissions {
                 let allow = settings.autoAnswer == .allow
@@ -682,6 +693,20 @@ final class AgentHub {
             remove(session: key, from: worktree)
         }
         publishStatuses()
+    }
+
+    /// Reads a Claude Code session's title from its transcript: at its first event, when a turn
+    /// starts or ends or it asks permission (the moments a title is written, or matters), and
+    /// otherwise every few minutes. A read is of the transcript's end only.
+    private func refreshTitle(of machine: inout AgentStatusMachine, key: String, after event: HookEvent) {
+        guard event.agent == .claudeCode, event.agentID == nil, let path = event.transcriptPath else { return }
+        let now = Date()
+        let moments: Set<HookEvent.Name> = [.sessionStart, .userPromptSubmit, .stop, .permissionRequest]
+        if let last = titleReads[key], now.timeIntervalSince(last) < (moments.contains(event.name) ? 5 : 300) { return }
+        titleReads[key] = now
+        if titleReads.count > 200 { titleReads = titleReads.filter { now.timeIntervalSince($0.value) < 3600 } }
+        // A turn with a lot of output can push the title out of the end that's read: keep the last one.
+        if let title = ClaudeSessionTitle.read(transcript: URL(fileURLWithPath: path)) { machine.setTitle(title) }
     }
 
     /// The directory Hermes records for the event's session. A session's row is written when its
@@ -1062,7 +1087,7 @@ final class AgentHub {
         return AgentPresence(kind: status.agent, source: .hooks, activity: status.activity, since: status.since,
                              processCount: own.count, isBusy: own.contains(where: \.isBusy),
                              lastToolCall: status.recentToolCalls.last, toolCallsThisTurn: status.toolCallsThisTurn,
-                             task: status.task, turnSteps: status.turnToolCalls,
+                             task: status.task, title: status.title, turnSteps: status.turnToolCalls,
                              turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
                              processIDs: processIDs,
                              awaitingCallID: status.pendingPermission?.callID,

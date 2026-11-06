@@ -103,6 +103,9 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var recentToolCalls: [AgentToolCall]
     /// The prompt that started the current (or, once it ends, the last) turn.
     public var task: String?
+    /// The session's title, such as the desktop app shows it; nil when it has none, or for an
+    /// agent that keeps none.
+    public var title: String?
     /// When the last turn began; unlike `turnStartedAt` it survives the turn's end.
     public var lastTurnStartedAt: Date?
     /// Set while `activity` is `needsPermission`.
@@ -638,6 +641,15 @@ public struct AgentStatusMachine: Sendable {
     /// You approved the shell command that was waiting: it is running. Claude Code sends no
     /// hook between the approval and the command finishing, so this comes from seeing the
     /// command's process. Returns false when nothing was waiting.
+    /// Sets the session's title (see `ClaudeSessionTitle`). Returns whether it changed.
+    @discardableResult
+    public mutating func setTitle(_ title: String?) -> Bool {
+        guard var current = status, current.title != title else { return false }
+        current.title = title
+        status = current
+        return true
+    }
+
     public mutating func noteApproved(at date: Date = Date()) -> Bool {
         guard var current = status, case .needsPermission(let tool, let detail) = current.activity else { return false }
         current.activity = .working(tool: tool.isEmpty ? nil : tool, detail: detail)

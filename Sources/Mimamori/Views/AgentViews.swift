@@ -178,7 +178,7 @@ struct AgentPresenceBadge: View {
     }
 
     private var help: String {
-        var lines = ([presence] + presence.others).map { $0.kind.displayName + " · " + $0.statusText }
+        var lines = ([presence] + presence.others).map { $0.label + " · " + $0.statusText }
         if let collision = presence.collision { lines.append(collision.title) }
         return lines.joined(separator: "\n")
     }
@@ -210,8 +210,9 @@ struct AgentStatusLine: View {
     var body: some View {
         HStack(spacing: 6) {
             AgentGlyph(presence: presence)
-            Text(presence.kind.displayName)
+            Text(presence.label)
                 .fontWeight(.medium)
+                .lineLimit(1)
             Text("·").foregroundStyle(.tertiary)
             Text(presence.statusText)
                 .foregroundStyle(presence.needsAttention ? presence.tint : .secondary)
@@ -613,8 +614,9 @@ struct OtherAgentLine: View {
         HStack(spacing: 6) {
             AgentGlyph(presence: presence)
                 .frame(width: 14)
-            Text(presence.kind.displayName)
+            Text(presence.label)
                 .fontWeight(.medium)
+                .lineLimit(1)
             Text("·").foregroundStyle(.tertiary)
             Text(worktree.map { AgentText.shortenPaths(presence.statusText, in: $0) } ?? presence.statusText)
                 .foregroundStyle(presence.needsAttention ? presence.tint : .secondary)

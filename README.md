@@ -195,6 +195,7 @@ Two agents working in the same folder can undo each other's work. Mimamori keeps
 When a worktree has more than one live agent:
 
 - The sidebar, menu bar and Agents window say how many, and the banner lists the others under **Also here**, each with Go to agent.
+- Each Claude Code session is named by its title, as the Claude desktop app shows it: the one you gave it, else the one Claude Code chose ("Claude Code · Weekly disk cleanup check"), on its card, in the banner and in a permission notification. So a request names the session asking, not just the folder and branch it works in. Mimamori reads the title from the end of the session's transcript (`transcript_path` in its hooks), read only.
 - When two of them edit the same file (both edits within 30 minutes, one of them in the last 10), the banner leads with a warning naming the files, the worktree counts as needing you, the activity feed records it, and a notification is posted (Settings › Agents › Notifications, on by default). **Dismiss** quiets it until they edit another file in common.
 - A shell command that names no file cannot be matched, and an agent whose hooks send no session id counts once per worktree.
 

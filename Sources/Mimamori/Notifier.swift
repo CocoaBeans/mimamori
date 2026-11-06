@@ -94,10 +94,11 @@ final class Notifier {
     }
 
     /// "Codex asks to use Bash": Allow, or Deny. The agent's own prompt is open meanwhile.
-    func askPermission(id: String, title: String, body: String) {
+    func askPermission(id: String, title: String, subtitle: String? = nil, body: String) {
         guard isAvailable else { return }
         let content = UNMutableNotificationContent()
         content.title = title
+        if let subtitle { content.subtitle = subtitle }
         content.body = body
         content.sound = .default
         content.categoryIdentifier = permissionCategory

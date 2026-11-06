@@ -173,7 +173,7 @@ struct HelpTopic: Identifiable {
             Commands it runs in the background are listed under **In the background**, with how long each has run and how it ended. They leave the agent Ready, "ready · 2 running in the background", since the turn is yours again. The iPhone shows both lists on its cards.
 
             ## Several agents in one worktree
-            Mimamori keeps each session apart. When two of them edit the same file, the banner warns you and names the files, since one may undo the other's work.
+            Mimamori keeps each session apart, and names a Claude Code session by its title, as the Claude desktop app does, so you can tell which one is asking. When two of them edit the same file, the banner warns you and names the files, since one may undo the other's work.
 
             ## Put an agent to sleep
             _Off until you turn on Offer putting agents to sleep, in Settings › General._

@@ -1015,11 +1015,15 @@ final class AppModel {
     private func permissionRequested(_ pending: PermissionRequest) {
         guard settings.notifyOnAgentPermission else { return }
         let name = sessions[pending.worktree]?.displayName ?? (pending.worktree as NSString).lastPathComponent
-        var body = [pending.detail, name].compactMap { $0 }.joined(separator: " · ")
+        // The session's title says which one asks, when several work in the same folder; with
+        // one, the subtitle names it and the folder, and the body keeps to what it asks.
+        let subtitle = pending.sessionTitle.map { "\($0) · \(name)" }
+        var body = (subtitle == nil ? [pending.detail, name] : [pending.detail]).compactMap { $0 }.joined(separator: " · ")
         if let plan = pending.autoAnswer {
             body += "\n\(plan.allow ? "Allowing" : "Denying") in \(Format.duration(plan.at.timeIntervalSince(pending.since))) unless you answer."
         }
-        notifier.askPermission(id: pending.id, title: "\(pending.agent.displayName) asks to use \(pending.tool)", body: body)
+        notifier.askPermission(id: pending.id, title: "\(pending.agent.displayName) asks to use \(pending.tool)",
+                               subtitle: subtitle, body: body)
     }
 
     /// Every answer given in Mimamori goes in the feed, so there is a record of what it allowed.
