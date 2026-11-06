@@ -338,13 +338,23 @@ final class AgentHub {
                 if let match = resolveWorktree(hint) { pathMatch = match; break }
             }
         }
-        let decision = placement.place(session: event.sessionID, cwdMatch: event.cwd.flatMap(resolveWorktree),
-                                       pathMatch: pathMatch, changesFiles: event.isMutatingTool,
-                                       homeMatch: self.hermesDirectory(for: event).flatMap(self.resolveWorktree))
+        // A subagent works for its session wherever it runs. One in a worktree of its own
+        // (`.claude/worktrees/agent-<id>`) reports from there, but belongs on its parent's card: placed
+        // by its folder, it moved the whole session there and back with every step.
+        var event = event
+        let sessionKey = AgentStatus.key(session: event.sessionID, agent: event.agent)
+        let parentWorktree = event.agentID == nil || event.sessionID == nil ? nil
+            : machines.first(where: { $0.value[sessionKey] != nil })?.key
+        if let parentWorktree, let own = event.cwd.flatMap(resolveWorktree), own != parentWorktree {
+            event.subagentWorktree = own
+        }
+        let placed = parentWorktree ?? placement.place(session: event.sessionID, cwdMatch: event.cwd.flatMap(resolveWorktree),
+                                                       pathMatch: pathMatch, changesFiles: event.isMutatingTool,
+                                                       homeMatch: self.hermesDirectory(for: event).flatMap(self.resolveWorktree)).worktree
         contacts[event.agent.id] = AgentContact(agent: event.agent, events: (contacts[event.agent.id]?.events ?? 0) + 1,
                                                 lastEventAt: event.receivedAt, lastEvent: event.rawName,
-                                                lastWorktree: decision.worktree)
-        guard let worktree = decision.worktree else {
+                                                lastWorktree: placed)
+        guard let worktree = placed else {
             eventsUnmatched += 1
             record(HookLogEntry(event, outcome: .unplaced(directory: event.cwd, held: event.sessionID != nil)))
             Log.agents.info("\(event.agent.displayName, privacy: .public) \(event.rawName, privacy: .public) fits no watched worktree; it works in \(event.cwd ?? "an unknown folder")")

@@ -332,7 +332,8 @@ extension AppModel {
             return AgentWidgetSnapshot.Card.Subagent(
                 id: subagent.id, title: subagent.title, description: details ? subagent.description : nil,
                 background: subagent.background, steps: subagent.steps, startedAt: subagent.startedAt,
-                finishedAt: subagent.finishedAt, lastStep: details ? step : nil)
+                finishedAt: subagent.finishedAt, lastStep: details ? step : nil,
+                worktree: subagent.worktreePath.map { ($0 as NSString).lastPathComponent })
         }
     }
 

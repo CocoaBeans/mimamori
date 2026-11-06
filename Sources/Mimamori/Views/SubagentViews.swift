@@ -23,6 +23,8 @@ struct SubagentsList: View {
 
 /// One subagent in a line, and its latest step under it while it runs.
 struct SubagentLine: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     let subagent: Subagent
     let now: Date
     var worktree: String? = nil
@@ -52,6 +54,20 @@ struct SubagentLine: View {
                         .truncationMode(.tail)
                 }
                 Spacer(minLength: 6)
+                // A worktree of its own: its changes are there to review.
+                if let own = subagent.worktreePath {
+                    Button {
+                        openWindow(id: "main")
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                        model.select(worktree: own)
+                    } label: {
+                        Label((own as NSString).lastPathComponent, systemImage: "arrow.triangle.branch")
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("It works in a worktree of its own: show its changes in Mimamori")
+                    .accessibilityLabel("Show the subagent's worktree")
+                }
                 Text(steps)
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()

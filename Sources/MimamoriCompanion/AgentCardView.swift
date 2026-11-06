@@ -414,6 +414,12 @@ private struct CardSubagents: View {
                             .foregroundStyle(running ? AnyShapeStyle(AgentToolCategory.subagent.color) : AnyShapeStyle(.tertiary))
                             .monospacedDigit()
                     }
+                    if let worktree = subagent.worktree {
+                        Label("in its own worktree, \(worktree)", systemImage: "arrow.triangle.branch")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 20)
+                    }
                     if running, let step = subagent.lastStep {
                         Text(step)
                             .font(.system(.caption2, design: .monospaced))

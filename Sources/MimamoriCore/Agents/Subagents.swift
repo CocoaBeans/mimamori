@@ -19,6 +19,8 @@ public struct Subagent: Sendable, Hashable, Codable, Identifiable {
     public var finishedAt: Date?
     /// Its last words, once finished, shortened.
     public var lastMessage: String?
+    /// The worktree it works in, when it has one of its own (`.claude/worktrees/agent-<id>`).
+    public var worktreePath: String?
 
     public init(id: String, type: String? = nil, description: String? = nil, background: Bool = false, startedAt: Date,
                 lastEventAt: Date? = nil, steps: Int = 0, lastStep: AgentToolCall? = nil, finishedAt: Date? = nil,

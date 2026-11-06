@@ -147,6 +147,17 @@ struct SubagentTests {
         #expect(machine.status?.runningSubagents.count == 1)
     }
 
+    @Test func aSubagentInAWorktreeOfItsOwnKeepsItOnItsParentsCard() throws {
+        var machine = started()
+        // The hub places it on its session's worktree, and says where it works.
+        var step = event(.preToolUse, tool: "Bash", id: "b1", agent: "a9", type: "general-purpose", at: 2)
+        step.subagentWorktree = "/repo/.claude/worktrees/agent-a9"
+        _ = machine.apply(step)
+        let subagent = try #require(machine.status?.subagents.first)
+        #expect(subagent.worktreePath == "/repo/.claude/worktrees/agent-a9")
+        #expect(machine.status?.sessionID == "s1")
+    }
+
     @Test func aBackgroundCommandRunsUntilClaudeCodeSaysItEnded() throws {
         var machine = started()
         var pre = event(.preToolUse, tool: "Bash", id: "c1", summary: "gh pr checks 64 --watch", at: 1)

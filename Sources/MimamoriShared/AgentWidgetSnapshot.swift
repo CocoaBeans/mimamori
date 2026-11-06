@@ -183,9 +183,11 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
             public var finishedAt: Date?
             /// Its latest step, "Read Sources/App.swift"; nil when tasks are kept on the Mac.
             public var lastStep: String?
+            /// The worktree it works in when it has one of its own, by name: "agent-a9eaebb9".
+            public var worktree: String?
 
             public init(id: String, title: String, description: String? = nil, background: Bool = false, steps: Int = 0,
-                        startedAt: Date, finishedAt: Date? = nil, lastStep: String? = nil) {
+                        startedAt: Date, finishedAt: Date? = nil, lastStep: String? = nil, worktree: String? = nil) {
                 self.id = id
                 self.title = title
                 self.description = description
@@ -194,6 +196,7 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
                 self.startedAt = startedAt
                 self.finishedAt = finishedAt
                 self.lastStep = lastStep
+                self.worktree = worktree
             }
         }
 

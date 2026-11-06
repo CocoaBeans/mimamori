@@ -332,6 +332,7 @@ public struct AgentStatusMachine: Sendable {
             let known = current.subagents.contains { $0.id == id }
             let index = subagentIndex(id)
             if current.subagents[index].type == nil { current.subagents[index].type = event.agentType }
+            if let own = event.subagentWorktree { current.subagents[index].worktreePath = own }
             current.subagents[index].lastEventAt = now
             if !known, let launch = current.pendingLaunches.firstIndex(where: { $0.type == nil || $0.type == event.agentType }) {
                 if current.subagents[index].description == nil {

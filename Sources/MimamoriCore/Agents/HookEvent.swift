@@ -66,6 +66,9 @@ public struct HookEvent: Sendable, Hashable {
     public var commandLaunch: CommandLaunch? = nil
     /// A prompt that is Claude Code telling the agent a background task ended (`<task-notification>`).
     public var taskNotification: TaskNotification? = nil
+    /// The worktree a subagent works in, when it isn't its session's: one Claude Code made for it.
+    /// Set by whoever places the event.
+    public var subagentWorktree: String? = nil
 
     public struct CommandLaunch: Sendable, Hashable {
         public var description: String?
