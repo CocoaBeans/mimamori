@@ -41,6 +41,9 @@ import WidgetKit
 ///     MIMAMORI_DEBUG_FLAGS=resize:1000/600/1000 drag the window's width through these sizes, holding at each (the window
 ///                                               MIMAMORI_SCREENSHOT_WINDOW names; captures as <screenshot>.resize-<n><a|b>.png)
 ///     MIMAMORI_DEBUG_FLAGS=hooks:raw            write every hook request's body as it came to <dump>.hooks.jsonl
+///     MIMAMORI_DEBUG_FLAGS=toggle-review:repeat press ⌘↩ on the selected file every 1–3 s
+///     MIMAMORI_DEBUG_FLAGS=watchdog             log when the main thread stops answering for a second, and sample
+///                                               the app then (<dump>.watchdog.txt, <dump>.hang-<n>.txt)
 ///     MIMAMORI_DEBUG_FLAGS=uninstall:run        run Uninstall's default choices, app kept out of the Trash
 ///                                               (report in <dump>.uninstall.txt; use a scratch setup)
 ///
@@ -58,6 +61,22 @@ enum DebugHooks {
         // "hooks:raw": every hook request's body, as it came, to <dump>.hooks.jsonl.
         if model.debugFlags.contains("hooks:raw") {
             model.agentHub.rawHookLog = URL(fileURLWithPath: (value("MIMAMORI_DEBUG_DUMP") ?? (NSTemporaryDirectory() + "mimamori")) + ".hooks.jsonl")
+        }
+        if model.debugFlags.contains("watchdog") {
+            MainThreadWatchdog(prefix: value("MIMAMORI_DEBUG_DUMP") ?? (NSTemporaryDirectory() + "mimamori")).start()
+        }
+        // "toggle-review:repeat": press ⌘↩ on the selected file every 1–3 s, as someone reviewing
+        // while an agent writes would, for chasing a hang.
+        if model.debugFlags.contains("toggle-review:repeat") {
+            Task { @MainActor [weak model] in
+                try? await Task.sleep(for: .seconds(6))
+                while let model, !Task.isCancelled {
+                    if let session = model.selectedSession, let selected = session.selectedPath, session.change(for: selected) != nil {
+                        model.toggleReviewForSelection()
+                    }
+                    try? await Task.sleep(for: .milliseconds(Int.random(in: 1000...3000)))
+                }
+            }
         }
         let dump = value("MIMAMORI_DEBUG_DUMP")
         let select = value("MIMAMORI_DEBUG_SELECT")
