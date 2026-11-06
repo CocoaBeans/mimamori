@@ -214,6 +214,8 @@ struct HelpTopic: Identifiable {
             ## Notifications
             The iPhone tells you when an agent needs you, finishes a turn, or edits the same file as another, as your Mac does; the gear on the iPhone chooses which. They come while Mimamori is open on the iPhone, or always with **Stay connected in the background** on there: Mimamori then keeps running after you leave it, playing silence so iOS doesn't suspend it, which uses more battery.
 
+            To keep your agents in view on a stand beside your Mac, turn on **Keep the screen on** in the iPhone's settings: it doesn't dim or lock while Mimamori is open, by default only while it's charging.
+
             ## If it doesn't connect
             - The iPhone and the Mac need to be on the same network, and the iPhone unplugged from the Mac's cable works best.
             - Both ask, the first time, to find devices on your local network. If you said no, turn Mimamori on in **Privacy & Security › Local Network**: System Settings on the Mac, Settings on the iPhone.

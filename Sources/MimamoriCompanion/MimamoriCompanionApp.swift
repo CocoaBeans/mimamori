@@ -1,5 +1,6 @@
 import MimamoriShared
 import SwiftUI
+import UIKit
 
 /// Mimamori's iPhone companion: the agents at work on your Mac, and who needs you.
 @main
@@ -7,7 +8,15 @@ struct MimamoriCompanionApp: App {
     @State private var model = CompanionModel()
     @State private var keepAlive = BackgroundKeepAlive()
     @AppStorage(CompanionNotificationSetting.staysConnected) private var staysConnected = false
+    @State private var screen = ScreenKeeper()
+    @AppStorage(ScreenKeeper.keepsScreenOn) private var keepsScreenOn = false
+    @AppStorage(ScreenKeeper.onlyWhileCharging) private var onlyWhileCharging = true
     @Environment(\.scenePhase) private var scenePhase
+
+    private var screenStaysOn: Bool {
+        ScreenKeeper.staysOn(asked: keepsScreenOn, onlyWhileCharging: onlyWhileCharging,
+                             active: scenePhase == .active, charging: screen.isCharging)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -23,6 +32,9 @@ struct MimamoriCompanionApp: App {
                 }
                 // The Mac's pairing code, opened from the Camera.
                 .onOpenURL { url in model.pair(with: url) }
+                .onChange(of: screenStaysOn, initial: true) { _, on in
+                    UIApplication.shared.isIdleTimerDisabled = on
+                }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .active:

@@ -12,6 +12,8 @@ struct CompanionSettingsSheet: View {
     @AppStorage(CompanionNotificationSetting.turnFinished) private var turnFinished = false
     @AppStorage(CompanionNotificationSetting.collision) private var collision = true
     @AppStorage(CompanionNotificationSetting.staysConnected) private var staysConnected = false
+    @AppStorage(ScreenKeeper.keepsScreenOn) private var keepsScreenOn = false
+    @AppStorage(ScreenKeeper.onlyWhileCharging) private var onlyWhileCharging = true
     @State private var notificationsDenied = false
 
     var body: some View {
@@ -38,6 +40,16 @@ struct CompanionSettingsSheet: View {
                     Toggle("Stay connected in the background", isOn: $staysConnected)
                 } footer: {
                     Text("Mimamori keeps running after you leave it, playing silence so iOS doesn't suspend it, and keeps in touch with your Mac so it can tell you when an agent needs you. Your own music keeps playing. It uses more battery: turn it off when you don't need it.")
+                }
+
+                Section {
+                    Toggle("Keep the screen on", isOn: $keepsScreenOn)
+                        .help("Don't let the iPhone dim or lock while Mimamori is open")
+                    Toggle("Only while charging", isOn: $onlyWhileCharging)
+                        .disabled(!keepsScreenOn)
+                        .help("Keep the screen on only while the iPhone is plugged in")
+                } footer: {
+                    Text("While Mimamori is open, the iPhone doesn't dim or lock, so your agents stay in view on a stand beside your Mac. Only while charging saves your battery when it's unplugged.")
                 }
             }
             .navigationTitle("Settings")

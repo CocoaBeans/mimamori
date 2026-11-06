@@ -22,6 +22,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - The iPhone tells you when an agent needs you, finishes a turn or collides with another, as the
   Mac does, and with "Stay connected in the background" on, it does while it isn't open
   ([#58](https://github.com/CocoaBeans/mimamori/pull/58)).
+- "Keep the screen on" in the iPhone's settings stops it dimming and locking while Mimamori is
+  open, so your agents stay in view on a stand; by default only while it's charging
+  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
 
 ### Changed
 
