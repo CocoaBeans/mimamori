@@ -97,15 +97,74 @@ public struct AgentClassifier: Sendable {
         if let kind = match(name: name) { return kind }
         if executable.contains("/claude-code/") || executable.hasSuffix("/claude.app/Contents/MacOS/claude") { return .claudeCode }
         guard Self.isInterpreter(name) else { return nil }
-        // node /path/to/@anthropic-ai/claude-code/cli.js, python -m aider, .venv/bin/hermes gateway run, …
-        for argument in arguments.dropFirst().prefix(6) where !argument.hasPrefix("-") || argument.hasPrefix("-m") {
-            let components = argument.split(separator: "/").map(String.init)
-            for component in components.reversed() {
-                if let kind = match(name: component) { return kind }
-            }
+        // Only what names the program the interpreter runs: never the program's own arguments,
+        // which can be any path, such as one under a folder called claude-profiles.
+        switch Self.program(arguments: arguments) {
+        case .module(let module):
+            return module.split(separator: ".").first.flatMap { match(name: String($0)) }
+        case .script(let path):
+            return classify(script: path)
+        case nil:
+            return nil
         }
-        // Console scripts: the first argument is the script itself, e.g. ~/.hermes/hermes-agent/.hermes/bin/hermes
-        if let script = arguments.first, let kind = match(name: (script as NSString).lastPathComponent) { return kind }
+    }
+
+    enum Program: Equatable {
+        /// `python -m aider`
+        case module(String)
+        /// A script's path, or a package a runner names: `node …/cli.js`, `npx @anthropic-ai/claude-code`.
+        case script(String)
+    }
+
+    /// Interpreter options followed by a value, which isn't the program.
+    private static let optionsWithValues: Set<String> = [
+        "-W", "-X", "-Q", "-r", "--require", "--loader", "--experimental-loader", "--import", "--input-type", "--with",
+        "--from", "--python", "-p", "--package",
+    ]
+    /// Code given inline or on standard input: there's no program to name.
+    private static let inlineCode: Set<String> = ["-c", "-e", "--eval", "--print", "-"]
+    /// A runner's subcommands before the program: `uv run aider`, `uv tool run aider`, `bun x …`.
+    private static let runnerSubcommands: Set<String> = ["run", "tool", "x", "exec"]
+
+    /// The program the interpreter in `arguments` (its argv) runs, if it names one.
+    static func program(arguments: [String]) -> Program? {
+        guard let first = arguments.first else { return nil }
+        // A console script's argv starts with the script itself (…/.venv/bin/hermes), not the interpreter.
+        if !isInterpreter((first as NSString).lastPathComponent) { return .script(first) }
+        var rest = arguments.dropFirst()[...]
+        while let argument = rest.first {
+            rest = rest.dropFirst()
+            if argument == "-m", let module = rest.first { return .module(module) }
+            if argument.hasPrefix("-m"), argument.count > 2 { return .module(String(argument.dropFirst(2))) }
+            if inlineCode.contains(argument) { return nil }
+            if optionsWithValues.contains(argument) {
+                rest = rest.dropFirst()
+                continue
+            }
+            if argument.hasPrefix("-") || runnerSubcommands.contains(argument) { continue }
+            return .script(argument)
+        }
+        return nil
+    }
+
+    /// Entry points too generic to name a program: the package around them does.
+    private static let genericEntries: Set<String> = ["cli", "index", "main", "__main__", "entry", "run", "app", "start", "bin"]
+
+    /// The agent a script is: by its own name, or for a generic entry point such as `cli.js`, by the
+    /// package it's installed as: the folder after `node_modules` (with its scope) or `site-packages`.
+    /// Not by other folders: anyone's `main.py` can sit in a folder called `hermes-notes`.
+    private func classify(script: String) -> AgentKind? {
+        let components = script.split(separator: "/").map(String.init)
+        guard let last = components.last else { return nil }
+        let base = (last as NSString).deletingPathExtension
+        if let kind = match(name: base) { return kind }
+        guard Self.genericEntries.contains(base.lowercased()) else { return nil }
+        for marker in ["node_modules", "site-packages"] {
+            guard let index = components.lastIndex(of: marker), index + 1 < components.count - 1 else { continue }
+            var package = components[index + 1]
+            if package.hasPrefix("@"), index + 2 < components.count - 1 { package = components[index + 2] }
+            return match(name: package)
+        }
         return nil
     }
 

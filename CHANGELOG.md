@@ -36,6 +36,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- A script run with Python, Node or the like no longer shows as a second agent in its worktree
+  because one of its arguments mentions an agent, such as a path through a folder named
+  `claude-profiles`. Mimamori now judges such a process by the program it runs alone
+  ([#63](https://github.com/CocoaBeans/mimamori/pull/63)).
 - A diff with wrapped lines could stop responding, once right after a click on Reviewed, and keep
   Mimamori busy until it was quit. The diff no longer measures its lines at widths it never shows
   them at, the work it was stuck repeating

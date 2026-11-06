@@ -32,6 +32,32 @@ struct AgentClassifierTests {
         #expect(classifier.classify(executable: "/usr/local/bin/node", arguments: ["node", "server.js"]) == nil)
         #expect(classifier.classify(executable: "/Applications/Xcode.app/Contents/MacOS/Xcode", arguments: []) == nil)
     }
+
+    @Test func readsOnlyTheProgramAnInterpreterRuns() {
+        let python = "/usr/bin/python3", node = "/opt/homebrew/bin/node"
+        // A helper's arguments are its own business, however they're named.
+        #expect(classifier.classify(executable: python, arguments: [
+            "python3", "-", "/Users/x/Library/Application Support/orca/claude-profiles/abc/home/memory"]) == nil)
+        #expect(classifier.classify(executable: python, arguments: [
+            "python3", "-I", "/tmp/tools/statefiles.py", "/Users/x/claude-profiles/y/state.json"]) == nil)
+        #expect(classifier.classify(executable: node, arguments: ["node", "/work/build.js", "--out", "codex-notes.md"]) == nil)
+        #expect(classifier.classify(executable: python, arguments: ["python3", "-c", "import claude"]) == nil)
+        // Nor does the folder a script happens to live in name it.
+        #expect(classifier.classify(executable: python, arguments: ["python3", "/Users/x/claude-profiles/p/tools/report.py"]) == nil)
+        #expect(classifier.classify(executable: python, arguments: ["python3", "/Users/x/hermes-notes/main.py"]) == nil)
+    }
+
+    @Test func recognizesAgentsStartedThroughInterpretersAndRunners() {
+        #expect(classifier.classify(executable: "/usr/local/bin/npx", arguments: ["npx", "@anthropic-ai/claude-code"]) == .claudeCode)
+        #expect(classifier.classify(executable: "/opt/homebrew/bin/uv", arguments: ["uv", "run", "aider", "--model", "x"]) == .aider)
+        #expect(classifier.classify(executable: "/opt/homebrew/bin/uv", arguments: ["uv", "tool", "run", "--from", "aider-chat", "aider"]) == .aider)
+        #expect(classifier.classify(executable: "/usr/bin/python3", arguments: ["python3", "-m", "hermes_cli.main", "gateway"]) == .hermes)
+        #expect(classifier.classify(executable: "/opt/homebrew/bin/node", arguments: [
+            "node", "--no-warnings", "/x/node_modules/@openai/codex/bin/codex.js"]) == .codex)
+        #expect(classifier.classify(executable: "/usr/bin/python3", arguments: [
+            "python3", "/venv/lib/python3.12/site-packages/aider/__main__.py"]) == .aider)
+        #expect(classifier.classify(executable: "/opt/homebrew/bin/node", arguments: ["node", "/usr/local/bin/claude", "--resume"]) == .claudeCode)
+    }
 }
 
 @Suite("Process inspection")
@@ -1063,13 +1089,14 @@ struct ClaudeSessionFileTests {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("mimamori-scan-\(UUID().uuidString)")
         let worktree = base.appendingPathComponent("repo")
         let sessions = base.appendingPathComponent("sessions")
-        let package = base.appendingPathComponent("claude-code")
+        let package = base.appendingPathComponent("node_modules/@anthropic-ai/claude-code")
         for directory in [worktree, sessions, package] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
         defer { try? FileManager.default.removeItem(at: base) }
-        // A stand-in for Claude Code: a script in a claude-code package is taken for it, as
-        // `node …/claude-code/cli.js` is. (A copied system binary is killed on launch.)
+        // A stand-in for Claude Code: a script where npm installs it is taken for it, as
+        // `node …/node_modules/@anthropic-ai/claude-code/cli.js` is. (A copied system binary is
+        // killed on launch.)
         let script = package.appendingPathComponent("cli.py")
         try Data("import time\ntime.sleep(30)\n".utf8).write(to: script)
         let process = Process()
