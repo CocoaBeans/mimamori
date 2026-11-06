@@ -14,7 +14,7 @@ import Network
 final class CompanionPublisher {
     private static let minimumInterval: TimeInterval = 10
 
-    /// A phone said who it is: which pairing it connected with, and its name.
+    /// A phone said who it is, once it proved that pairing: which pairing, and its name.
     var onHello: ((CompanionMessage.Hello) -> Void)?
     /// A phone answered a permission request, with the pairing it proved it is, if it has: what
     /// became of it goes back to that phone.
@@ -40,7 +40,7 @@ final class CompanionPublisher {
     private struct Phone {
         let connection: NWConnection
         var reader = CompanionLineReader()
-        /// The pairing it said hello with: a claim, good for the paired phones' list.
+        /// The pairing it proved and said hello as: what the paired phones' list and goodbye go by.
         var pairingID: String?
         /// The pairing it proved it is, against this connection's own nonce: what answers go by.
         var identity = CompanionConnectionIdentity()
@@ -198,9 +198,14 @@ final class CompanionPublisher {
         // In order, so a proof counts for an answer that follows it in the same piece.
         for line in lines {
             guard phones[id] != nil, let message = try? CompanionMessage(line: line) else { continue }
-            if let hello = message.hello {
-                phones[id]?.pairingID = hello.pairingID
-                onHello?(hello)
+            if let hello = message.hello, var identity = phones[id]?.identity {
+                let believed = identity.receive(hello)
+                phones[id]?.identity = identity
+                if let believed {
+                    greet(believed, from: id)
+                } else if identity.verifiedPairingID != nil {
+                    Log.companion.error("Ignored a companion's hello for pairing \(hello.pairingID, privacy: .public), which it hasn't proved")
+                }
             }
             if let proof = message.proof { check(proof, from: id) }
             if message.wantsSnapshot == true, let reply = currentLine() { send(reply, to: connection) }
@@ -226,11 +231,22 @@ final class CompanionPublisher {
         switch outcome {
         case .verified(let pairing):
             Log.companion.notice("A companion proved it is pairing \(pairing, privacy: .public)")
+            // The hello it sent before the challenge counts now, if it named this pairing.
+            if let held = phones[id]?.identity.releaseHeldHello() {
+                greet(held, from: id)
+            } else if let held = identity.heldHello, held.pairingID != pairing {
+                Log.companion.error("Ignored a companion's hello for pairing \(held.pairingID, privacy: .public), which it hasn't proved")
+            }
         case .alreadyVerified:
             break
         case .conflicting, .unknownPairing, .mismatch:
             Log.companion.error("Turned down a companion's proof for pairing \(proof.pairingID, privacy: .public): \(String(describing: outcome), privacy: .public)")
         }
+    }
+
+    private func greet(_ hello: CompanionMessage.Hello, from id: ObjectIdentifier) {
+        phones[id]?.pairingID = hello.pairingID
+        onHello?(hello)
     }
 
     private func send(_ line: Data, to connection: NWConnection) {

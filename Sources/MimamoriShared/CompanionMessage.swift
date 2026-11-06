@@ -85,7 +85,7 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
     /// What the Mac lists a paired phone by.
     public struct Hello: Codable, Sendable, Equatable {
         /// The pairing it connected with. TLS has already checked that the phone holds a paired
-        /// key; this says which, for the Mac's list.
+        /// key; this says which, and the Mac believes it only once the phone proves it.
         public var pairingID: String
         /// "iPhone", or the phone's own name where iOS shares it.
         public var deviceName: String

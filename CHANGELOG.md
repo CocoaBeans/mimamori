@@ -63,6 +63,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - A Claude Code subagent working in a worktree of its own no longer moves its parent's card to
   that worktree and back with every step; it shows on its parent's card, with its worktree a click
   away ([#70](https://github.com/CocoaBeans/mimamori/pull/70)).
+- The Mac takes a paired iPhone's name, and finishes pairing a new one, only once it has proved
+  which pairing it is, as it already did for its answers. Before, another paired iPhone could
+  name itself as a different one, or as an iPhone being paired
+  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
+
 - A script run with Python, Node or the like no longer shows as a second agent in its worktree
   because one of its arguments mentions an agent, such as a path through a folder named
   `claude-profiles`. Mimamori now judges such a process by the program it runs alone

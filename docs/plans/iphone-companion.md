@@ -7,7 +7,8 @@
 > `permissionRequest`, and the phone's `answer`, which the Mac acts on only from a paired phone for
 > a request still waiting (`CompanionAnswerCheck`). Which paired phone is proved per connection:
 > the Mac's `challenge` nonce, answered by an HMAC under the pairing's secret (`CompanionProof`),
-> since TLS alone shows only that a phone holds one of the keys. Then an agent's list of actions,
+> since TLS alone shows only that a phone holds one of the keys; the phone's `hello` (its name,
+> and for a new phone the end of pairing) counts only once that proof holds. Then an agent's list of actions,
 > which completes step 2. Builds of your own come first: same network, then the silent-audio
 > keep-alive with "needs you" notifications, then Tailscale. CloudKit and a relay wait for an App
 > Store build.

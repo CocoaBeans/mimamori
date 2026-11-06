@@ -79,6 +79,46 @@ struct CompanionAnswerTests {
         #expect(identity.check(proof(), secret: secret) == .alreadyVerified)
     }
 
+    private func hello(_ pairingID: String = "pairing-1") -> CompanionMessage.Hello {
+        CompanionMessage.Hello(pairingID: pairingID, deviceName: "iPhone")
+    }
+
+    @Test func aHelloBeforeTheProofWaitsForIt() {
+        // The phone says hello at once and proves itself after the challenge.
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.receive(hello()) == nil)
+        #expect(identity.releaseHeldHello() == nil)
+        #expect(identity.check(proof(), secret: secret) == .verified("pairing-1"))
+        #expect(identity.releaseHeldHello() == hello())
+        // Once only.
+        #expect(identity.releaseHeldHello() == nil)
+    }
+
+    @Test func aHelloAfterTheProofCountsAtOnce() {
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.check(proof(), secret: secret) == .verified("pairing-1"))
+        #expect(identity.receive(hello()) == hello())
+    }
+
+    @Test func aHelloForAnotherPairingNeverCounts() {
+        // A paired phone naming another pairing, such as the code on show for a phone pairing now.
+        var held = CompanionConnectionIdentity(nonce: nonce)
+        #expect(held.receive(hello("pairing-2")) == nil)
+        #expect(held.check(proof(), secret: secret) == .verified("pairing-1"))
+        #expect(held.releaseHeldHello() == nil)
+
+        var proved = CompanionConnectionIdentity(nonce: nonce)
+        #expect(proved.check(proof(), secret: secret) == .verified("pairing-1"))
+        #expect(proved.receive(hello("pairing-2")) == nil)
+    }
+
+    @Test func aHelloWithoutAProofNeverCounts() {
+        var identity = CompanionConnectionIdentity(nonce: nonce)
+        #expect(identity.receive(hello()) == nil)
+        #expect(identity.check(proof(secret: otherSecret), secret: secret) == .mismatch)
+        #expect(identity.releaseHeldHello() == nil)
+    }
+
     @Test func aProofUnderAnotherSecretFails() {
         // Another paired phone's key, which TLS would let in, can't prove this pairing.
         var identity = CompanionConnectionIdentity(nonce: nonce)

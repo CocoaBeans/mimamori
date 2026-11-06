@@ -19,6 +19,8 @@ public struct CompanionConnectionIdentity: Sendable {
     /// What the phone signs; sent in the connection's challenge.
     public let nonce: Data
     public private(set) var verifiedPairingID: String?
+    /// A hello that came before any proof, held until a proof says whether to believe it.
+    public private(set) var heldHello: CompanionMessage.Hello?
 
     public init(nonce: Data = CompanionProof.newNonce()) {
         self.nonce = nonce
@@ -33,6 +35,26 @@ public struct CompanionConnectionIdentity: Sendable {
         guard CompanionProof.isValid(proof.mac, secret: secret, nonce: nonce, pairingID: proof.pairingID) else { return .mismatch }
         verifiedPairingID = proof.pairingID
         return .verified(proof.pairingID)
+    }
+
+    /// A hello to act on, or nil. Its name and model go in the paired phones' list, and for a
+    /// phone pairing now it completes the pairing, so only a hello from the pairing this
+    /// connection proved counts. One that comes first is held for the proof; one naming another
+    /// pairing is dropped.
+    public mutating func receive(_ hello: CompanionMessage.Hello) -> CompanionMessage.Hello? {
+        guard let verifiedPairingID else {
+            heldHello = hello
+            return nil
+        }
+        return hello.pairingID == verifiedPairingID ? hello : nil
+    }
+
+    /// The held hello, once a proof has made it believable: nil until then, or if it named
+    /// another pairing than the one proved.
+    public mutating func releaseHeldHello() -> CompanionMessage.Hello? {
+        guard let verifiedPairingID, let held = heldHello else { return nil }
+        heldHello = nil
+        return held.pairingID == verifiedPairingID ? held : nil
     }
 }
 
