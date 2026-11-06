@@ -161,6 +161,8 @@ struct HelpTopic: Identifiable {
             ## Answer permission requests
             When Claude Code asks permission for a tool call, **Allow** and **Deny** appear in the agent's banner, on its card in the Agents window and in the notification. Claude Code shows its own prompt at the same time and takes whichever answer comes first, so answer wherever you are. A deny rule in your Claude Code settings always wins.
 
+            In the Claude desktop app, Claude Code can wait for Mimamori's answer before its own prompt works, so Mimamori offers Allow and Deny for 20 seconds there, then leaves the request to the app.
+
             With smart approvals on, Hermes first has a second model check a risky command. The agent stays Working meanwhile, and shows as needing permission only if the model leaves the decision to you.
 
             Settings › Agents › Hooks can also answer by itself after a wait you choose, but never allows a call that matches one of your ask rules, or a command too long (over 64 KB) to check against them.

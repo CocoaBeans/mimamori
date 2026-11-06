@@ -234,6 +234,8 @@ What Mimamori can show depends on what an agent sends: start and end of a turn g
 
 When Claude Code asks permission for a tool call, Mimamori shows **Allow** and **Deny** in the agent's banner (and the toolbar pill's popover), on its card in the Agents window, and in a notification with the same buttons. Claude Code shows its own prompt at the same time and takes whichever answer comes first, so you can answer in either place. An allowed call goes ahead as if you allowed it in the prompt; a denied one tells Claude no, and it carries on without that step. An allow never gets past a `deny` rule in your Claude Code settings.
 
+In the Claude desktop app, Claude Code can wait for this hook before it shows its own prompt (in bypass permissions mode, for a call it asks about anyway), so until the hook answers, the app's own **Allow** and **Deny** do nothing. Mimamori holds a request from the desktop app for 20 seconds only, then leaves it to the app's prompt: its own buttons go, and the agent shows as needing permission until it moves on. Requests from Claude Code in a terminal are held for up to ten minutes, as both prompts work at once there.
+
 This works through Mimamori's `PermissionRequest` hook. Unlike its other hooks, this one waits for an answer and prints it:
 
 ```bash

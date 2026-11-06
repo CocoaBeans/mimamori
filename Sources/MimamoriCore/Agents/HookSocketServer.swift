@@ -10,19 +10,30 @@ public struct HookCaller: Sendable, Hashable {
     /// The agent that ran the hook, found among the caller and its ancestors.
     public var agent: AgentKind?
     public var agentPID: Int32?
+    /// The agent's executable.
+    public var agentPath: String?
 
-    public init(pid: Int32, directory: String? = nil, agent: AgentKind? = nil, agentPID: Int32? = nil) {
+    public init(pid: Int32, directory: String? = nil, agent: AgentKind? = nil, agentPID: Int32? = nil, agentPath: String? = nil) {
         self.pid = pid
         self.directory = directory
         self.agent = agent
         self.agentPID = agentPID
+        self.agentPath = agentPath
     }
 
     /// Looks the caller up while it is still connected, and so still running.
     public static func identify(pid: Int32, classifier: AgentClassifier) -> HookCaller {
         let ancestor = ProcessInspector.agentAncestor(of: pid, classifier: classifier)
         return HookCaller(pid: pid, directory: ProcessInspector.currentDirectory(of: pid),
-                          agent: ancestor?.kind, agentPID: ancestor?.pid)
+                          agent: ancestor?.kind, agentPID: ancestor?.pid,
+                          agentPath: ancestor.flatMap { ProcessInspector.executablePath(of: $0.pid) })
+    }
+
+    /// Claude Code run by the Claude desktop app, which keeps its own copy in Application Support.
+    public var isClaudeDesktop: Bool { agentPath.map(Self.isClaudeDesktop(path:)) ?? false }
+
+    static func isClaudeDesktop(path: String) -> Bool {
+        path.contains("/Library/Application Support/Claude/claude-code/")
     }
 }
 
@@ -75,6 +86,9 @@ public final class HookSocketServer: @unchecked Sendable {
         /// The hook waiting on permission request `id` went away before an answer: the agent no
         /// longer waits on it. Claude Code ends the hook when you say no in its own prompt.
         case hungUp(permission: String)
+        /// Permission request `id` was held as long as it may be, and let go with no decision: the
+        /// agent's own prompt decides it now.
+        case timedOut(permission: String)
         /// The server stopped or started listening after it started: another copy of Mimamori
         /// took the socket, or let it go.
         case state(State)
@@ -115,6 +129,10 @@ public final class HookSocketServer: @unchecked Sendable {
     /// The longest a permission request waits: under the hook's own timeout, so the hook ends
     /// on its own terms.
     public var permissionTimeout: TimeInterval = 590
+    /// How long a request from the Claude desktop app is held. In bypass permissions mode Claude
+    /// Code there can wait on its permission hook before it shows its own prompt, so a request held
+    /// for the full timeout leaves that prompt's Allow and Deny doing nothing.
+    public var desktopPermissionHold: TimeInterval = 20
 
     public init(path: String, handler: @escaping Handler) {
         self.path = path
@@ -404,7 +422,11 @@ public final class HookSocketServer: @unchecked Sendable {
             event.permissionRequestID = id
             if let id { permissions.open(id) }
             deliveryQueue.sync { handler(event) }
-            guard let id, let answer = waitForAnswer(id, hook: fd) else { return (204, "No Content", "") }
+            guard let id else { return (204, "No Content", "") }
+            let hold = caller?.isClaudeDesktop == true ? min(desktopPermissionHold, permissionTimeout) : permissionTimeout
+            let outcome = waitForAnswer(id, hook: fd, timeout: hold)
+            if outcome.timedOut { note(.timedOut(permission: id)) }
+            guard let answer = outcome.answer else { return (204, "No Content", "") }
             return (200, "OK", answer.hookResponse + "\n")
         case ("POST", "/event"), ("POST", "/event/hermes"):
             // A test from Settings: the cheap byte search keeps agents' events from being parsed twice.
@@ -433,7 +455,7 @@ public final class HookSocketServer: @unchecked Sendable {
     /// Waits for an answer to `id` while watching the hook's connection. A hook that hangs up
     /// first was ended by its agent, which no longer waits on the answer: the request is let go
     /// then, and reported, rather than held until the timeout.
-    private func waitForAnswer(_ id: String, hook fd: Int32) -> PermissionAnswer? {
+    private func waitForAnswer(_ id: String, hook fd: Int32, timeout: TimeInterval) -> PermissionBroker.Outcome {
         let watch = DispatchSource.makeReadSource(fileDescriptor: fd, queue: hangUpQueue)
         let stopped = DispatchSemaphore(value: 0)
         watch.setEventHandler { [weak self] in
@@ -447,11 +469,11 @@ public final class HookSocketServer: @unchecked Sendable {
         }
         watch.setCancelHandler { stopped.signal() }
         watch.resume()
-        let answer = permissions.wait(id, timeout: permissionTimeout)
+        let outcome = permissions.wait(id, timeout: timeout)
         // The socket closes once the reply is written: stop watching it first.
         watch.cancel()
         stopped.wait()
-        return answer
+        return outcome
     }
 
     private func respond(_ fd: Int32, status: Int, reason: String, body: String) {

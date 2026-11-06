@@ -47,10 +47,52 @@ struct PermissionTests {
     private final class Notes: @unchecked Sendable {
         private let lock = NSLock()
         private var hungUp: [String] = []
+        private var timedOut: [String] = []
         func append(_ note: HookSocketServer.Note) {
             if case .hungUp(let id) = note { lock.withLock { hungUp.append(id) } }
+            if case .timedOut(let id) = note { lock.withLock { timedOut.append(id) } }
         }
         var hangUps: [String] { lock.withLock { hungUp } }
+        var timeOuts: [String] { lock.withLock { timedOut } }
+    }
+
+    @Test func aRequestHeldItsFullTimeIsLetGoAndSaysSo() async throws {
+        let (server, events, path) = try await start()
+        defer { server.stop() }
+        server.answersPermissions = true
+        server.permissionTimeout = 0.3
+        let notes = Notes()
+        server.onNote = { notes.append($0) }
+        let printed = try await request(socket: path)
+        // No decision, so the agent's own prompt decides; Mimamori is told, to take its buttons away.
+        #expect(printed.isEmpty)
+        let id = try #require(events.last?.permissionRequestID)
+        for _ in 0..<50 where notes.timeOuts.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(notes.timeOuts == [id])
+        #expect(notes.hangUps.isEmpty)
+        #expect(!server.permissions.answer(id, .allow))
+    }
+
+    @Test func anAnswerInTimeIsNotATimeOut() async throws {
+        let (server, events, path) = try await start()
+        defer { server.stop() }
+        server.answersPermissions = true
+        let notes = Notes()
+        server.onNote = { notes.append($0) }
+        async let printed = request(socket: path)
+        for _ in 0..<100 where events.last?.permissionRequestID == nil { try await Task.sleep(for: .milliseconds(20)) }
+        server.permissions.answer(try #require(events.last?.permissionRequestID), nil)
+        #expect(try await printed == "")
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(notes.timeOuts.isEmpty)
+    }
+
+    @Test func claudeCodeFromTheDesktopAppIsKnownByItsPath() {
+        let desktop = "/Users/x/Library/Application Support/Claude/claude-code/2.1.317/91184d3d9ba3/claude.app/Contents/MacOS/claude"
+        #expect(HookCaller(pid: 1, agent: .claudeCode, agentPID: 2, agentPath: desktop).isClaudeDesktop)
+        #expect(!HookCaller(pid: 1, agent: .claudeCode, agentPID: 2, agentPath: "/Users/x/.local/share/claude/versions/2.1.318").isClaudeDesktop)
+        #expect(!HookCaller(pid: 1, agent: .claudeCode, agentPID: 2, agentPath: "/opt/homebrew/bin/claude").isClaudeDesktop)
+        #expect(!HookCaller(pid: 1).isClaudeDesktop)
     }
 
     @Test func aHookThatHangsUpLetsItsRequestGo() async throws {

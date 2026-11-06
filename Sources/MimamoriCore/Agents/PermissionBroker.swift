@@ -34,11 +34,22 @@ public final class PermissionBroker: @unchecked Sendable {
         lock.withLock { waiting[id] = Waiting() }
     }
 
-    /// Blocks until `id` is answered or let go, or `timeout` passes. Nil: no decision.
-    func wait(_ id: String, timeout: TimeInterval) -> PermissionAnswer? {
-        guard let semaphore = lock.withLock({ waiting[id]?.semaphore }) else { return nil }
+    /// How a wait ended.
+    struct Outcome: Equatable {
+        /// Nil: no decision.
+        var answer: PermissionAnswer?
+        /// Nobody answered or let it go before the time was up.
+        var timedOut: Bool
+    }
+
+    /// Blocks until `id` is answered or let go, or `timeout` passes.
+    func wait(_ id: String, timeout: TimeInterval) -> Outcome {
+        guard let semaphore = lock.withLock({ waiting[id]?.semaphore }) else { return Outcome(answer: nil, timedOut: false) }
         _ = semaphore.wait(timeout: .now() + timeout)
-        return lock.withLock { waiting.removeValue(forKey: id)?.answer }
+        return lock.withLock {
+            let entry = waiting.removeValue(forKey: id)
+            return Outcome(answer: entry?.answer, timedOut: entry?.settled == false)
+        }
     }
 
     /// Answers `id`; nil lets it go with no decision, leaving it to the agent's own prompt. Only

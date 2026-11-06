@@ -10,6 +10,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- A permission request from the Claude desktop app no longer leaves the app's own Allow and Deny doing
+  nothing for up to ten minutes: Mimamori holds it for 20 seconds, then leaves it to the app.
 - Tapping a notification from the iPhone app opens it again, instead of closing it
   ([#80](https://github.com/CocoaBeans/mimamori/pull/80)).
 

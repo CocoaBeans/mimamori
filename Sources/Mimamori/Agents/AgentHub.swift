@@ -437,6 +437,8 @@ final class AgentHub {
             Log.hooks.notice("A test event arrived through the hook command")
         case .hungUp(let id):
             permissionAnsweredElsewhere(id)
+        case .timedOut(let id):
+            permissionHoldEnded(id)
         case .state(let state):
             isListening = state == .listening
             socketError = state == .deferring ? Self.deferringMessage : nil
@@ -625,6 +627,15 @@ final class AgentHub {
             self.machines[pending.worktree]?[pending.session] = machine
             self.schedulePublish(urgent: true)
         }
+    }
+
+    /// The hook stopped waiting for an answer from Mimamori: its time was up, which for the Claude
+    /// desktop app comes after a short hold. The agent's own prompt decides now, so Allow and Deny
+    /// go here, while the agent still shows as needing permission until it moves on.
+    private func permissionHoldEnded(_ id: String) {
+        guard let pending = pendingPermissions.values.first(where: { $0.id == id }) else { return }
+        Log.agents.notice("Stopped holding \(pending.agent.displayName, privacy: .public)'s \(pending.tool, privacy: .public) request; its own prompt decides it")
+        settlePermission(for: pending.session)
     }
 
     private func noteApproved(in worktree: String, session key: String) {
