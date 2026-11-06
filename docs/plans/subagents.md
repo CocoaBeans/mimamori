@@ -1,8 +1,8 @@
 # Plan: seeing an agent's subagents
 
-> **Proposed.** Claude Code tells Mimamori enough to follow each subagent: when it starts and
-> finishes, what kind it is, what it was asked, and every step it takes. Step 1 confirms that with
-> a real run before anything is built.
+> **Step 1 done.** Real runs on 2026-11-05 confirmed that Claude Code tells Mimamori enough to
+> follow each subagent, from hooks it already installs: see "What we saw". The design below is
+> simplified to match. Next: step 2, the model.
 
 ## The problem
 
@@ -48,8 +48,31 @@ From Claude Code's hooks reference, and on this Mac's Claude Code 2.1.318:
   it, foreground or background, and whether it finished. Mimamori already reads Claude Code's
   session records, so this is a fallback for subagents whose hooks were missed.
 
-Not yet seen with our own eyes: a `SubagentStop` for a foreground built-in subagent (a run on
-2026-11-05 left none in the feed), and the exact entries in `background_tasks`. Step 1 settles both.
+## What we saw
+
+Step 1's `hooks:raw` flag wrote every hook request as it came while this repository's Claude Code
+session (2.1.318) ran four subagents: one in the foreground, two in the background at once, and one
+in a worktree of its own.
+
+- **Every step inside a subagent** carries `agent_id` and `agent_type` (`Explore`,
+  `general-purpose`), on PreToolUse, PostToolUse and PostToolBatch alike.
+- **The `Agent` call** that launches one has, in `tool_input`, `subagent_type`, `description`,
+  `run_in_background` and `isolation` (`"worktree"`). In the background, its PostToolUse comes at
+  once with `tool_response.status: "async_launched"` and `agentId`, which is the `agent_id` its
+  steps carry. In the foreground, it comes after the subagent's `SubagentStop`, with `status:
+  "completed"` and the same `agentId`.
+- **`SubagentStop`** came for all four, foreground included, with `agent_id`, `agent_type`,
+  `agent_transcript_path`, `last_assistant_message` and `background_tasks`. Mimamori's feed has
+  "Claude Code subagent finished" for each. (An earlier run of the built-in web-fetch subagent left
+  none; not chased further.)
+- **`background_tasks`** lists what's still in flight, each with an `id`, `type`, `status` and
+  `description`. A subagent's entry is `type: "subagent"` with its `agent_type`, and its `id` is its
+  `agent_id`. A command run in the background is `type: "shell"`. So every `SubagentStop`, and
+  `Stop`, gives the whole list of running subagents, with what each was asked.
+- **A subagent in a worktree of its own** works in `<repository>/.claude/worktrees/agent-<agent_id>`,
+  in the repository's main checkout, even when the session is in another worktree. Its steps and
+  its `SubagentStop` carry that folder as `cwd`, which is why it shows as a separate agent there.
+- **`SubagentStart`** wasn't seen: Mimamori doesn't install it. It isn't needed for any of this.
 
 ## What Mimamori does now
 
@@ -67,13 +90,16 @@ Not yet seen with our own eyes: a `SubagentStop` for a foreground built-in subag
 - `type` (`agent_type`), `description` (from the `Agent` call that launched it), `startedAt`,
   `lastEventAt`, `steps` and the latest step, `background`, `finishedAt`, and its last message
   (`last_assistant_message`), shortened.
-- **Started** by `SubagentStart`, or by the first event carrying a new `agent_id`. The `Agent`
-  call that launched it gives the description: matched by the `agentId` in a background launch's
-  response, else by order (the oldest unmatched launch of that type).
+- **Started** by the first event carrying a new `agent_id`, or a background launch's response.
+  Its description comes from `background_tasks`, or from the background launch's `Agent` call, by
+  `agentId`. A foreground subagent isn't in `background_tasks`; it takes the description of the
+  `Agent` call under way with its `subagent_type`, confirmed by `agentId` when that call ends.
 - **Steps**: a tool event with `agent_id` is the subagent's, and `AgentToolCall` gains `agentID`,
   so the timeline, the list of actions and the card can tell them apart.
-- **Finished** by `SubagentStop`. If that never comes: when `Stop`'s `background_tasks` no longer
+- **Finished** by `SubagentStop`. If that never comes: when a later `background_tasks` no longer
   lists it, when the session ends or its process goes, or after 10 minutes without an event.
+- **Background commands** (`type: "shell"`) can be counted the same way, as "1 background command",
+  so a card doesn't say Ready while one runs.
 
 **The card stays active.** On `Stop` with subagents still running (by `background_tasks`, or by
 the ones we know started and haven't stopped), the activity becomes *working on subagents*:
@@ -85,9 +111,10 @@ the ones we know started and haven't stopped), the activity becomes *working on 
 A subagent's step while the main agent is Ready no longer flips the whole card; it's the
 subagent's.
 
-**Subagents in their own worktree.** A worktree under `.claude/worktrees/agent-<id>` whose `<id>`
-matches a running subagent is shown as that subagent, inside its parent's card, not as an agent of
-its own. Its files stay reviewable in that worktree as now.
+**Subagents in their own worktree.** A worktree at `<repository>/.claude/worktrees/agent-<id>`, where
+`<id>` is a running subagent's `agent_id`, is shown as that subagent, inside its parent's card, not
+as an agent of its own. Its events are placed by `cwd` in that worktree today, so they need routing
+to the parent session by `session_id`. Its files stay reviewable in that worktree as now.
 
 **Showing them.**
 
@@ -99,20 +126,17 @@ its own. Its files stay reviewable in that worktree as now.
 - **Privacy:** with "Show tasks and steps in widgets" off, descriptions and steps stay on the Mac,
   as tasks and steps do; the type and counts remain.
 
-**Hooks.** Add `SubagentStart` to the events Mimamori installs for Claude Code. A Mimamori that
-finds its hooks installed without it already offers to update them.
+**Hooks.** None to add: what's above comes from hooks Mimamori already installs. `SubagentStart`
+would only say a subagent started a moment before its first step does.
 
 ## Steps
 
-1. **Look at real events.** A debug flag that writes every hook event's raw JSON to a file, in a
-   scratch copy. Run a foreground subagent, a background one, two at once, and one in a worktree of
-   its own, and note which events and fields arrive, and what `background_tasks` holds at `Stop`.
-   Adjust the design to what's there.
+1. **Look at real events.** Done: `hooks:raw` (a debug flag writing every hook request as it came),
+   and the runs in "What we saw".
 2. **The model.** `subagents` in the status, `agentID` on tool calls, the matching of launches,
    finishing and expiry, and *working on subagents* after `Stop`, with status-machine tests for
    each case from step 1.
-3. **The Mac.** The *Subagents* section on cards and the banner; the deferred "finished a turn";
-   `SubagentStart` in the installed hooks.
+3. **The Mac.** The *Subagents* section on cards and the banner; the deferred "finished a turn".
 4. **The iPhone.** The snapshot's subagents, the card's list, and steps labelled by subagent.
 5. **Worktree-isolated subagents** shown inside their parent.
 
