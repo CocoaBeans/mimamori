@@ -59,7 +59,11 @@ struct CompanionSettingsSheet: View {
     }
 
     private func checkNotifications() async {
-        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
-        notificationsDenied = status == .denied
+        notificationsDenied = await Self.authorizationStatus() == .denied
+    }
+
+    /// Off the main actor: the settings object isn't Sendable, and Swift 6.1 won't bring it across.
+    private nonisolated static func authorizationStatus() async -> UNAuthorizationStatus {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 }
