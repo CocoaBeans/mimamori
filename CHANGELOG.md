@@ -25,6 +25,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - "Keep the screen on" in the iPhone's settings stops it dimming and locking while Mimamori is
   open, so your agents stay in view on a stand; by default only while it's charging
   ([#60](https://github.com/CocoaBeans/mimamori/pull/60)).
+- Allow or Deny Claude Code's permission requests from the iPhone, on the agent's card or its
+  notification, with the exact command, the Mac's countdown, and Face ID before Allow. Needs
+  "Answer permission requests in Mimamori" on, and the activity feed says which iPhone answered
+  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
 
 ### Changed
 

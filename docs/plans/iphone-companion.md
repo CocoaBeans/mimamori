@@ -2,9 +2,12 @@
 
 > **Under way.** Step 1 is done, and so is step 2's pairing: QR pairing, TLS with each phone's own
 > key, and Settings › iPhone, in release builds. From step 3, the keep-alive and local
-> notifications came next, ahead of the rest of step 2. Next: an agent's list of actions, then
-> Allow and Deny, on the cards and on the notifications. Builds of your own come first: same network, then the silent-audio keep-alive
-> with "needs you" notifications, then Tailscale. CloudKit and a relay wait for an App Store build.
+> notifications came next, ahead of the rest of step 2. Then Allow and Deny, on the cards and on
+> the notifications, with Face ID before Allow and the auto-answer countdown: the snapshot's
+> `permissionRequest`, and the phone's `answer`, which the Mac acts on only from a paired phone for
+> a request still waiting (`CompanionAnswerCheck`). Next: an agent's list of actions. Builds of
+> your own come first: same network, then the silent-audio keep-alive with "needs you"
+> notifications, then Tailscale. CloudKit and a relay wait for an App Store build.
 > The Mac side stays on macOS 15 with `NWListener` (see "Decided").
 
 ## Goal
