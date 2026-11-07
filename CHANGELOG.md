@@ -14,7 +14,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
   later: Hermes's `on_session_end` marks the end of a turn, so the session stays, ready for your
   next prompt. Mimamori also recognizes Hermes's newer launcher again, so every running Hermes
   shows in its worktree, even one you haven't prompted yet
-  ([#PR](https://github.com/CocoaBeans/mimamori/pull/PR)).
+  ([#88](https://github.com/CocoaBeans/mimamori/pull/88)).
 
 ## [1.3.0] - 2026-11-06
 
