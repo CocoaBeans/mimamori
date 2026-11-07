@@ -66,6 +66,8 @@ public enum CompanionAnswerCheck {
     public enum Verdict: Equatable, Sendable {
         /// Settle the request, recording it as answered on `phone`.
         case answer(requestID: String, allow: Bool, phone: String)
+        /// Answer the request's questions with `answers`, recording it as answered on `phone`.
+        case answers(requestID: String, answers: [String: String], phone: String)
         /// Leave everything as it is, telling the phone why in a sentence.
         case refuse(String)
     }
@@ -76,8 +78,9 @@ public enum CompanionAnswerCheck {
     ///   - phones: paired phones' names, by pairing id.
     ///   - answering: "Answer permission requests in Mimamori" is on.
     ///   - pending: the ids of the requests waiting for an answer now.
+    ///   - questions: the questions' texts of each waiting request that asks some, by its id.
     public static func verdict(for answer: CompanionMessage.Answer, pairingID: String?, phones: [String: String],
-                               answering: Bool, pending: Set<String>) -> Verdict {
+                               answering: Bool, pending: Set<String>, questions: [String: Set<String>] = [:]) -> Verdict {
         guard let pairingID else { return .refuse("This iPhone hasn't proved which pairing it is yet. Try again in a moment.") }
         guard let phone = phones[pairingID] else { return .refuse("This iPhone isn't paired with the Mac any more.") }
         guard answering else {
@@ -86,6 +89,18 @@ public enum CompanionAnswerCheck {
         guard pending.contains(answer.requestID) else {
             return .refuse("That request no longer waits: it was answered, or the agent moved on.")
         }
+        if let asked = questions[answer.requestID] {
+            // Allow alone would pass the questions on unanswered: an older phone's, which can't show them.
+            guard let answers = answer.answers else {
+                if !answer.allow { return .answer(requestID: answer.requestID, allow: false, phone: phone) }
+                return .refuse("Update Mimamori on this iPhone to answer questions, or answer in the agent's own prompt.")
+            }
+            guard Set(answers.keys) == asked, answers.values.allSatisfy({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
+                return .refuse("Answer every question, then send them again.")
+            }
+            return .answers(requestID: answer.requestID, answers: answers, phone: phone)
+        }
+        guard answer.answers == nil else { return .refuse("That request asks no questions.") }
         return .answer(requestID: answer.requestID, allow: answer.allow, phone: phone)
     }
 

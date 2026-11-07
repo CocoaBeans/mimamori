@@ -506,17 +506,18 @@ final class AgentHub {
         stepBack(from: id, because: "dismissed in Mimamori")
     }
 
-    /// You answered an agent's questions in Mimamori: the call is allowed with `answers` (each
-    /// question's text → its answer), which the tool hands back to the agent.
-    func answerQuestions(_ id: String, answers: [String: String]) {
+    /// You answered an agent's questions in Mimamori, or on a paired iPhone (`phone`, its name): the
+    /// call is allowed with `answers` (each question's text → its answer), which the tool hands back
+    /// to the agent.
+    func answerQuestions(_ id: String, answers: [String: String], phone: String? = nil) {
         guard let pending = pendingPermission(withID: id), let questions = pending.questionsJSON else { return }
         pendingPermissions.removeValue(forKey: pending.session)
         autoAnswerTasks.removeValue(forKey: id)?.cancel()
         server?.permissions.answer(id, .answers(questions: questions, answers: answers))
         onPermissionSettled(id)
-        onPermissionAnswered(pending, true, false, nil)
+        onPermissionAnswered(pending, true, false, phone)
         onPermissionsChange()
-        Log.agents.notice("Answered \(pending.agent.displayName, privacy: .public)'s \(answers.count) question(s) from Mimamori")
+        Log.agents.notice("Answered \(pending.agent.displayName, privacy: .public)'s \(answers.count) question(s) \(phone.map { "on \($0)" } ?? "in Mimamori", privacy: .public)")
     }
 
     /// Stops a request's countdown: it waits for you.

@@ -20,11 +20,16 @@ final class CompanionController {
     /// What's keeping phones from connecting, in a sentence; nil while all is well.
     private(set) var problem: String?
 
-    /// Whether Mimamori answers permission requests, and the ids of those waiting now: what an
-    /// answer from a phone is checked against. Set by AppModel.
-    @ObservationIgnored var permissionRequests: () -> (answering: Bool, pending: Set<String>) = { (false, []) }
+    /// Whether Mimamori answers permission requests, the ids of those waiting now, and the
+    /// questions' texts of those that ask some: what an answer from a phone is checked against.
+    /// Set by AppModel.
+    @ObservationIgnored var permissionRequests: () -> (answering: Bool, pending: Set<String>, questions: [String: Set<String>])
+        = { (false, [], [:]) }
     /// Settles a request a paired phone answered, with the phone's name; set by AppModel.
     @ObservationIgnored var onAnswer: (_ requestID: String, _ allow: Bool, _ phone: String) -> Void = { _, _, _ in }
+    /// Answers a request's questions with a paired phone's answers, with the phone's name; set by AppModel.
+    @ObservationIgnored var onAnswerQuestions: (_ requestID: String, _ answers: [String: String], _ phone: String) -> Void
+        = { _, _, _ in }
 
     @ObservationIgnored private var pendingUpdate: Task<Void, Never>?
     @ObservationIgnored private let publisher = CompanionPublisher()
@@ -175,16 +180,20 @@ final class CompanionController {
         return keychain.key(for: pairingID)?.secret
     }
 
-    /// A phone's Allow or Deny: settled only if it comes from a phone that proved it's paired, for
-    /// a request that still waits (`CompanionAnswerCheck`).
+    /// A phone's Allow or Deny, or its answers to a request's questions: settled only if it comes
+    /// from a phone that proved it's paired, for a request that still waits (`CompanionAnswerCheck`).
     private func answered(_ answer: CompanionMessage.Answer, pairingID: String?) -> CompanionMessage.AnswerResult {
         let requests = permissionRequests()
         let phones = Dictionary(pairings.phones.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         let verdict = CompanionAnswerCheck.verdict(for: answer, pairingID: pairingID, phones: phones,
-                                                   answering: requests.answering, pending: requests.pending)
+                                                   answering: requests.answering, pending: requests.pending,
+                                                   questions: requests.questions)
         switch verdict {
         case .answer(let id, let allow, let phone):
             onAnswer(id, allow, phone)
+            return CompanionMessage.AnswerResult(requestID: id, accepted: true)
+        case .answers(let id, let answers, let phone):
+            onAnswerQuestions(id, answers, phone)
             return CompanionMessage.AnswerResult(requestID: id, accepted: true)
         case .refuse(let reason):
             Log.companion.notice("Turned down an answer from an iPhone: \(reason, privacy: .public)")

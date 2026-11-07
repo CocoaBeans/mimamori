@@ -50,7 +50,7 @@ struct AgentCardView: View {
     /// What this phone sent for the agent's permission request, if anything.
     var answer: AnswerState? = nil
     /// Allow (true) or Deny (false) for the agent's permission request.
-    var onAnswer: ((Bool) -> Void)? = nil
+    var onAnswer: ((CompanionReply) -> Void)? = nil
 
     /// A working agent this long without a tool call is probably stuck, or thinking hard.
     private static let quietAfter: TimeInterval = 3 * 60

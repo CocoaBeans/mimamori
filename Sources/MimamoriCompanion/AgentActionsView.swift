@@ -18,9 +18,9 @@ struct AgentActionsView: View {
                 if let agent {
                     Section {
                         AgentCardView(agent: agent, detailed: true, now: context.date,
-                                      answer: agent.permissionRequest.flatMap { model.answers[$0.id] }) { allow in
+                                      answer: agent.permissionRequest.flatMap { model.answers[$0.id] }) { reply in
                             if let request = agent.permissionRequest {
-                                Task { await model.answer(request, allow: allow) }
+                                Task { await model.answer(request, reply) }
                             }
                         }
                             .listRowInsets(EdgeInsets())

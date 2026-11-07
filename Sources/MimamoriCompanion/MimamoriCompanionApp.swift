@@ -96,9 +96,9 @@ struct AgentsScreen: View {
                                     if !collapsed {
                                         ForEach(entry.agents) { agent in
                                             AgentCardView(agent: agent, detailed: detailed, now: context.date,
-                                                          answer: agent.permissionRequest.flatMap { model.answers[$0.id] }) { allow in
+                                                          answer: agent.permissionRequest.flatMap { model.answers[$0.id] }) { reply in
                                                 if let request = agent.permissionRequest {
-                                                    Task { await model.answer(request, allow: allow) }
+                                                    Task { await model.answer(request, reply) }
                                                 }
                                             }
                                             .contentShape(Rectangle())

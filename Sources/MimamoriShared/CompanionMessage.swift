@@ -51,15 +51,20 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
         }
     }
 
-    /// Allow or Deny for one request, by its id. The Mac acts on it only while that request still
-    /// waits, so an answer that arrives late, or names something else, does nothing.
+    /// Allow or Deny for one request, by its id, or for a request with questions, the answers. The
+    /// Mac acts on it only while that request still waits, so an answer that arrives late, or names
+    /// something else, does nothing.
     public struct Answer: Codable, Sendable, Equatable {
         public var requestID: String
         public var allow: Bool
+        /// Each question's text → its answer (`AgentQuestion.answer`). Sent with `allow` true, so an
+        /// older Mac reads it as Allow, which leaves the questions to the agent's own prompt.
+        public var answers: [String: String]?
 
-        public init(requestID: String, allow: Bool) {
+        public init(requestID: String, allow: Bool, answers: [String: String]? = nil) {
             self.requestID = requestID
             self.allow = allow
+            self.answers = answers
         }
     }
 

@@ -103,6 +103,9 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         public var since: Date
         /// When Mimamori answers by itself, and how; nil while it waits for you.
         public var autoAnswer: AutoAnswer?
+        /// An AskUserQuestion call's questions, answered in place of Allow and Deny. An older phone
+        /// ignores them, and an older Mac sends none.
+        public var questions: [AgentQuestion]?
 
         public struct AutoAnswer: Codable, Sendable, Hashable {
             public var allow: Bool
@@ -114,12 +117,14 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
             }
         }
 
-        public init(id: String, tool: String, detail: String? = nil, since: Date, autoAnswer: AutoAnswer? = nil) {
+        public init(id: String, tool: String, detail: String? = nil, since: Date, autoAnswer: AutoAnswer? = nil,
+                    questions: [AgentQuestion]? = nil) {
             self.id = id
             self.tool = tool
             self.detail = detail
             self.since = since
             self.autoAnswer = autoAnswer
+            self.questions = questions
         }
     }
 

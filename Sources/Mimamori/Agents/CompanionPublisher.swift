@@ -269,11 +269,18 @@ extension AppModel {
     /// sends them each request as it comes and goes.
     func connectCompanionToPermissions() {
         companion.permissionRequests = { [weak self] in
-            guard let self else { return (false, []) }
-            return (self.settings.answerPermissionsInMimamori, Set(self.agentHub.pendingPermissions.values.map(\.id)))
+            guard let self else { return (false, [], [:]) }
+            let pending = self.agentHub.pendingPermissions.values
+            let questions = pending.reduce(into: [String: Set<String>]()) { result, request in
+                if let asked = request.questions { result[request.id] = Set(asked.map(\.question)) }
+            }
+            return (self.settings.answerPermissionsInMimamori, Set(pending.map(\.id)), questions)
         }
         companion.onAnswer = { [weak self] id, allow, phone in
             self?.agentHub.answerPermission(id, allow: allow, phone: phone)
+        }
+        companion.onAnswerQuestions = { [weak self] id, answers, phone in
+            self?.agentHub.answerQuestions(id, answers: answers, phone: phone)
         }
         agentHub.onPermissionsChange = { [weak self] in
             self?.companion.updateSoon { [weak self] in self?.companionAgents() ?? [] }
@@ -296,13 +303,11 @@ extension AppModel {
     /// nobody should allow a command they can't see.
     private func companionPermissionRequest(for row: AgentRow) -> AgentWidgetSnapshot.PermissionRequest? {
         guard settings.answerPermissionsInMimamori, let id = row.presence.permissionRequestID,
-              let pending = agentHub.pendingPermissions.values.first(where: { $0.id == id }),
-              // Allow and Deny don't answer a question; the iPhone can't answer one yet.
-              pending.questions == nil else { return nil }
+              let pending = agentHub.pendingPermissions.values.first(where: { $0.id == id }) else { return nil }
         let detail = CompanionAnswerCheck.clipped(pending.command ?? pending.detail)
         let autoAnswer = pending.autoAnswer.map { AgentWidgetSnapshot.PermissionRequest.AutoAnswer(allow: $0.allow, at: $0.at) }
         return AgentWidgetSnapshot.PermissionRequest(id: pending.id, tool: pending.tool, detail: detail, since: pending.since,
-                                                     autoAnswer: autoAnswer)
+                                                     autoAnswer: autoAnswer, questions: pending.questions)
     }
 
     /// What the Agents window's card shows for `row`. Without `details`, the steps keep their kind

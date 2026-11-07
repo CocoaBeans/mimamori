@@ -3,9 +3,10 @@ import Foundation
 /// A question an agent asks you through Claude Code's AskUserQuestion tool, with the options it
 /// offers. Claude Code asks permission for that tool like any other, so its permission hook can
 /// answer the questions themselves: it allows the call with the answers in `updatedInput`, and the
-/// tool returns them to the agent (see `PermissionAnswer.answers`).
-public struct AgentQuestion: Sendable, Hashable {
-    public struct Option: Sendable, Hashable {
+/// tool returns them to the agent (see `PermissionAnswer.answers`). The iPhone companion shows
+/// them too, so this lives where the Mac and the phone share it.
+public struct AgentQuestion: Codable, Sendable, Hashable {
+    public struct Option: Codable, Sendable, Hashable {
         public var label: String
         public var description: String?
 

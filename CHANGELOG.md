@@ -13,6 +13,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Answer Claude's questions in Mimamori: when it asks one or several, with options, the card shows
   them in place of Allow and Deny, with a field for an answer of your own
   ([#85](https://github.com/CocoaBeans/mimamori/pull/85)).
+- Answer Claude's questions on the iPhone too, after Face ID or the passcode, as for Allow.
 
 ### Added
 

@@ -75,6 +75,17 @@ struct CompanionAlertsTests {
         return waiting
     }
 
+    @Test func aQuestionsAlertNamesTheQuestionAndOffersNoAllowOrDeny() throws {
+        let questions = [AgentQuestion(question: "Which color?", options: [.init(label: "Red"), .init(label: "Blue")]),
+                         AgentQuestion(question: "Which fruits?", multiSelect: true, options: [.init(label: "Pear")])]
+        let request = AgentWidgetSnapshot.PermissionRequest(id: "req-1", tool: "AskUserQuestion", since: now.addingTimeInterval(5),
+                                                            questions: questions)
+        let alert = try #require(CompanionAlerts.changes(from: [agent(.working)], to: [asking(request)]).post.first)
+        #expect(alert.title.hasSuffix("has a question for you"))
+        #expect(alert.body.contains("Which color?") && alert.body.contains("1 more"))
+        #expect(alert.requestID == nil)
+    }
+
     @Test func aRequestToAnswerGivesTheAlertItsIDAndCommand() throws {
         let request = AgentWidgetSnapshot.PermissionRequest(id: "req-1", tool: "Bash", detail: "make deploy\nmake tag",
                                                             since: now.addingTimeInterval(5),

@@ -13,6 +13,59 @@ struct CompanionAnswerTests {
         CompanionAnswerCheck.verdict(for: answer, pairingID: pairingID, phones: phones, answering: answering, pending: pending)
     }
 
+    private let questions: [String: Set<String>] = ["req-1": ["Which color?", "Which fruits?"]]
+
+    @Test func aPhonesAnswersToEveryQuestionAreTaken() {
+        let answers = ["Which color?": "Blue", "Which fruits?": "Pear, Plum"]
+        let answered = CompanionMessage.Answer(requestID: "req-1", allow: true, answers: answers)
+        #expect(CompanionAnswerCheck.verdict(for: answered, pairingID: "pairing-1", phones: phones, answering: true,
+                                             pending: ["req-1"], questions: questions)
+                == .answers(requestID: "req-1", answers: answers, phone: "Kevin's iPhone"))
+    }
+
+    @Test func partialEmptyOrMissingAnswersAreTurnedDown() {
+        func check(_ answer: CompanionMessage.Answer, asked: [String: Set<String>]) -> CompanionAnswerCheck.Verdict {
+            CompanionAnswerCheck.verdict(for: answer, pairingID: "pairing-1", phones: phones, answering: true,
+                                         pending: ["req-1"], questions: asked)
+        }
+        let partial = CompanionMessage.Answer(requestID: "req-1", allow: true, answers: ["Which color?": "Blue"])
+        let empty = CompanionMessage.Answer(requestID: "req-1", allow: true, answers: ["Which color?": "Blue", "Which fruits?": " "])
+        for answer in [partial, empty] {
+            guard case .refuse(let reason) = check(answer, asked: questions) else { Issue.record("accepted \(answer)"); continue }
+            #expect(reason.contains("every question"))
+        }
+        // An older phone can't show questions: its Allow would pass them on unanswered.
+        guard case .refuse(let reason) = check(allow, asked: questions) else {
+            Issue.record("a bare Allow answered questions")
+            return
+        }
+        #expect(reason.contains("Update Mimamori"))
+        // Its Deny still tells the agent no.
+        #expect(check(CompanionMessage.Answer(requestID: "req-1", allow: false), asked: questions)
+                == .answer(requestID: "req-1", allow: false, phone: "Kevin's iPhone"))
+        // Answers for a request that asks nothing are a mistake, not an Allow.
+        guard case .refuse = check(CompanionMessage.Answer(requestID: "req-1", allow: true, answers: ["x": "y"]), asked: [:]) else {
+            Issue.record("answers were taken as an Allow")
+            return
+        }
+    }
+
+    @Test func answersTravelAndOlderMessagesStillRead() throws {
+        // An older phone's answer has no answers.
+        let old = try JSONDecoder().decode(CompanionMessage.Answer.self, from: Data(#"{"requestID":"req-1","allow":true}"#.utf8))
+        #expect(old == CompanionMessage.Answer(requestID: "req-1", allow: true))
+        let new = CompanionMessage.Answer(requestID: "req-1", allow: true, answers: ["Which color?": "Blue"])
+        #expect(try JSONDecoder().decode(CompanionMessage.Answer.self, from: JSONEncoder().encode(new)) == new)
+        // A request with questions goes to the phone whole; an older Mac's request has none.
+        let question = AgentQuestion(question: "Which color?", header: "Color", multiSelect: false,
+                                     options: [.init(label: "Red", description: "Warm"), .init(label: "Blue")])
+        let request = AgentWidgetSnapshot.PermissionRequest(id: "req-1", tool: "AskUserQuestion", since: now, questions: [question])
+        let sent = try JSONDecoder().decode(AgentWidgetSnapshot.PermissionRequest.self, from: JSONEncoder().encode(request))
+        #expect(sent.questions == [question])
+        let older = #"{"id":"req-1","tool":"Bash","since":800000000}"#
+        #expect(try JSONDecoder().decode(AgentWidgetSnapshot.PermissionRequest.self, from: Data(older.utf8)).questions == nil)
+    }
+
     @Test func aPairedPhoneSettlesAWaitingRequest() {
         #expect(verdict(allow) == .answer(requestID: "req-1", allow: true, phone: "Kevin's iPhone"))
         let deny = CompanionMessage.Answer(requestID: "req-1", allow: false)

@@ -70,6 +70,11 @@ public enum CompanionAlerts {
     /// "Claude Code needs permission: Bash", "Codex has a question for you", from the status line.
     private static func needsYou(_ agent: AgentWidgetSnapshot.Agent) -> Alert {
         let status = agent.status
+        if let questions = agent.permissionRequest?.questions, let first = questions.first {
+            // No Allow or Deny on it: a question is answered on its card, after opening the app.
+            let detail = questions.count == 1 ? first.question : "\(first.question) (and \(questions.count - 1) more)"
+            return alert(.needsYou, agent, title: "\(agent.agent) has a question for you", detail: detail)
+        }
         if let request = agent.permissionRequest {
             var result = alert(.needsYou, agent, title: "\(agent.agent) needs permission: \(request.tool)", detail: request.detail)
             result.requestID = request.id
