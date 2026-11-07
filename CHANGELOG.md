@@ -8,6 +8,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-06
+
 ### Added
 
 - Answer Claude's questions in Mimamori: when it asks one or several, with options, the card shows
@@ -15,9 +17,6 @@ the ones the update window and the release page show, are in [docs/releases](doc
   ([#85](https://github.com/CocoaBeans/mimamori/pull/85)).
 - Answer Claude's questions on the iPhone too, after Face ID or the passcode, as for Allow
   ([#86](https://github.com/CocoaBeans/mimamori/pull/86)).
-
-### Added
-
 - **Dismiss** beside a permission request's Allow and Deny takes them away without answering, leaving
   the request to the agent's own prompt
   ([#82](https://github.com/CocoaBeans/mimamori/pull/82)).
@@ -224,7 +223,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Markdown.
 - Automatic updates through Sparkle.
 
-[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/CocoaBeans/mimamori/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/CocoaBeans/mimamori/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/CocoaBeans/mimamori/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/CocoaBeans/mimamori/compare/v1.1.0...v1.1.1
