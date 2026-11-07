@@ -17,7 +17,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   and in a permission notification, so a request names the session asking
   ([#83](https://github.com/CocoaBeans/mimamori/pull/83)).
 - A changed image shows as pictures in the diff, before and after side by side, with each one's size,
-  instead of only saying that a binary file changed.
+  instead of only saying that a binary file changed
+  ([#84](https://github.com/CocoaBeans/mimamori/pull/84)).
 
 ### Fixed
 
