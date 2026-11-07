@@ -11,7 +11,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 ### Added
 
 - **Dismiss** beside a permission request's Allow and Deny takes them away without answering, leaving
-  the request to the agent's own prompt.
+  the request to the agent's own prompt
+  ([#82](https://github.com/CocoaBeans/mimamori/pull/82)).
 
 ### Fixed
 
