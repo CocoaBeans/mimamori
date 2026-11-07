@@ -1013,7 +1013,8 @@ final class AppModel {
 
     /// An agent asks permission and its hook waits for an answer from Mimamori too.
     private func permissionRequested(_ pending: PermissionRequest) {
-        guard settings.notifyOnAgentPermission else { return }
+        // A question was announced as one already; Allow and Deny don't answer it.
+        guard settings.notifyOnAgentPermission, pending.questions == nil else { return }
         let name = sessions[pending.worktree]?.displayName ?? (pending.worktree as NSString).lastPathComponent
         // The session's title says which one asks, when several work in the same folder; with
         // one, the subtitle names it and the folder, and the body keeps to what it asks.
@@ -1029,8 +1030,9 @@ final class AppModel {
     /// Every answer given in Mimamori goes in the feed, so there is a record of what it allowed.
     private func permissionAnswered(_ pending: PermissionRequest, allow: Bool, automatically: Bool, phone: String?) {
         let how = phone.map { "on \($0)" } ?? (automatically ? "by itself, after \(settings.autoAnswerSeconds) s" : "in Mimamori")
+        let what = pending.questions == nil ? "\(allow ? "Allowed" : "Denied") \(how): \(pending.tool)" : "Answered \(how): \(pending.tool)"
         record([ActivityEntry(worktreePath: pending.worktree, kind: .agentAttention, path: nil,
-                              title: "\(allow ? "Allowed" : "Denied") \(how): \(pending.tool)", detail: pending.detail,
+                              title: what, detail: pending.detail,
                               severity: allow && automatically ? .warning : nil, agent: pending.agent.displayName)])
     }
 

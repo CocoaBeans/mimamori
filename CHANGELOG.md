@@ -10,6 +10,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Added
 
+- Answer Claude's questions in Mimamori: when it asks one or several, with options, the card shows
+  them in place of Allow and Deny, with a field for an answer of your own.
+
+### Added
+
 - **Dismiss** beside a permission request's Allow and Deny takes them away without answering, leaving
   the request to the agent's own prompt
   ([#82](https://github.com/CocoaBeans/mimamori/pull/82)).

@@ -3,6 +3,9 @@ import Foundation
 /// How Mimamori answers a permission request.
 public enum PermissionAnswer: Sendable, Equatable {
     case allow, deny
+    /// Answers to an AskUserQuestion call: it's allowed with them in its input, and returns them
+    /// to the agent. `questions` is the call's `questions`, as JSON, which the input keeps.
+    case answers(questions: Data, answers: [String: String])
 
     /// What a Claude Code `PermissionRequest` hook prints to make the decision.
     public var hookResponse: String {
@@ -11,7 +14,17 @@ public enum PermissionAnswer: Sendable, Equatable {
             #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#
         case .deny:
             #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Denied in Mimamori."}}}"#
+        case .answers(let questions, let answers):
+            Self.answering(questions: questions, answers: answers)
         }
+    }
+
+    private static func answering(questions: Data, answers: [String: String]) -> String {
+        let asked = (try? JSONSerialization.jsonObject(with: questions)) ?? []
+        let decision: [String: Any] = ["behavior": "allow", "updatedInput": ["questions": asked, "answers": answers]]
+        let output: [String: Any] = ["hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": decision]]
+        guard let data = try? JSONSerialization.data(withJSONObject: output, options: [.sortedKeys]) else { return "" }
+        return String(decoding: data, as: UTF8.self)
     }
 }
 

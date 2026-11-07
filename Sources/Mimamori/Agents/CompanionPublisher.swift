@@ -296,7 +296,9 @@ extension AppModel {
     /// nobody should allow a command they can't see.
     private func companionPermissionRequest(for row: AgentRow) -> AgentWidgetSnapshot.PermissionRequest? {
         guard settings.answerPermissionsInMimamori, let id = row.presence.permissionRequestID,
-              let pending = agentHub.pendingPermissions.values.first(where: { $0.id == id }) else { return nil }
+              let pending = agentHub.pendingPermissions.values.first(where: { $0.id == id }),
+              // Allow and Deny don't answer a question; the iPhone can't answer one yet.
+              pending.questions == nil else { return nil }
         let detail = CompanionAnswerCheck.clipped(pending.command ?? pending.detail)
         let autoAnswer = pending.autoAnswer.map { AgentWidgetSnapshot.PermissionRequest.AutoAnswer(allow: $0.allow, at: $0.at) }
         return AgentWidgetSnapshot.PermissionRequest(id: pending.id, tool: pending.tool, detail: detail, since: pending.since,

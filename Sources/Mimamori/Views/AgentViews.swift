@@ -731,6 +731,14 @@ struct PermissionAnswerButtons: View {
     }
 
     var body: some View {
+        if let questions = pending?.questions {
+            QuestionAnswerForm(requestID: requestID, questions: questions)
+        } else {
+            allowAndDeny
+        }
+    }
+
+    private var allowAndDeny: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Button {
@@ -1345,5 +1353,128 @@ struct AgentSettingsView: View {
         var copy = model.settings
         copy.customAgentNames = customNames.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         model.updateSettings(copy)
+    }
+}
+
+/// An agent's questions, from Claude Code's AskUserQuestion tool, answered in Mimamori: each one's
+/// options, a round mark where one is chosen and a square one where several may be, and a field
+/// for an answer of your own, as Claude Code's own prompt offers. Answer hands them all back.
+struct QuestionAnswerForm: View {
+    @Environment(AppModel.self) private var model
+    let requestID: String
+    let questions: [AgentQuestion]
+
+    /// The options chosen, by question.
+    @State private var chosen: [String: Set<String>] = [:]
+    /// Answers of your own, by question.
+    @State private var typed: [String: String] = [:]
+
+    private func answer(to question: AgentQuestion) -> String? {
+        question.answer(choosing: chosen[question.question] ?? [], other: typed[question.question] ?? "")
+    }
+
+    private var answers: [String: String]? {
+        var all: [String: String] = [:]
+        for question in questions {
+            guard let answer = answer(to: question) else { return nil }
+            all[question.question] = answer
+        }
+        return all
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(questions, id: \.question) { question in
+                QuestionField(question: question,
+                              chosen: Binding(get: { chosen[question.question] ?? [] }, set: { chosen[question.question] = $0 }),
+                              typed: Binding(get: { typed[question.question] ?? "" }, set: { typed[question.question] = $0 }))
+            }
+            HStack(spacing: 6) {
+                Button {
+                    if let answers { model.agentHub.answerQuestions(requestID, answers: answers) }
+                } label: {
+                    Label(questions.count == 1 ? "Answer" : "Answer All", systemImage: "arrowshape.turn.up.left")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(answers == nil)
+                .help(answers == nil ? "Choose an answer to every question first" : "Send these answers to the agent, as answering in its own prompt would")
+                Button("Dismiss") {
+                    model.agentHub.dismissPermission(requestID)
+                }
+                .buttonStyle(.borderless)
+                .help("Answer in the agent's own prompt instead: the questions go from Mimamori, and stay open there")
+            }
+            .controlSize(.small)
+        }
+    }
+}
+
+/// One question: its title, its text, its options and a field for your own answer.
+private struct QuestionField: View {
+    let question: AgentQuestion
+    @Binding var chosen: Set<String>
+    @Binding var typed: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let header = question.header {
+                Text(header)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Text(question.question)
+                .fontWeight(.medium)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(question.options, id: \.label) { option in
+                optionButton(option)
+            }
+            TextField("Other answer", text: $typed)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .frame(maxWidth: 320)
+                .help(question.multiSelect ? "Add an answer of your own" : "Answer in your own words instead")
+                .accessibilityLabel("Other answer to: \(question.question)")
+                .onChange(of: typed) {
+                    // One answer only: words of your own replace a chosen option.
+                    if !question.multiSelect, !typed.trimmingCharacters(in: .whitespaces).isEmpty { chosen = [] }
+                }
+        }
+    }
+
+    private func optionButton(_ option: AgentQuestion.Option) -> some View {
+        let isChosen = chosen.contains(option.label)
+        return Button {
+            if question.multiSelect {
+                if isChosen { chosen.remove(option.label) } else { chosen.insert(option.label) }
+            } else {
+                chosen = [option.label]
+                typed = ""
+            }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: symbol(isChosen))
+                    .foregroundStyle(isChosen ? Color.accentColor : .secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(option.label)
+                    if let description = option.description {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(option.description ?? option.label)
+        .accessibilityLabel(option.label)
+        .accessibilityValue(option.description ?? "")
+        .accessibilityAddTraits(isChosen ? .isSelected : [])
+    }
+
+    private func symbol(_ isChosen: Bool) -> String {
+        if question.multiSelect { return isChosen ? "checkmark.square.fill" : "square" }
+        return isChosen ? "largecircle.fill.circle" : "circle"
     }
 }

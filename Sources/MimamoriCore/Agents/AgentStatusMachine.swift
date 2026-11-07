@@ -544,6 +544,13 @@ public struct AgentStatusMachine: Sendable {
             let call = named ?? current.recentToolCalls.last { call in
                 call.finishedAt == nil && call.toolName == tool && (event.summary == nil || call.summary == event.summary)
             }
+            if event.isQuestionTool {
+                // Claude Code asks permission for its question tool too. What waits on you is the
+                // question, which its PreToolUse announced, and which Mimamori can answer.
+                set(.askedQuestion(detail: event.summary))
+                current.pendingPermission = PendingPermission(callID: event.toolUseID ?? call?.id, agentID: event.agentID)
+                break
+            }
             set(.needsPermission(tool: tool, detail: event.summary))
             current.pendingPermission = PendingPermission(
                 callID: event.toolUseID ?? call?.id, agentID: event.agentID,
@@ -558,6 +565,8 @@ public struct AgentStatusMachine: Sendable {
                 // itself already said what the permission is for.
                 if case .needsPermission = current.activity { break }
                 let tool = event.toolName ?? Self.permissionTool(in: event.message) ?? "a tool"
+                // The same reminder for a question: it still asks you something, not for permission.
+                if case .askedQuestion = current.activity, HookEvent.questionTools.contains(tool) { break }
                 set(.needsPermission(tool: tool, detail: event.summary ?? event.message))
                 // Gemini CLI's alert names its tool, so the step waiting on you can be found.
                 let call = event.toolName.flatMap { name in current.recentToolCalls.last { $0.finishedAt == nil && $0.toolName == name } }

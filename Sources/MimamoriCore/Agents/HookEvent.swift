@@ -51,6 +51,9 @@ public struct HookEvent: Sendable, Hashable {
     public var receivedAt: Date
     /// Set when the agent's hook waits for Mimamori to answer this permission request.
     public var permissionRequestID: String? = nil
+    /// The questions an AskUserQuestion call asks, and the same as JSON, which answering keeps.
+    public var questions: [AgentQuestion]? = nil
+    public var questionsJSON: Data? = nil
     /// A shell tool's whole command (`summary` has its first line), for matching permission rules.
     public var command: String? = nil
     /// The command was longer than `commandLimit`, so `command` is cut short and can't be checked
@@ -326,6 +329,12 @@ public enum HookEventParser {
             receivedAt: receivedAt)
         // Whole, up to a limit: ask rules are matched against it, and a part cut off could be the
         // part a rule is about. Longer than that, it's flagged, and never allowed by itself.
+        if toolName.map(HookEvent.questionTools.contains) == true, let toolInput,
+           let questions = AgentQuestion.questions(in: toolInput),
+           let json = try? JSONSerialization.data(withJSONObject: toolInput["questions"] ?? []) {
+            event.questions = questions
+            event.questionsJSON = json
+        }
         if let command = toolInput?["command"] as? String {
             event.command = String(command.prefix(HookEvent.commandLimit))
             event.commandTruncated = command.count > HookEvent.commandLimit

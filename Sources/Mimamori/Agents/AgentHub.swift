@@ -129,6 +129,10 @@ struct PermissionRequest: Hashable, Identifiable {
     var waitsForAskRule: String? = nil
     /// Its command was too long to check whole against the ask rules, so it's never allowed by itself.
     var waitsForLongCommand = false
+    /// An AskUserQuestion call's questions, which Mimamori answers in place of Allow and Deny.
+    var questions: [AgentQuestion]? = nil
+    /// The same as JSON, which the answer hands back.
+    var questionsJSON: Data? = nil
 
     struct AutoAnswer: Hashable {
         var allow: Bool
@@ -418,7 +422,10 @@ final class AgentHub {
                                             tool: event.toolName ?? "", detail: event.summary,
                                             sessionTitle: machine.status?.title, command: event.command,
                                             since: event.receivedAt, call: call)
-            if settings.autoAnswerPermissions {
+            pending.questions = event.questions
+            pending.questionsJSON = event.questionsJSON
+            // A question waits for your answer: there is nothing to allow or deny by itself.
+            if settings.autoAnswerPermissions, pending.questions == nil {
                 let allow = settings.autoAnswer == .allow
                 // A call you asked Claude Code to always ask about is never allowed by itself, nor one
                 // whose command was too long to check against those rules in full.
@@ -497,6 +504,19 @@ final class AgentHub {
     /// You'd rather answer in the agent's own prompt: the hook is let go with no decision.
     func dismissPermission(_ id: String) {
         stepBack(from: id, because: "dismissed in Mimamori")
+    }
+
+    /// You answered an agent's questions in Mimamori: the call is allowed with `answers` (each
+    /// question's text → its answer), which the tool hands back to the agent.
+    func answerQuestions(_ id: String, answers: [String: String]) {
+        guard let pending = pendingPermission(withID: id), let questions = pending.questionsJSON else { return }
+        pendingPermissions.removeValue(forKey: pending.session)
+        autoAnswerTasks.removeValue(forKey: id)?.cancel()
+        server?.permissions.answer(id, .answers(questions: questions, answers: answers))
+        onPermissionSettled(id)
+        onPermissionAnswered(pending, true, false, nil)
+        onPermissionsChange()
+        Log.agents.notice("Answered \(pending.agent.displayName, privacy: .public)'s \(answers.count) question(s) from Mimamori")
     }
 
     /// Stops a request's countdown: it waits for you.
