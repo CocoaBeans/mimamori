@@ -11,7 +11,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 ### Added
 
 - Answer Claude's questions in Mimamori: when it asks one or several, with options, the card shows
-  them in place of Allow and Deny, with a field for an answer of your own.
+  them in place of Allow and Deny, with a field for an answer of your own
+  ([#85](https://github.com/CocoaBeans/mimamori/pull/85)).
 
 ### Added
 
