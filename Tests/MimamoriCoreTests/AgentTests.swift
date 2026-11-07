@@ -27,6 +27,29 @@ struct AgentClassifierTests {
         #expect(classifier.classify(executable: python, arguments: ["python3.14", "-I", "-c", "import os"]) == nil)
     }
 
+    @Test func recognizesHermesLauncherCode() {
+        // Hermes's launcher runs its bootstrap inline, ending the way a console script does.
+        let python = "/Users/x/.hermes/tools/python-3.14.9+20261021-darwin-arm64/bin/python3"
+        let bootstrap = """
+            import os, re, sys
+            sys.path.insert(0, '/Users/x/.hermes/hermes-agent')
+            if sys.argv[1:2] == ['--run-module']:
+                import runpy
+                sys.exit(0)
+            from hermes_cli.main import main
+            sys.argv[0] = re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])
+            sys.exit(main())
+            """
+        #expect(classifier.classify(executable: python, arguments: [python, "-I", "-c", bootstrap, "--tui", "--yolo"]) == .hermes)
+        #expect(classifier.classify(executable: python, arguments: [python, "-I", "-c", bootstrap, "gateway", "run"]) == .hermes)
+        // Code that only imports a package, or starts someone else's, names no agent.
+        #expect(classifier.classify(executable: python, arguments: ["python3", "-c", "from claude import main"]) == nil)
+        #expect(classifier.classify(executable: python, arguments: ["python3", "-c", "from mytool.cli import main\nmain()"]) == nil)
+        // The kernel Hermes runs execute_code in is a helper, not a second Hermes.
+        #expect(classifier.classify(executable: python, arguments: [
+            python, "/var/folders/7v/T/hermes_kernel_0rutktrx/hermes_kernel_runner.py"]) == nil)
+    }
+
     @Test func ignoresOrdinaryProcesses() {
         #expect(classifier.classify(executable: "/bin/zsh", arguments: ["-zsh"]) == nil)
         #expect(classifier.classify(executable: "/usr/local/bin/node", arguments: ["node", "server.js"]) == nil)
@@ -154,8 +177,39 @@ struct HermesHookTests {
         #expect(human.notificationType == "question")
         #expect(human.message == "Which branch?")
 
-        let verify = try #require(parse(#"{"hook_event_name":"pre_verify","cwd":"/repo","extra":{}}"#))
-        #expect(verify.name == .stop)
+        // Asked after edits whether to keep going: the turn's end comes next, from on_session_end.
+        let verify = try #require(parse(#"{"hook_event_name":"pre_verify","cwd":"/repo","extra":{"changed_paths":["a.py"]}}"#))
+        #expect(verify.name == .other)
+    }
+
+    @Test func hermesSessionEndAfterATurnEndsOnlyTheTurn() throws {
+        // Hermes fires on_session_end at the end of every turn, with the turn's outcome.
+        let done = try #require(parse(#"{"hook_event_name":"on_session_end","session_id":"s","cwd":"/repo","extra":{"turn_id":"t1","completed":true,"failed":false,"interrupted":false,"turn_exit_reason":"text_response(stop)"}}"#))
+        #expect(done.name == .stop)
+        #expect(done.rawName == "on_session_end")
+
+        let interrupted = try #require(parse(#"{"hook_event_name":"on_session_end","session_id":"s","cwd":"/repo","extra":{"completed":false,"interrupted":true,"reason":"keyboard_interrupt"}}"#))
+        #expect(interrupted.name == .stop)
+
+        let failed = try #require(parse(#"{"hook_event_name":"on_session_end","session_id":"s","cwd":"/repo","extra":{"turn_id":"t2","completed":false,"failed":true,"turn_exit_reason":"provider_error"}}"#))
+        #expect(failed.name == .stopFailure)
+        #expect(failed.message == "provider_error")
+
+        // One that names no turn ends the session.
+        let ended = try #require(parse(#"{"hook_event_name":"on_session_end","session_id":"s","cwd":"/repo","extra":{}}"#))
+        #expect(ended.name == .sessionEnd)
+    }
+
+    @Test func aHermesSessionIsReadyBetweenTurns() throws {
+        var machine = AgentStatusMachine()
+        for json in [
+            #"{"hook_event_name":"pre_llm_call","session_id":"s","cwd":"/repo","extra":{"user_message":"hello"}}"#,
+            #"{"hook_event_name":"on_session_end","session_id":"s","cwd":"/repo","extra":{"turn_id":"t1","completed":true,"failed":false,"interrupted":false,"turn_exit_reason":"text_response(stop)"}}"#,
+        ] {
+            _ = machine.apply(try #require(parse(json)))
+        }
+        #expect(machine.status?.activity == .ready)
+        #expect(machine.status?.lastTurnEndedAt != nil)
     }
 
     @Test func gatewayEventsKeepRelativePathsAndOfferHints() throws {
@@ -370,7 +424,7 @@ struct HermesHookTests {
         let second = machine.apply(llm(2))
         #expect(second.isEmpty)
         #expect(machine.status?.toolCallsThisTurn == 1)
-        let stop = machine.apply(HookEvent(name: .stop, rawName: "pre_verify", agent: .hermes, cwd: "/repo", receivedAt: Date(timeIntervalSince1970: 1010)))
+        let stop = machine.apply(HookEvent(name: .stop, rawName: "on_session_end", agent: .hermes, cwd: "/repo", receivedAt: Date(timeIntervalSince1970: 1010)))
         #expect(stop.first?.kind == .turnFinished)
         #expect(machine.status?.activity == .ready)
     }

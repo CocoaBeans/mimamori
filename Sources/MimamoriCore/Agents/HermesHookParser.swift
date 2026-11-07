@@ -7,6 +7,8 @@ import Foundation
 /// dictionary carrying `tool_call_id`, `user_message` and friends.
 public enum HermesHookParser {
     /// Hermes event name → the Claude Code event Mimamori's status machine understands.
+    /// `on_session_end` fires at the end of every turn, not just the session's; `parse` tells
+    /// the two apart.
     static let eventMap: [String: HookEvent.Name] = [
         "on_session_start": .sessionStart,
         "on_session_end": .sessionEnd,
@@ -18,7 +20,8 @@ public enum HermesHookParser {
         "post_approval_response": .postToolUse,
         "on_human_input_request": .notification,
         "on_human_input_resolved": .userPromptSubmit,
-        "pre_verify": .stop,
+        // Asked after a turn's edits whether to keep going; the turn's `on_session_end` follows.
+        "pre_verify": .other,
         "subagent_stop": .subagentStop,
     ]
 
@@ -45,6 +48,13 @@ public enum HermesHookParser {
         if rawName == "pre_llm_call", let prompt = extra["user_message"] as? String {
             object["prompt"] = prompt
         }
+        // `on_session_end` ends each turn and names it; one naming no turn ends the session.
+        let endsTurn = rawName == "on_session_end"
+            && (extra["turn_id"] != nil || extra["turn_exit_reason"] != nil || extra["completed"] != nil)
+        let turnFailed = endsTurn && extra["failed"] as? Bool == true
+        if turnFailed, object["message"] == nil, let reason = extra["turn_exit_reason"] as? String, !reason.isEmpty {
+            object["message"] = reason
+        }
         if rawName == "on_human_input_request" {
             // A real question for you, unlike Claude Code's idle reminder.
             object["notification_type"] = "question"
@@ -62,7 +72,8 @@ public enum HermesHookParser {
         // you, and reports that check as an approval request of its own. Nobody is asked yet: if
         // the model can't decide, Hermes asks you next, as a request from the surface you use.
         let checkedByModel = extra["surface"] as? String == "smart"
-        let mapped: HookEvent.Name = checkedByModel ? .other : eventMap[rawName] ?? .other
+        let mapped: HookEvent.Name = checkedByModel ? .other
+            : turnFailed ? .stopFailure : endsTurn ? .stop : eventMap[rawName] ?? .other
         object["hook_event_name"] = mapped == .other ? rawName : mapped.rawValue
         guard var event = HookEventParser.parse(object, receivedAt: receivedAt, agent: .hermes,
                                                 resolveRelativePaths: sessionDirectory != nil) else { return nil }

@@ -104,6 +104,8 @@ public struct AgentClassifier: Sendable {
             return module.split(separator: ".").first.flatMap { match(name: String($0)) }
         case .script(let path):
             return classify(script: path)
+        case .inline(let code):
+            return Self.entryModule(in: code).flatMap { match(name: $0) }
         case nil:
             return nil
         }
@@ -114,6 +116,8 @@ public struct AgentClassifier: Sendable {
         case module(String)
         /// A script's path, or a package a runner names: `node …/cli.js`, `npx @anthropic-ai/claude-code`.
         case script(String)
+        /// Code given inline: `python -c '…'`.
+        case inline(String)
     }
 
     /// Interpreter options followed by a value, which isn't the program.
@@ -121,8 +125,8 @@ public struct AgentClassifier: Sendable {
         "-W", "-X", "-Q", "-r", "--require", "--loader", "--experimental-loader", "--import", "--input-type", "--with",
         "--from", "--python", "-p", "--package",
     ]
-    /// Code given inline or on standard input: there's no program to name.
-    private static let inlineCode: Set<String> = ["-c", "-e", "--eval", "--print", "-"]
+    /// Code given inline, which is the program; its arguments follow it.
+    private static let inlineCode: Set<String> = ["-c", "-e", "--eval", "--print"]
     /// A runner's subcommands before the program: `uv run aider`, `uv tool run aider`, `bun x …`.
     private static let runnerSubcommands: Set<String> = ["run", "tool", "x", "exec"]
 
@@ -136,7 +140,9 @@ public struct AgentClassifier: Sendable {
             rest = rest.dropFirst()
             if argument == "-m", let module = rest.first { return .module(module) }
             if argument.hasPrefix("-m"), argument.count > 2 { return .module(String(argument.dropFirst(2))) }
-            if inlineCode.contains(argument) { return nil }
+            if inlineCode.contains(argument) { return rest.first.map(Program.inline) }
+            // Code on standard input: there's no program to name.
+            if argument == "-" { return nil }
             if optionsWithValues.contains(argument) {
                 rest = rest.dropFirst()
                 continue
@@ -146,6 +152,26 @@ public struct AgentClassifier: Sendable {
         }
         return nil
     }
+
+    /// The package inline code starts, when it ends the way a console script does:
+    /// `from hermes_cli.main import main` then `sys.exit(main())`. Hermes's launcher runs
+    /// `python -I -c` with code like that, so no argument names Hermes. Other imports name
+    /// nothing: anyone's one-liner can `import claude`.
+    static func entryModule(in code: String) -> String? {
+        let lines = code.split(separator: "\n")
+        for (index, line) in lines.enumerated().reversed() {
+            let words = line.split(separator: " ")
+            guard words.count == 4, words[0] == "from", words[2] == "import", words[3] == "main" else { continue }
+            // Imported and then called, as the console script calls it.
+            guard lines[(index + 1)...].contains(where: { $0.contains("main()") }) else { return nil }
+            return words[1].split(separator: ".").first.map(String.init)
+        }
+        return nil
+    }
+
+    /// Scripts named like an agent that are its helpers, started wherever its session works.
+    /// `hermes_kernel_runner.py` is the kernel Hermes's `execute_code` runs code in.
+    private static let helperScripts: Set<String> = ["hermes_kernel_runner"]
 
     /// Entry points too generic to name a program: the package around them does.
     private static let genericEntries: Set<String> = ["cli", "index", "main", "__main__", "entry", "run", "app", "start", "bin"]
@@ -157,6 +183,7 @@ public struct AgentClassifier: Sendable {
         let components = script.split(separator: "/").map(String.init)
         guard let last = components.last else { return nil }
         let base = (last as NSString).deletingPathExtension
+        if Self.helperScripts.contains(base.lowercased()) { return nil }
         if let kind = match(name: base) { return kind }
         guard Self.genericEntries.contains(base.lowercased()) else { return nil }
         for marker in ["node_modules", "site-packages"] {
