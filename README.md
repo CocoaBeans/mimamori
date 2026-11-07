@@ -33,6 +33,7 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 - **Shows diffs the way you read them.**
   - Unified or side-by-side (⌥⌘L), with line numbers, syntax colors for about 25 languages and formats, and word-level emphasis on the parts of a line that actually changed. The highlighter is built in, with no dependencies, and runs off the main thread once per diff.
   - Wrapping or horizontal scrolling, copy as a patch, and flags that jump to the offending line.
+  - A changed image (PNG, JPEG, GIF, HEIC, TIFF, WebP and the other types macOS reads) shows as pictures, before and after side by side, each with its size in pixels and bytes, over a checkerboard where it's transparent. An added or deleted image shows its one side. Images over 50 MB, and other binary files, still say only that they changed.
   - Each hunk's header stays at the top while you scroll through it. On longer diffs, a strip beside the diff marks where the added and removed lines are, with a box around what is on screen; click or drag on it to go there.
   - ⌘F filters the file list.
 - **Shows merges, rebases and their conflicts.** A worktree stopped in the middle of a merge, rebase, cherry-pick or revert (or bisecting) gets a banner above its changes: "Merging feature/euros into main · 1 file conflicted", "Rebasing feature/login onto main · 3 of 7 · Stopped at 1a2b3c4 Friendlier greeting". Its sidebar row and the menu bar say so too, and mid-rebase it goes by the branch being rebased rather than "detached".

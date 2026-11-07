@@ -488,6 +488,13 @@ public struct GitClient: Sendable {
         return oid.isEmpty ? nil : oid
     }
 
+    /// A blob's size in bytes, without reading it; nil when there is no such blob.
+    public func blobSize(_ oid: String, in worktree: URL) async -> Int? {
+        guard let result = try? await run(["cat-file", "-s", oid], in: worktree, options: Options(allowedExitCodes: [0, 128])),
+              result.status == 0 else { return nil }
+        return Int(result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     /// A blob's bytes, as stored.
     public func blob(_ oid: String, in worktree: URL) async throws -> Data {
         try await run(["cat-file", "blob", oid], in: worktree, options: .shown).stdout

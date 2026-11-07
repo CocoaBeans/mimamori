@@ -78,6 +78,7 @@ struct HelpTopic: Identifiable {
             - **Side-by-Side Diff** (⌥⌘L) and **Wrap Diff Lines** (⌥⌘W) are in the Monitor menu.
             - The words that changed within a line are emphasised.
             - Beside a long diff, a strip marks where lines were added and removed. Click or drag on it to go there.
+            - A changed image shows as pictures, before and after side by side, with each one's size.
 
             ## Keep track of what you've read
             - **Mark as Reviewed** (⌘↩) dims the file and moves to the next one.

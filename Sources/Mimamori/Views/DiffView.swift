@@ -200,6 +200,8 @@ struct DiffView: View {
         if change.isSubmodule {
             ContentUnavailableView("Submodule Pointer Changed", systemImage: "shippingbox",
                                    description: Text(pointerDescription))
+        } else if change.isBinary, ImagePreview.isImage(path: change.path) {
+            ImageDiffView(session: session, change: change, commit: commit)
         } else if change.isBinary {
             ContentUnavailableView("Binary File", systemImage: "doc.zipper",
                                    description: Text(binaryDescription))

@@ -16,6 +16,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - A Claude Code session shows its title, as the Claude desktop app does, on its card, in the banner
   and in a permission notification, so a request names the session asking
   ([#83](https://github.com/CocoaBeans/mimamori/pull/83)).
+- A changed image shows as pictures in the diff, before and after side by side, with each one's size,
+  instead of only saying that a binary file changed.
 
 ### Fixed
 

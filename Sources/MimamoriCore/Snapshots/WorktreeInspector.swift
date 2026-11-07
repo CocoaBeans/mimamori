@@ -260,6 +260,38 @@ public actor WorktreeInspector {
     /// What changed in a file since the version you reviewed: that blob against the current one.
     /// Nil when the file is gone or the reviewed blob is no longer in the object store
     /// (unreferenced objects are eventually pruned by `git gc`).
+    /// Both sides of `change` as bytes, for showing a binary file such as an image: the baseline's
+    /// blob, and on the new side the file in the working tree (`fromWorkingTree`, as the diff shows
+    /// it) or else the blob a commit made. A side over `maxBytes` isn't read.
+    public nonisolated func versions(of change: FileChange, fromWorkingTree: Bool,
+                                     maxBytes: Int = ImagePreview.maxBytes) async throws -> FileVersions {
+        async let old = blobSide(change.oldOID, maxBytes: maxBytes)
+        let new: FileVersions.Side
+        if change.kind == .deleted {
+            new = .none
+        } else if fromWorkingTree {
+            new = try fileSide(worktree.appendingPathComponent(change.path), maxBytes: maxBytes)
+        } else {
+            new = try await blobSide(change.newOID, maxBytes: maxBytes)
+        }
+        return FileVersions(old: try await old, new: new)
+    }
+
+    private nonisolated func blobSide(_ oid: String?, maxBytes: Int) async throws -> FileVersions.Side {
+        guard let oid, let size = await git.blobSize(oid, in: worktree) else { return .none }
+        guard size <= maxBytes else { return .tooLarge(bytes: size) }
+        return .data(try await git.blob(oid, in: worktree))
+    }
+
+    /// A working-tree file's bytes. A symbolic link isn't followed: it may lead out of the worktree.
+    private nonisolated func fileSide(_ url: URL, maxBytes: Int) throws -> FileVersions.Side {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true else { return .none }
+        let size = values.fileSize ?? 0
+        guard size <= maxBytes else { return .tooLarge(bytes: size) }
+        return .data(try Data(contentsOf: url))
+    }
+
     public func diffSinceReview(for change: FileChange, reviewedBlob: String) async throws -> FileDiff? {
         guard let current = change.newOID else { return nil }
         let key = "review|\(reviewedBlob)|\(current)|\(change.path)"

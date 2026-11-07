@@ -831,6 +831,13 @@ final class WorktreeSession: Identifiable {
         return await inspector.commits(since: state)
     }
 
+    /// Both sides of a binary change as bytes, for showing an image: the working tree's file on the
+    /// new side, or a commit's blob when `inCommit`.
+    func versions(of change: FileChange, inCommit: Bool) async throws -> FileVersions? {
+        guard let inspector else { return nil }
+        return try await inspector.versions(of: change, fromWorkingTree: !inCommit)
+    }
+
     func diffSinceReview(for change: FileChange, reviewedBlob: String) async throws -> FileDiff? {
         guard let inspector else { return nil }
         return try await inspector.diffSinceReview(for: change, reviewedBlob: reviewedBlob)
