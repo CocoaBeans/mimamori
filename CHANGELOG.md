@@ -14,7 +14,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   the request to the agent's own prompt
   ([#82](https://github.com/CocoaBeans/mimamori/pull/82)).
 - A Claude Code session shows its title, as the Claude desktop app does, on its card, in the banner
-  and in a permission notification, so a request names the session asking.
+  and in a permission notification, so a request names the session asking
+  ([#83](https://github.com/CocoaBeans/mimamori/pull/83)).
 
 ### Fixed
 
