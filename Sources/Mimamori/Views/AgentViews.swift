@@ -1286,6 +1286,12 @@ struct AgentSettingsView: View {
                         .disabled(!FileManager.default.fileExists(atPath: url.path))
                 }
             }
+            LabeledContent("Or have your agent set this up") {
+                CopyButton("Copy Prompt", help: "Copy instructions to paste into \(recipe == .other ? "the agent" : recipe.title), which then sets up its own hooks") {
+                    Workspace.copy(AgentSetupPrompt.text(for: recipe, socketPath: model.agentHub.socketPath,
+                                                         agent: recipe == .other ? otherAgentName : nil))
+                }
+            }
         } footer: {
             Text("Any agent that can run a command when something happens can report to Mimamori. Add the setup to the agent's own settings: Mimamori works out which agent sent each event and understands its event names. Mimamori never edits these files, so remove the entries yourself to stop.")
         }

@@ -93,9 +93,14 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
     /// The command every hook runs. It posts the event to Mimamori's socket, gives up after a second
     /// and always succeeds, so it can never hold up or block the agent.
     public static func command(socketPath: String, agent: String, home: String = HookCommand.defaultHome) -> String {
+        HookCommand.event(socketPath: socketPath, address: address(agent: agent), home: home)
+    }
+
+    /// The address an agent's events go to on the socket, `/event?agent=<name>`, with only safe characters in the name.
+    public static func address(agent: String) -> String {
         let name = AgentKind.named(agent)?.id ?? AgentKind.unnamed.id
         let safe = String(name.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || "-_.".unicodeScalars.contains($0) })
-        return HookCommand.event(socketPath: socketPath, address: "/event?agent=\(safe.isEmpty ? AgentKind.unnamed.id : safe)", home: home)
+        return "/event?agent=\(safe.isEmpty ? AgentKind.unnamed.id : safe)"
     }
 
     /// The agent name the setup reports as.
@@ -110,8 +115,8 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// The text to paste: the agent's settings JSON, OMP's extension, or the bare command for any other agent.
-    public func setup(socketPath: String, agent: String? = nil) -> String {
-        let command = Self.command(socketPath: socketPath, agent: agent ?? agentName)
+    public func setup(socketPath: String, agent: String? = nil, home: String = HookCommand.defaultHome) -> String {
+        let command = Self.command(socketPath: socketPath, agent: agent ?? agentName, home: home)
         var hooks: [String: Any] = [:]
         switch self {
         case .codex:
@@ -133,7 +138,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
             }
             return Self.json(["version": 1, "hooks": hooks])
         case .omp:
-            return OMPExtension.source(socketPath: socketPath)
+            return OMPExtension.source(socketPath: socketPath, home: home)
         case .other:
             return command
         }

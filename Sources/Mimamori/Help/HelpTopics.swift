@@ -153,6 +153,7 @@ struct HelpTopic: Identifiable {
             - **Claude Code and Hermes:** Help › Welcome to Mimamori or Settings › Agents › Hooks installs them in a click, after a backup. Hermes asks you to approve them once.
             - **Codex, Gemini CLI, Cursor and others:** Settings › Agents › Other Agents shows what to paste, with a Copy button.
             - **OMP:** the same pane has an extension to save as `~/.omp/agent/extensions/mimamori.ts`, since OMP's hooks are code rather than commands.
+            - **Or have your agent set this up:** Copy Prompt copies instructions to paste into the agent, which then sets up its own hooks and tells you what it changed.
             - Agents read their hooks when a session starts, so start a new session afterwards.
 
             ## Keep an eye on them

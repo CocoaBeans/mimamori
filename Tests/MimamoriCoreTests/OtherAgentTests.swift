@@ -376,6 +376,43 @@ struct AgentHookRecipeTests {
     }
 }
 
+@Suite("Prompts that have an agent set itself up")
+struct AgentSetupPromptTests {
+    private let home = "/Users/someone"
+    private var socket: String { home + "/Library/Application Support/Mimamori/mimamori.sock" }
+
+    @Test func everyPromptCarriesItsSetupAndHowToCheckIt() {
+        for recipe in AgentHookRecipe.allCases {
+            let prompt = AgentSetupPrompt.text(for: recipe, socketPath: socket, home: home)
+            #expect(prompt.contains(socket), "\(recipe.title)")
+            #expect(prompt.contains("http://mimamori/event?agent=\(recipe.agentName)"), "\(recipe.title)")
+            #expect(prompt.contains(#"--unix-socket "$HOME/Library/Application Support/Mimamori/mimamori.sock" http://mimamori/health"#))
+            #expect(prompt.contains("never file contents"))
+            if let file = recipe.file { #expect(prompt.contains(file), "\(recipe.title)") }
+            // The setup itself, as the pane shows it.
+            let setup = recipe.setup(socketPath: socket, agent: recipe.agentName, home: home).trimmingCharacters(in: .newlines)
+            if recipe != .other {
+                #expect(prompt.contains(setup), "\(recipe.title)")
+            }
+        }
+        #expect(AgentSetupPrompt.text(for: .omp, socketPath: socket, home: home).contains("```ts\n// Reports this OMP session"))
+        #expect(AgentSetupPrompt.text(for: .codex, socketPath: socket, home: home).contains("trust Mimamori's"))
+    }
+
+    @Test func anyOtherAgentLearnsTheEventsAndItsOwnName() {
+        let prompt = AgentSetupPrompt.text(for: .other, socketPath: socket, agent: "Zed Agent", home: home)
+        #expect(prompt.hasPrefix("Please connect yourself"))
+        for event in AgentEventTranslator.plainEvents {
+            #expect(prompt.contains("`\(event.name)`: \(event.meaning)"))
+        }
+        #expect(prompt.contains(AgentHookRecipe.command(socketPath: socket, agent: "Zed Agent", home: home)))
+        #expect(prompt.contains("http://mimamori/event?agent=zed-agent over the Unix socket"))
+        // Wrapped lines read as one sentence.
+        #expect(!prompt.contains("   are."))
+        #expect(AgentSetupPrompt.text(for: .other, socketPath: socket, agent: "", home: home).contains("?agent=agent"))
+    }
+}
+
 @Suite("OMP")
 struct OMPTests {
     private let home = "/Users/someone"

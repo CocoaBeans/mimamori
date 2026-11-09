@@ -203,7 +203,9 @@ When a worktree has more than one live agent:
 
 ### Connecting other agents
 
-Any agent that can run a command when something happens can report to Mimamori the same way. **Settings › Agents › Other Agents** shows what to paste into Codex (`~/.codex/hooks.json`), Gemini CLI (`~/.gemini/settings.json`) or Cursor (`~/.cursor/hooks.json`), with a Copy button, and lists every agent that has reported since Mimamori started, so you can see a new setup work. Mimamori never edits those files; remove the entries yourself to stop. Every setup runs the same command, with the agent's name in the address:
+Any agent that can run a command when something happens can report to Mimamori the same way. **Settings › Agents › Other Agents** shows what to paste into Codex (`~/.codex/hooks.json`), Gemini CLI (`~/.gemini/settings.json`) or Cursor (`~/.cursor/hooks.json`), with a Copy button, and lists every agent that has reported since Mimamori started, so you can see a new setup work. Mimamori never edits those files; remove the entries yourself to stop.
+
+To have the agent do it instead, **Or have your agent set this up › Copy Prompt** copies instructions to paste into it. For Codex, Gemini CLI, Cursor and OMP they carry the same setup and say where it goes; for any other agent, they describe the events and fields below so the agent can find its own hooks and connect them. Either way they ask it to keep what the settings already hold, back them up first, never block on Mimamori or send file contents, check that Mimamori answers on its socket, and tell you what it changed. Every setup runs the same command, with the agent's name in the address:
 
 ```bash
 curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \
