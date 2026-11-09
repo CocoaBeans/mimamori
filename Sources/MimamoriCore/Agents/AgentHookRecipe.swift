@@ -2,9 +2,9 @@ import Foundation
 
 /// Hook setups for agents Mimamori does not install into: copy one into the agent's own settings
 /// file and its events reach Mimamori's socket. Every one runs the same command; only the agent's
-/// file format and event names differ.
+/// file format and event names differ. OMP's hooks are code, so its setup is an extension instead.
 public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
-    case codex, gemini, cursor, other
+    case codex, gemini, cursor, omp, other
 
     public var id: String { rawValue }
 
@@ -13,6 +13,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: "Codex"
         case .gemini: "Gemini CLI"
         case .cursor: "Cursor"
+        case .omp: "OMP"
         case .other: "Any other agent"
         }
     }
@@ -23,7 +24,34 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: "~/.codex/hooks.json"
         case .gemini: "~/.gemini/settings.json"
         case .cursor: "~/.cursor/hooks.json"
+        case .omp: OMPExtension.file
         case .other: nil
+        }
+    }
+
+    /// What to do with the setup, above it.
+    public var lead: String {
+        switch self {
+        case .omp: "Save this as \(OMPExtension.file):"
+        case .other: "Have the agent's hooks run:"
+        default: "Add this to \(file ?? "the agent's settings"):"
+        }
+    }
+
+    /// The Copy button's title and tooltip.
+    public var copyTitle: String {
+        switch self {
+        case .omp: "Copy Extension"
+        case .other: "Copy Command"
+        default: "Copy Setup"
+        }
+    }
+
+    public var copyHelp: String {
+        switch self {
+        case .omp: "Copy the extension to save as \(OMPExtension.file)"
+        case .other: "Copy the command for the agent's hooks to run"
+        default: "Copy the hooks to add to \(file ?? "the agent's settings")"
         }
     }
 
@@ -38,6 +66,8 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .cursor:
             ["sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse", "postToolUseFailure", "subagentStop", "stop",
              "sessionEnd"]
+        case .omp:
+            OMPExtension.ompEvents
         case .other:
             AgentEventTranslator.plainEvents.map(\.name)
         }
@@ -52,6 +82,8 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
             "If settings.json already exists, add these entries under its \"hooks\" key. Gemini CLI's /hooks panel lists them."
         case .cursor:
             "Cursor reloads hooks.json when you save it. If the file already exists, add these entries under its \"hooks\" key."
+        case .omp:
+            "OMP loads extensions when it starts, so sessions started after you save the file report to Mimamori. Delete the file to stop."
         case .other:
             "Run this from the agent's hooks with the event's JSON on standard input. When the agent uses names Mimamori does not know, or sends no JSON, add &event= with one of: "
                 + AgentEventTranslator.plainEvents.map(\.name).joined(separator: ", ") + "."
@@ -72,11 +104,12 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: AgentKind.codex.id
         case .gemini: AgentKind.gemini.id
         case .cursor: AgentKind.cursor.id
+        case .omp: AgentKind.omp.id
         case .other: "my-agent"
         }
     }
 
-    /// The text to paste: the agent's settings JSON, or the bare command for any other agent.
+    /// The text to paste: the agent's settings JSON, OMP's extension, or the bare command for any other agent.
     public func setup(socketPath: String, agent: String? = nil) -> String {
         let command = Self.command(socketPath: socketPath, agent: agent ?? agentName)
         var hooks: [String: Any] = [:]
@@ -99,6 +132,8 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
                 hooks[event] = [["command": command, "timeout": 5]]
             }
             return Self.json(["version": 1, "hooks": hooks])
+        case .omp:
+            return OMPExtension.source(socketPath: socketPath)
         case .other:
             return command
         }

@@ -64,8 +64,8 @@ Git clients are built for committing. When an agent is editing on your behalf, y
 - **Records snapshots.** When the tree changes, Mimamori writes a commit object of the whole working tree (untracked files included) under `refs/monitor/<worktree-id>/`. Branches, the index and the working tree are untouched. Snapshots keep the Start marker alive across restarts and let you compare against any earlier moment.
 - **Keeps an activity feed.** Created, modified, deleted and reverted files, discards, commits, branch switches, new flags and agent work, newest first, for one worktree or all of them. Click an entry to jump to the file. The feed is saved to disk and kept for a week by default (Settings › General), so it and session summaries survive a restart. It lists the newest 400 entries, with **Show Earlier Activity** for the rest, so a week of history costs nothing while agents work. Its filter menu shows agents only (their events and the changes traced to them) or hides agents' own events.
 - **Knows where the agents are.**
-  - Mimamori scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, or names you add) and shows which worktree each one is working in.
-  - With hooks connected (one reversible click for Claude Code and Hermes, a setup to paste for Codex, Gemini CLI, Cursor or any agent that can run a command), it knows exactly what each agent is doing: when a turn starts and ends, each tool call, and when it needs your permission or asks you a question. A finished turn reads as ready for your next prompt and does not count as needing you.
+  - Mimamori scans for agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, Hermes, OMP, or names you add) and shows which worktree each one is working in.
+  - With hooks connected (one reversible click for Claude Code and Hermes, a setup to paste for Codex, Gemini CLI, Cursor, OMP or any agent that can run a command), it knows exactly what each agent is doing: when a turn starts and ends, each tool call, and when it needs your permission or asks you a question. A finished turn reads as ready for your next prompt and does not count as needing you.
   - File changes are attributed to the tool call that made them, worktrees that need you are counted in the sidebar and the menu bar, and you can be notified when an agent needs permission or has a question.
 - **Shows who needs you in the toolbar.** A pill in the toolbar names the agent waiting on you longest, in any worktree ("Codex needs you · plan · 42s"), or how many are working. Click it for that agent's banner, with its task, steps and files, and every other agent; click one to show its worktree.
 - **Has an Agents window.** ⇧⌘A (or the toolbar's Agents button, or the menu bar) lists every worktree with an agent in it: what it is doing and for how long, the task it was given, its last few steps, the files it has touched this turn (click one to open its diff), and how much is changed and left to review.
@@ -210,6 +210,8 @@ curl -s -m 1 -H 'Expect:' -H 'Content-Type: application/json' \
   --unix-socket "$HOME/Library/Application Support/Mimamori/mimamori.sock" \
   --data-binary @- 'http://mimamori/event?agent=codex' >/dev/null 2>&1 || true
 ```
+
+OMP's hooks are TypeScript extensions rather than commands, so for OMP the pane shows an extension to save as `~/.omp/agent/extensions/mimamori.ts` instead. It posts OMP's session, turn, tool, permission and subagent events to the same socket by the plain names below, sends a step's file path or command but never a file's contents, and gives up on an event after a second, so OMP never waits on Mimamori. OMP loads it when a session starts; delete the file to stop.
 
 The hook's JSON goes in on standard input, as each agent writes it. Mimamori understands each agent's own names for the same moments and maps them onto one set:
 

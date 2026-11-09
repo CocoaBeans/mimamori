@@ -8,6 +8,13 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Added
+
+- OMP (oh-my-pi) reports to Mimamori: Settings › Agents › Other Agents has an extension to save
+  as `~/.omp/agent/extensions/mimamori.ts`, which shows each OMP session's turns, steps, edited
+  files, permission requests, questions and subagents on its card. Mimamori also recognizes a
+  running `omp` without it.
+
 ### Fixed
 
 - A Hermes session no longer reads as ended after each turn and drops off its card two minutes

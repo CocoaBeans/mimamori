@@ -1258,7 +1258,7 @@ struct AgentSettingsView: View {
                     .help("The name Mimamori shows for this agent")
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(recipe.file.map { "Add this to \($0):" } ?? "Have the agent's hooks run:")
+                Text(recipe.lead)
                     .font(.callout)
                 ScrollView {
                     Text(setup)
@@ -1275,8 +1275,7 @@ struct AgentSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                CopyButton(recipe == .other ? "Copy Command" : "Copy Setup",
-                           help: recipe.file.map { "Copy the hooks to add to \($0)" } ?? "Copy the command for the agent's hooks to run") {
+                CopyButton(recipe.copyTitle, help: recipe.copyHelp) {
                     Workspace.copy(setup)
                 }
                 Spacer()

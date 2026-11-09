@@ -19,10 +19,11 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
     public static let opencode = AgentKind(id: "opencode", displayName: "OpenCode")
     public static let amp = AgentKind(id: "amp", displayName: "Amp")
     public static let hermes = AgentKind(id: "hermes", displayName: "Hermes")
+    public static let omp = AgentKind(id: "omp", displayName: "OMP")
     /// An agent whose events did not say which agent it is.
     public static let unnamed = AgentKind(id: "agent", displayName: "Agent")
 
-    public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes]
+    public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes, .omp]
 
     /// The SF Symbol that stands for this agent wherever it appears. Generic symbols, never a
     /// product's logo; an agent Mimamori does not know gets the circled first letter of its name.
@@ -37,6 +38,7 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
         case Self.goose.id: "bird"
         case Self.opencode.id: "chevron.left.forwardslash.chevron.right"
         case Self.amp.id: "bolt"
+        case Self.omp.id: "pi"
         default:
             if let letter = displayName.lowercased().first(where: { $0.isLetter && $0.isASCII }) { "\(letter).circle" } else { "person.crop.circle" }
         }
@@ -90,6 +92,7 @@ public struct AgentClassifier: Sendable {
         ("opencode", .opencode),
         ("amp", .amp),
         ("hermes", .hermes),
+        ("omp", .omp),
     ]
 
     public func classify(executable: String, arguments: [String]) -> AgentKind? {

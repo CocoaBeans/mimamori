@@ -352,7 +352,7 @@ struct AgentHookRecipeTests {
     private let socket = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Application Support/Mimamori/mimamori.sock"
 
     @Test func everySetupIsValidAndCoversItsEvents() throws {
-        for recipe in AgentHookRecipe.allCases where recipe != .other {
+        for recipe in AgentHookRecipe.allCases where recipe != .other && recipe != .omp {
             let text = recipe.setup(socketPath: socket)
             let object = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
             let hooks = try #require(object["hooks"] as? [String: Any])
@@ -373,6 +373,84 @@ struct AgentHookRecipeTests {
         #expect(command.contains("'http://mimamori/event?agent=weird-name'"))
         #expect(command.hasSuffix("|| true"))
         #expect(AgentHookRecipe.other.setup(socketPath: socket, agent: "") .contains("?agent=agent'"))
+    }
+}
+
+@Suite("OMP")
+struct OMPTests {
+    private let home = "/Users/someone"
+    private var socket: String { home + "/Library/Application Support/Mimamori/mimamori.sock" }
+
+    private func translate(_ json: String) -> HookEvent? {
+        AgentEventTranslator.translate(Data(json.utf8), agent: AgentKind.named("omp"))
+    }
+
+    @Test func theProcessIsRecognised() {
+        let classifier = AgentClassifier()
+        #expect(classifier.classify(executable: "/Users/someone/.local/bin/omp", arguments: ["omp"]) == .omp)
+        #expect(AgentKind.named("omp") == .omp)
+        #expect(AgentKind.named("OMP") == .omp)
+    }
+
+    @Test func theExtensionPostsToTheSocketUnderHome() {
+        let source = OMPExtension.source(socketPath: socket, home: home)
+        #expect(source.contains(#"const SOCKET = join(homedir(), "Library/Application Support/Mimamori/mimamori.sock");"#))
+        #expect(source.contains(#""http://mimamori/event?agent=omp""#))
+        #expect(!source.contains(home))
+        let elsewhere = OMPExtension.source(socketPath: "/tmp/m \"x\".sock", home: home)
+        #expect(elsewhere.contains(#"const SOCKET = "/tmp/m \"x\".sock";"#))
+        #expect(AgentHookRecipe.omp.setup(socketPath: socket).hasPrefix("// Reports this OMP session to Mimamori"))
+    }
+
+    @Test func itListensToOMPsEventsAndPostsOnesMimamoriKnows() throws {
+        let source = OMPExtension.source(socketPath: socket, home: home)
+        for event in OMPExtension.ompEvents {
+            #expect(source.contains("pi.on(\"\(event)\""), "\(event)")
+        }
+        let listened = try Regex(#"pi\.on\("([a-z_]+)""#)
+        #expect(Set(source.matches(of: listened).map { String($0.output[1].substring ?? "") }) == Set(OMPExtension.ompEvents))
+        let posted = try Regex(#"base\("([A-Za-z_]+)""#)
+        let names = Set(source.matches(of: posted).map { String($0.output[1].substring ?? "") })
+        #expect(names.isSubset(of: Set(OMPExtension.postedEvents)))
+        #expect(names.contains("turn_start") && names.contains("turn_end"))
+        for event in OMPExtension.postedEvents {
+            let translated = try #require(translate(#"{"event":"\#(event)","session_id":"s1","cwd":"/repo"}"#), "\(event)")
+            #expect(translated.name != .other, "\(event)")
+            #expect(translated.agent == .omp)
+        }
+        // Edits and failures read as they do for every other agent.
+        #expect(source.contains(#"event.isError ? "tool_failed" : "tool_end""#))
+    }
+
+    @Test func itsStepsReadLikeAnyAgents() throws {
+        let edit = try #require(translate(#"{"event":"tool_start","session_id":"s1","cwd":"/repo","tool_name":"edit","tool_use_id":"c1","tool_input":{"path":"src/a.ts"}}"#))
+        #expect(edit.name == .preToolUse)
+        #expect(edit.filePath == "/repo/src/a.ts")
+        #expect(edit.isMutatingTool)
+        let bash = try #require(translate(#"{"event":"tool_start","session_id":"s1","cwd":"/repo","tool_name":"bash","tool_input":{"command":"swift test"}}"#))
+        #expect(bash.command == "swift test")
+        #expect(bash.isMutatingTool)
+        let read = try #require(translate(#"{"event":"tool_start","session_id":"s1","cwd":"/repo","tool_name":"read","tool_input":{"path":"README.md"}}"#))
+        #expect(!read.isMutatingTool)
+        let sub = try #require(translate(#"{"event":"tool_start","session_id":"s1","cwd":"/repo","tool_name":"grep","agent_id":"0-Explore","agent_type":"explore"}"#))
+        #expect(sub.agentID == "0-Explore")
+        #expect(sub.agentType == "explore")
+        let stop = try #require(translate(#"{"event":"SubagentStop","session_id":"s1","cwd":"/repo","agent_id":"0-Explore"}"#))
+        #expect(stop.name == .subagentStop)
+    }
+
+    @Test func aTurnWithAQuestionNeedsYouUntilItIsAnswered() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try #require(translate(#"{"event":"turn_start","session_id":"s1","cwd":"/repo","prompt":"Ship it"}"#)))
+        #expect(machine.status?.task == "Ship it")
+        _ = machine.apply(try #require(translate(#"{"event":"tool_start","session_id":"s1","cwd":"/repo","tool_name":"ask","tool_use_id":"q1","tool_input":{"question":"Which branch?"}}"#)))
+        #expect(machine.status?.activity == .askedQuestion(detail: "Which branch?"))
+        _ = machine.apply(try #require(translate(#"{"event":"tool_end","session_id":"s1","cwd":"/repo","tool_name":"ask","tool_use_id":"q1"}"#)))
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+        _ = machine.apply(try #require(translate(#"{"event":"needs_permission","session_id":"s1","cwd":"/repo","tool_name":"bash","tool_use_id":"b1"}"#)))
+        #expect(machine.status?.activity == .needsPermission(tool: "bash", detail: nil))
+        _ = machine.apply(try #require(translate(#"{"event":"turn_end","session_id":"s1","cwd":"/repo"}"#)))
+        #expect(machine.status?.activity == .ready)
     }
 }
 
