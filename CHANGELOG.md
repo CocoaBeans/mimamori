@@ -16,7 +16,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   running `omp` without it ([#90](https://github.com/CocoaBeans/mimamori/pull/90)).
 - Have an agent connect itself: Settings › Agents › Other Agents › **Copy Prompt** copies
   instructions to paste into Codex, Gemini CLI, Cursor, OMP or any other agent, which then sets
-  up its own hooks, keeping what its settings already hold, and checks that Mimamori answers.
+  up its own hooks, keeping what its settings already hold, and checks that Mimamori answers
+  ([#91](https://github.com/CocoaBeans/mimamori/pull/91)).
 
 ### Fixed
 
