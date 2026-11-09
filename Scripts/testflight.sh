@@ -12,13 +12,16 @@
 #
 # Requirements:
 #   - The app's record in App Store Connect, for the bundle ID com.kevinross.Mimamori.Companion.
-#   - An App Store Connect API key, for signing and the upload:
+#   - The team's Apple ID signed in to Xcode (Settings › Accounts). Xcode signs with a
+#     cloud-managed distribution certificate, and uploads, through that account.
+#   - Or an App Store Connect API key instead, which needs the Admin role for cloud signing:
 #       ASC_KEY_ID      the key id (the file is read from
 #                       ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8,
 #                       or point ASC_KEY_PATH at it)
 #       ASC_ISSUER_ID   the issuer id
 #
-# Usage: ASC_KEY_ID=XXXXXXXXXX ASC_ISSUER_ID=... Scripts/testflight.sh
+# Usage: Scripts/testflight.sh
+#        ASC_KEY_ID=XXXXXXXXXX ASC_ISSUER_ID=... Scripts/testflight.sh
 #        TESTFLIGHT_DRY_RUN=1 Scripts/testflight.sh
 #
 # A dry run exports with the everyday development signing and uploads nothing, to check the
@@ -43,19 +46,16 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   COMMIT="$COMMIT-dirty"
 fi
 
-# With an API key, xcodebuild may fetch or create the certificate and profiles signing needs.
-AUTH=()
+# xcodebuild may fetch or create the certificate and profiles signing needs, through the account
+# signed in to Xcode, or the API key when one is given. A key without the Admin role can't use
+# cloud signing, and the export fails with "Cloud signing permission error".
+AUTH=(-allowProvisioningUpdates)
 if [[ -n "${ASC_KEY_ID:-}" ]]; then
   : "${ASC_ISSUER_ID:?Set ASC_ISSUER_ID to your App Store Connect issuer id}"
   ASC_KEY_PATH="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8}"
   [[ -f "$ASC_KEY_PATH" ]] || { echo "API key not found at $ASC_KEY_PATH" >&2; exit 1; }
-  AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH"
-        -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
-elif [[ $DRY_RUN != 1 ]]; then
-  echo "Set ASC_KEY_ID and ASC_ISSUER_ID to your App Store Connect API key, for signing and the upload." >&2
-  exit 1
-else
-  AUTH=(-allowProvisioningUpdates)
+  AUTH+=(-authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID"
+         -authenticationKeyIssuerID "$ASC_ISSUER_ID")
 fi
 
 rm -rf $OUT
