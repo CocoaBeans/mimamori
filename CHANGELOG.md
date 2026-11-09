@@ -13,7 +13,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - OMP (oh-my-pi) reports to Mimamori: Settings › Agents › Other Agents has an extension to save
   as `~/.omp/agent/extensions/mimamori.ts`, which shows each OMP session's turns, steps, edited
   files, permission requests, questions and subagents on its card. Mimamori also recognizes a
-  running `omp` without it.
+  running `omp` without it ([#90](https://github.com/CocoaBeans/mimamori/pull/90)).
 
 ### Fixed
 
