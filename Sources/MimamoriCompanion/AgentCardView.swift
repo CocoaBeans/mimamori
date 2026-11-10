@@ -104,6 +104,7 @@ struct AgentCardView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, detailed ? 10 : 8)
+        .labelStyle(CardLabelStyle())
         .background(agent.state.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(agent.state.tint.opacity(0.22)))
     }
@@ -250,6 +251,18 @@ struct AgentCardView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 2)
+        }
+    }
+}
+
+/// Icon then title, the same wherever the card is. In a List (the agent's actions), the automatic
+/// style lays labels out as list rows, with a wide icon column and a row's height: the quiet label
+/// beside the timeline grew tall, padding the card, and lost its text.
+private struct CardLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            configuration.icon
+            configuration.title
         }
     }
 }
