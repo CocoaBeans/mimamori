@@ -352,7 +352,7 @@ struct AgentHookRecipeTests {
     private let socket = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Application Support/Mimamori/mimamori.sock"
 
     @Test func everySetupIsValidAndCoversItsEvents() throws {
-        for recipe in AgentHookRecipe.allCases where recipe != .other && recipe != .omp {
+        for recipe in AgentHookRecipe.allCases where recipe != .other && recipe.extensionHost == nil {
             let text = recipe.setup(socketPath: socket)
             let object = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
             let hooks = try #require(object["hooks"] as? [String: Any])
@@ -430,27 +430,27 @@ struct OMPTests {
     }
 
     @Test func theExtensionPostsToTheSocketUnderHome() {
-        let source = OMPExtension.source(socketPath: socket, home: home)
+        let source = PiExtension.source(for: .omp, socketPath: socket, home: home)
         #expect(source.contains(#"const SOCKET = join(homedir(), "Library/Application Support/Mimamori/mimamori.sock");"#))
-        #expect(source.contains(#""http://mimamori/event?agent=omp""#))
+        #expect(source.contains(#"const ADDRESS = "/event?agent=omp";"#))
         #expect(!source.contains(home))
-        let elsewhere = OMPExtension.source(socketPath: "/tmp/m \"x\".sock", home: home)
+        let elsewhere = PiExtension.source(for: .omp, socketPath: "/tmp/m \"x\".sock", home: home)
         #expect(elsewhere.contains(#"const SOCKET = "/tmp/m \"x\".sock";"#))
         #expect(AgentHookRecipe.omp.setup(socketPath: socket).hasPrefix("// Reports this OMP session to Mimamori"))
     }
 
     @Test func itListensToOMPsEventsAndPostsOnesMimamoriKnows() throws {
-        let source = OMPExtension.source(socketPath: socket, home: home)
-        for event in OMPExtension.ompEvents {
+        let source = PiExtension.source(for: .omp, socketPath: socket, home: home)
+        for event in PiExtension.events {
             #expect(source.contains("pi.on(\"\(event)\""), "\(event)")
         }
         let listened = try Regex(#"pi\.on\("([a-z_]+)""#)
-        #expect(Set(source.matches(of: listened).map { String($0.output[1].substring ?? "") }) == Set(OMPExtension.ompEvents))
+        #expect(Set(source.matches(of: listened).map { String($0.output[1].substring ?? "") }) == Set(PiExtension.events))
         let posted = try Regex(#"base\("([A-Za-z_]+)""#)
         let names = Set(source.matches(of: posted).map { String($0.output[1].substring ?? "") })
-        #expect(names.isSubset(of: Set(OMPExtension.postedEvents)))
+        #expect(names.isSubset(of: Set(PiExtension.postedEvents)))
         #expect(names.contains("turn_start") && names.contains("turn_end"))
-        for event in OMPExtension.postedEvents {
+        for event in PiExtension.postedEvents {
             let translated = try #require(translate(#"{"event":"\#(event)","session_id":"s1","cwd":"/repo"}"#), "\(event)")
             #expect(translated.name != .other, "\(event)")
             #expect(translated.agent == .omp)
@@ -488,6 +488,46 @@ struct OMPTests {
         #expect(machine.status?.activity == .needsPermission(tool: "bash", detail: nil))
         _ = machine.apply(try #require(translate(#"{"event":"turn_end","session_id":"s1","cwd":"/repo"}"#)))
         #expect(machine.status?.activity == .ready)
+    }
+}
+
+@Suite("pi")
+struct PiTests {
+    private let home = "/Users/someone"
+    private var socket: String { home + "/Library/Application Support/Mimamori/mimamori.sock" }
+
+    @Test func theProcessIsRecognisedButNotEverythingCalledPi() {
+        let classifier = AgentClassifier()
+        let cli = "/Users/someone/.hermes/node/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+        #expect(classifier.classify(executable: "/usr/local/bin/node", arguments: ["node", cli]) == .pi)
+        #expect(classifier.classify(executable: "/Users/someone/.local/bin/pi", arguments: ["pi"]) == .pi)
+        #expect(classifier.classify(executable: "/usr/bin/python3", arguments: ["python3", "pi_digits.py"]) == nil)
+        #expect(classifier.classify(executable: "/usr/local/bin/pi-hole", arguments: []) == nil)
+        #expect(AgentKind.named("pi") == .pi)
+        #expect(AgentKind.named("omp") == .omp)
+    }
+
+    @Test func itGetsTheSameExtensionUnderItsOwnName() {
+        let pi = PiExtension.source(for: .pi, socketPath: socket, home: home)
+        let omp = PiExtension.source(for: .omp, socketPath: socket, home: home)
+        #expect(pi.hasPrefix("// Reports this pi session to Mimamori"))
+        #expect(pi.contains(#"const ADDRESS = "/event?agent=pi";"#))
+        #expect(pi.replacingOccurrences(of: "agent=pi", with: "agent=omp").replacingOccurrences(of: "this pi session", with: "this OMP session") == omp)
+        #expect(AgentHookRecipe.pi.file == "~/.pi/agent/extensions/mimamori.ts")
+        #expect(AgentHookRecipe.pi.setup(socketPath: socket, home: home) == pi)
+        #expect(AgentSetupPrompt.text(for: .pi, socketPath: socket, home: home).contains("~/.pi/agent/extensions/mimamori.ts"))
+        // Node and Bun both have node:http; Bun's fetch over a socket isn't in Node.
+        #expect(pi.contains(#"import { request } from "node:http";"#))
+        #expect(!pi.contains("fetch("))
+        // pi's print mode exits straight after a turn: those handlers wait for the events to go.
+        #expect(pi.components(separatedBy: "return flush();").count == 3)
+    }
+
+    @Test func itsEventsReadAsPis() throws {
+        let event = try #require(AgentEventTranslator.translate(Data(#"{"event":"tool_start","session_id":"p1","cwd":"/repo","tool_name":"write","tool_input":{"path":"a.md"}}"#.utf8), agent: AgentKind.named("pi")))
+        #expect(event.agent == .pi)
+        #expect(event.filePath == "/repo/a.md")
+        #expect(event.isMutatingTool)
     }
 }
 

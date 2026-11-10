@@ -2,17 +2,27 @@ import Foundation
 
 /// Hook setups for agents Mimamori does not install into: copy one into the agent's own settings
 /// file and its events reach Mimamori's socket. Every one runs the same command; only the agent's
-/// file format and event names differ. OMP's hooks are code, so its setup is an extension instead.
+/// file format and event names differ. pi's and OMP's hooks are code, so theirs is an extension instead.
 public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
-    case codex, gemini, cursor, omp, other
+    case codex, gemini, cursor, pi, omp, other
 
     public var id: String { rawValue }
+
+    /// The agent that runs the extension, for pi and OMP.
+    public var extensionHost: PiExtension.Host? {
+        switch self {
+        case .pi: .pi
+        case .omp: .omp
+        default: nil
+        }
+    }
 
     public var title: String {
         switch self {
         case .codex: "Codex"
         case .gemini: "Gemini CLI"
         case .cursor: "Cursor"
+        case .pi: "pi"
         case .omp: "OMP"
         case .other: "Any other agent"
         }
@@ -24,7 +34,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: "~/.codex/hooks.json"
         case .gemini: "~/.gemini/settings.json"
         case .cursor: "~/.cursor/hooks.json"
-        case .omp: OMPExtension.file
+        case .pi, .omp: extensionHost?.file
         case .other: nil
         }
     }
@@ -32,7 +42,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
     /// What to do with the setup, above it.
     public var lead: String {
         switch self {
-        case .omp: "Save this as \(OMPExtension.file):"
+        case .pi, .omp: "Save this as \(file ?? "the agent's extensions"):"
         case .other: "Have the agent's hooks run:"
         default: "Add this to \(file ?? "the agent's settings"):"
         }
@@ -41,7 +51,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
     /// The Copy button's title and tooltip.
     public var copyTitle: String {
         switch self {
-        case .omp: "Copy Extension"
+        case .pi, .omp: "Copy Extension"
         case .other: "Copy Command"
         default: "Copy Setup"
         }
@@ -49,7 +59,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
 
     public var copyHelp: String {
         switch self {
-        case .omp: "Copy the extension to save as \(OMPExtension.file)"
+        case .pi, .omp: "Copy the extension to save as \(file ?? "the agent's extensions")"
         case .other: "Copy the command for the agent's hooks to run"
         default: "Copy the hooks to add to \(file ?? "the agent's settings")"
         }
@@ -66,8 +76,8 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .cursor:
             ["sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse", "postToolUseFailure", "subagentStop", "stop",
              "sessionEnd"]
-        case .omp:
-            OMPExtension.ompEvents
+        case .pi, .omp:
+            PiExtension.events
         case .other:
             AgentEventTranslator.plainEvents.map(\.name)
         }
@@ -82,8 +92,10 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
             "If settings.json already exists, add these entries under its \"hooks\" key. Gemini CLI's /hooks panel lists them."
         case .cursor:
             "Cursor reloads hooks.json when you save it. If the file already exists, add these entries under its \"hooks\" key."
+        case .pi:
+            "pi loads extensions when a session starts, and /reload loads a new one into a running session. Delete the file to stop."
         case .omp:
-            "OMP loads extensions when it starts, so sessions started after you save the file report to Mimamori. Delete the file to stop."
+            "OMP loads extensions when it starts, so OMP started after you save the file reports to Mimamori. OMP that another app runs, such as Orca's chats, needs that app to start it again. Delete the file to stop."
         case .other:
             "Run this from the agent's hooks with the event's JSON on standard input. When the agent uses names Mimamori does not know, or sends no JSON, add &event= with one of: "
                 + AgentEventTranslator.plainEvents.map(\.name).joined(separator: ", ") + "."
@@ -109,12 +121,13 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: AgentKind.codex.id
         case .gemini: AgentKind.gemini.id
         case .cursor: AgentKind.cursor.id
+        case .pi: AgentKind.pi.id
         case .omp: AgentKind.omp.id
         case .other: "my-agent"
         }
     }
 
-    /// The text to paste: the agent's settings JSON, OMP's extension, or the bare command for any other agent.
+    /// The text to paste: the agent's settings JSON, pi's or OMP's extension, or the bare command for any other agent.
     public func setup(socketPath: String, agent: String? = nil, home: String = HookCommand.defaultHome) -> String {
         let command = Self.command(socketPath: socketPath, agent: agent ?? agentName, home: home)
         var hooks: [String: Any] = [:]
@@ -137,8 +150,8 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
                 hooks[event] = [["command": command, "timeout": 5]]
             }
             return Self.json(["version": 1, "hooks": hooks])
-        case .omp:
-            return OMPExtension.source(socketPath: socketPath, home: home)
+        case .pi, .omp:
+            return PiExtension.source(for: extensionHost ?? .pi, socketPath: socketPath, home: home)
         case .other:
             return command
         }

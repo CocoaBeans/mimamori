@@ -146,13 +146,13 @@ struct HelpTopic: Identifiable {
             actions: [.agentsWindow, .settings(.agents, "Agent Settings…")],
             markdown: """
             ## With no setup
-            Mimamori notices agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, Hermes, OMP, and any names you add in Settings › Agents) and shows each one on the worktree it works in. That tells you an agent is there and whether it's busy.
+            Mimamori notices agent processes (Claude Code, Codex, Aider, Cursor, Gemini, Goose, OpenCode, Amp, Hermes, OMP, pi, and any names you add in Settings › Agents) and shows each one on the worktree it works in. That tells you an agent is there and whether it's busy.
 
             ## With hooks
             A hook is a command the agent runs at each step, and Mimamori's passes the step on through a socket only you can reach. With hooks, Mimamori knows when a turn starts and ends, each tool call, which edit changed which file, and when the agent needs your permission or asks you something.
             - **Claude Code and Hermes:** Help › Welcome to Mimamori or Settings › Agents › Hooks installs them in a click, after a backup. Hermes asks you to approve them once.
             - **Codex, Gemini CLI, Cursor and others:** Settings › Agents › Other Agents shows what to paste, with a Copy button.
-            - **OMP:** the same pane has an extension to save as `~/.omp/agent/extensions/mimamori.ts`, since OMP's hooks are code rather than commands.
+            - **pi and OMP:** the same pane has an extension to save in `~/.pi/agent/extensions/` or `~/.omp/agent/extensions/`, since their hooks are code rather than commands.
             - **Or have your agent set this up:** Copy Prompt copies instructions to paste into the agent, which then sets up its own hooks and tells you what it changed.
             - Agents read their hooks when a session starts, so start a new session afterwards.
 

@@ -53,11 +53,11 @@ public enum AgentSetupPrompt {
 
             Mimamori's note on this, to pass on to me: \(recipe.note)
             """
-        case .omp:
+        case .pi, .omp:
             return """
-            Save this extension as \(OMPExtension.file). If a file by that name is there already, replace it only when \
-            its first line is the same as this one's; otherwise stop and ask me. OMP loads extensions when a session \
-            starts.
+            Save this extension as \(recipe.file ?? "mimamori.ts in the agent's extensions folder"). If a file by that \
+            name is there already, replace it only when its first line is the same as this one's; otherwise stop and \
+            ask me. \(recipe.title) loads extensions when a session starts.
 
             ```ts
             \(setup.trimmingCharacters(in: .newlines))

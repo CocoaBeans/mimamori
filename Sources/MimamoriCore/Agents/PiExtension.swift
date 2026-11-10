@@ -1,14 +1,22 @@
 import Foundation
 
-/// The extension that connects OMP (oh-my-pi) to Mimamori. OMP's hooks are TypeScript modules, not
-/// shell commands, so instead of a curl command this is a small extension that posts the same
-/// events to the socket, by Mimamori's plain names, from inside OMP.
-public enum OMPExtension {
-    /// Where OMP looks for extensions of your own, with `~` for your home folder.
-    public static let file = "~/.omp/agent/extensions/mimamori.ts"
+/// The extension that connects pi and OMP (oh-my-pi, a fork of pi) to Mimamori. Their hooks are
+/// TypeScript modules, not shell commands, so instead of a curl command this is a small extension
+/// that posts the same events to the socket, by Mimamori's plain names, from inside the agent.
+/// Both share the extension API; what only OMP has (subagents, approvals, session switches) is
+/// simply never heard from pi.
+public enum PiExtension {
+    public enum Host: Sendable, CaseIterable {
+        case pi, omp
 
-    /// OMP's own names for the events the extension listens to.
-    public static let ompEvents = [
+        public var agent: AgentKind { self == .pi ? .pi : .omp }
+
+        /// Where the agent looks for extensions of your own, with `~` for your home folder.
+        public var file: String { self == .pi ? "~/.pi/agent/extensions/mimamori.ts" : "~/.omp/agent/extensions/mimamori.ts" }
+    }
+
+    /// The agents' own names for the events the extension listens to.
+    public static let events = [
         "session_start", "session_switch", "before_agent_start", "agent_start", "tool_call",
         "tool_approval_requested", "tool_result", "agent_end", "session_shutdown",
     ]
@@ -19,9 +27,9 @@ public enum OMPExtension {
         "turn_failed", "session_end", "SubagentStop",
     ]
 
-    /// The extension's source, posting to `socketPath`: as a path under the home folder when it is
-    /// in `home`, so the file moves between Macs and users.
-    public static func source(socketPath: String, home: String = HookCommand.defaultHome) -> String {
+    /// The extension's source for `host`, posting to `socketPath`: as a path under the home folder
+    /// when it is in `home`, so the file moves between Macs and users.
+    public static func source(for host: Host, socketPath: String, home: String = HookCommand.defaultHome) -> String {
         let socket: String
         if !home.isEmpty, socketPath.hasPrefix(home + "/") {
             socket = "join(homedir(), \(literal(String(socketPath.dropFirst(home.count + 1)))))"
@@ -29,6 +37,8 @@ public enum OMPExtension {
             socket = literal(socketPath)
         }
         return template.replacingOccurrences(of: "__SOCKET__", with: socket)
+            .replacingOccurrences(of: "__NAME__", with: host.agent.displayName)
+            .replacingOccurrences(of: "__AGENT__", with: host.agent.id)
     }
 
     /// A string as a JavaScript literal: JSON's quoting is valid there.
@@ -38,36 +48,62 @@ public enum OMPExtension {
     }
 
     private static let template = #"""
-    // Reports this OMP session to Mimamori, which shows what your agents are doing in each worktree.
+    // Reports this __NAME__ session to Mimamori, which shows what your agents are doing in each worktree.
     // Set up from Mimamori's Settings › Agents › Other Agents. Delete this file to stop.
+    import { request } from "node:http";
     import { homedir } from "node:os";
     import { join } from "node:path";
 
     const SOCKET = __SOCKET__;
-    const ADDRESS = "http://mimamori/event?agent=omp";
+    const ADDRESS = "/event?agent=__AGENT__";
     // Inputs Mimamori reads to say what a step does. File contents and edits stay here.
     const INPUTS = ["path", "file_path", "command", "pattern", "url", "description", "prompt", "query", "question", "title"];
 
     let queue: Promise<unknown> = Promise.resolve();
     let pending = 0;
-    let mainSession: string | undefined;
-    let prompt: string | undefined;
+    // By folder, the session working there: a subagent works in its parent's folder, and one
+    // process can run several sessions (Orca's chats run in one OMP).
+    const mainSessions = new Map<string, string>();
+    // By session, the prompt that starts its next turn.
+    const prompts = new Map<string, string>();
 
-    // One event at a time, so they arrive in order. Never awaited and never throws, and gives up
-    // after a second, so OMP carries on the same whether Mimamori runs or not.
+    // Posts over the socket with node:http, which both Node (pi) and Bun (OMP) have. Settles
+    // whatever happens, within a second.
+    function send(body: string): Promise<void> {
+      return new Promise(resolve => {
+        const req = request({
+          socketPath: SOCKET,
+          path: ADDRESS,
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+          timeout: 1000,
+        }, res => {
+          res.resume();
+          res.on("end", () => resolve());
+          res.on("error", () => resolve());
+        });
+        req.on("timeout", () => req.destroy());
+        req.on("error", () => resolve());
+        req.on("close", () => resolve());
+        req.end(body);
+      });
+    }
+
+    // One event at a time, so they arrive in order. Never awaited and never throws, so the agent
+    // carries on the same whether Mimamori runs or not.
     function post(body: Record<string, unknown>): void {
       if (pending >= 50) return;
       pending++;
       queue = queue
-        .then(() => fetch(ADDRESS, {
-          method: "POST",
-          unix: SOCKET,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(1000),
-        } as RequestInit))
+        .then(() => send(JSON.stringify(body)))
         .catch(() => {})
         .finally(() => { pending--; });
+    }
+
+    // Waits for the events sent so far, a second at most. At the end of a turn or session the
+    // agent may exit straight after (pi's print mode does), and it waits for a handler's promise.
+    function flush(): Promise<void> {
+      return Promise.race([queue.then(() => {}, () => {}), new Promise<void>(resolve => setTimeout(resolve, 1000))]);
     }
 
     function isSub(ctx: any): boolean {
@@ -81,7 +117,8 @@ public enum OMPExtension {
     // A subagent's steps belong to the session that started it, marked with the subagent's id.
     function base(event: string, ctx: any): Record<string, unknown> {
       if (!isSub(ctx)) return { event, session_id: sessionId(ctx), cwd: ctx?.cwd };
-      return { event, session_id: mainSession ?? sessionId(ctx), cwd: ctx?.cwd, agent_id: ctx.agent.id, agent_type: ctx.agent.name };
+      const main = typeof ctx?.cwd === "string" ? mainSessions.get(ctx.cwd) : undefined;
+      return { event, session_id: main ?? sessionId(ctx), cwd: ctx?.cwd, agent_id: ctx.agent.id, agent_type: ctx.agent.name };
     }
 
     function inputs(input: unknown): Record<string, unknown> {
@@ -100,30 +137,41 @@ public enum OMPExtension {
       return block ? String(block.text).slice(0, 2000) : undefined;
     }
 
+    // Notes the session working in the folder, for its subagents' steps.
+    function remember(ctx: any): string | undefined {
+      const id = sessionId(ctx);
+      if (id && typeof ctx?.cwd === "string") mainSessions.set(ctx.cwd, id);
+      return id;
+    }
+
     export default function mimamori(pi: any) {
       pi.on("session_start", (_event: any, ctx: any) => {
         if (isSub(ctx)) return;
-        mainSession = sessionId(ctx);
+        remember(ctx);
         post(base("session_start", ctx));
       });
 
-      // /new, /resume and /fork: the session before it closes, another opens.
+      // OMP's /new, /resume and /fork: the session before it closes, another opens. pi ends the
+      // session and starts another instead.
       pi.on("session_switch", (_event: any, ctx: any) => {
         if (isSub(ctx)) return;
-        if (mainSession) post({ event: "session_end", session_id: mainSession, cwd: ctx?.cwd });
-        mainSession = sessionId(ctx);
+        const before = typeof ctx?.cwd === "string" ? mainSessions.get(ctx.cwd) : undefined;
+        if (before && before !== sessionId(ctx)) post({ event: "session_end", session_id: before, cwd: ctx?.cwd });
+        remember(ctx);
         post(base("session_start", ctx));
       });
 
+      // OMP says "revive" when it wakes a parked subagent; pi gives no reason.
       pi.on("before_agent_start", (event: any, ctx: any) => {
-        if (!isSub(ctx) && event?.reason === "prompt") prompt = event.prompt;
+        const id = sessionId(ctx);
+        if (!isSub(ctx) && id && event?.reason !== "revive" && typeof event?.prompt === "string") prompts.set(id, event.prompt);
       });
 
       pi.on("agent_start", (_event: any, ctx: any) => {
         if (isSub(ctx)) return;
-        mainSession = sessionId(ctx);
-        post({ ...base("turn_start", ctx), prompt });
-        prompt = undefined;
+        const id = remember(ctx);
+        post({ ...base("turn_start", ctx), prompt: id ? prompts.get(id) : undefined });
+        if (id) prompts.delete(id);
       });
 
       pi.on("tool_call", (event: any, ctx: any) => {
@@ -157,11 +205,16 @@ public enum OMPExtension {
         } else {
           post({ ...base("turn_end", ctx), last_assistant_message: text(last?.content) });
         }
+        return flush();
       });
 
       pi.on("session_shutdown", (_event: any, ctx: any) => {
         if (isSub(ctx)) return;
+        const id = sessionId(ctx);
+        if (id) prompts.delete(id);
+        if (typeof ctx?.cwd === "string" && mainSessions.get(ctx.cwd) === id) mainSessions.delete(ctx.cwd);
         post(base("session_end", ctx));
+        return flush();
       });
     }
 

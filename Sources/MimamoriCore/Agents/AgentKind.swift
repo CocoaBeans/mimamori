@@ -20,10 +20,11 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
     public static let amp = AgentKind(id: "amp", displayName: "Amp")
     public static let hermes = AgentKind(id: "hermes", displayName: "Hermes")
     public static let omp = AgentKind(id: "omp", displayName: "OMP")
+    public static let pi = AgentKind(id: "pi", displayName: "pi")
     /// An agent whose events did not say which agent it is.
     public static let unnamed = AgentKind(id: "agent", displayName: "Agent")
 
-    public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes, .omp]
+    public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes, .omp, .pi]
 
     /// The SF Symbol that stands for this agent wherever it appears. Generic symbols, never a
     /// product's logo; an agent Mimamori does not know gets the circled first letter of its name.
@@ -38,7 +39,8 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
         case Self.goose.id: "bird"
         case Self.opencode.id: "chevron.left.forwardslash.chevron.right"
         case Self.amp.id: "bolt"
-        case Self.omp.id: "pi"
+        case Self.pi.id: "pi"
+        case Self.omp.id: "pi.circle"
         default:
             if let letter = displayName.lowercased().first(where: { $0.isLetter && $0.isASCII }) { "\(letter).circle" } else { "person.crop.circle" }
         }
@@ -93,7 +95,10 @@ public struct AgentClassifier: Sendable {
         ("amp", .amp),
         ("hermes", .hermes),
         ("omp", .omp),
+        ("pi-coding-agent", .pi), ("pi", .pi),
     ]
+    /// Names too short to stand for an agent with anything after them: `pi_calc.py` isn't pi.
+    private static let exactOnly: Set<String> = ["pi"]
 
     public func classify(executable: String, arguments: [String]) -> AgentKind? {
         let name = (executable as NSString).lastPathComponent
@@ -207,7 +212,8 @@ public struct AgentClassifier: Sendable {
             if lower == rule.needle { return rule.kind }
         }
         // Variants such as "claude-code", "hermes-agent", "cursor-agent-1.2" or "hermes_cli".
-        for rule in Self.rules where lower.hasPrefix(rule.needle + "-") || lower.hasPrefix(rule.needle + "_") {
+        for rule in Self.rules where !Self.exactOnly.contains(rule.needle)
+            && (lower.hasPrefix(rule.needle + "-") || lower.hasPrefix(rule.needle + "_")) {
             return rule.kind
         }
         return nil
