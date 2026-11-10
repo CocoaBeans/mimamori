@@ -23,7 +23,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 - On the iPhone, an agent's card no longer grows a tall empty band around its timeline on the
   screen you get by tapping it, where the "quiet" time beside the timeline also lost its text.
-  The card now lays out the same there as in the list.
+  The card now lays out the same there as in the list
+  ([#92](https://github.com/CocoaBeans/mimamori/pull/92)).
 - A Hermes session no longer reads as ended after each turn and drops off its card two minutes
   later: Hermes's `on_session_end` marks the end of a turn, so the session stays, ready for your
   next prompt. Mimamori also recognizes Hermes's newer launcher again, so every running Hermes
