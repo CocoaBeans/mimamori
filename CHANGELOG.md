@@ -16,7 +16,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
   running `omp` without it ([#90](https://github.com/CocoaBeans/mimamori/pull/90)).
 - pi reports to Mimamori the same way as OMP, which is a fork of it: Settings › Agents › Other
   Agents has an extension to save as `~/.pi/agent/extensions/mimamori.ts`, and Mimamori recognizes
-  a running pi without it.
+  a running pi without it ([#93](https://github.com/CocoaBeans/mimamori/pull/93)).
 - Have an agent connect itself: Settings › Agents › Other Agents › **Copy Prompt** copies
   instructions to paste into Codex, Gemini CLI, Cursor, pi, OMP or any other agent, which then sets
   up its own hooks, keeping what its settings already hold, and checks that Mimamori answers
