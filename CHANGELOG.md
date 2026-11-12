@@ -25,7 +25,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 ### Fixed
 
 - On the iPhone, the card at the top of an agent's actions no longer has its rounded corners and
-  border cut off by the list around it: it takes the list section's own rounded shape.
+  border cut off by the list around it: it takes the list section's own rounded shape
+  ([#94](https://github.com/CocoaBeans/mimamori/pull/94)).
 - On the iPhone, an agent's card no longer grows a tall empty band around its timeline on the
   screen you get by tapping it, where the "quiet" time beside the timeline also lost its text.
   The card now lays out the same there as in the list
