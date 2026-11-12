@@ -1,0 +1,153 @@
+name: Release
+
+# Pushing a tag v<version> builds Mimamori the way Scripts/release.sh does on a Mac: archived
+# with Xcode 26, signed with Developer ID, notarized and stapled, packed in a DMG that is
+# notarized in turn, signed for Sparkle, with an appcast that offers it and embeds the notes from
+# docs/releases/<version>.md. The result is a draft release with the same notes, so installed
+# copies see nothing until it is published.
+#
+# Run it by hand (Actions › Release › Run workflow) to rehearse: the same build, kept as a
+# workflow artifact for a week, with no release.
+#
+# The signing secrets belong to the "release" environment, which waits for the maintainer's
+# approval before this job starts. The README's Releasing section lists them.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# The job asks for what it needs below; nothing else gets the token.
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, notarize and draft the release
+    # Xcode 26, so the build keeps the macOS 26 code paths that need its compiler: 26.5, the one
+    # releases are built with, named so that a new default on the image doesn't change them.
+    runs-on: macos-26
+    environment: release
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Check the version
+        id: version
+        run: |
+          setting() { grep -m1 -o "$1 = [^;]*" Mimamori.xcodeproj/project.pbxproj | sed "s/^$1 = //"; }
+          version="$(setting MARKETING_VERSION)"
+          build="$(setting CURRENT_PROJECT_VERSION)"
+          echo "Mimamori $version ($build)"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::The tag $GITHUB_REF_NAME doesn't match the project's version, $version. Scripts/set-version.sh sets it."
+            exit 1
+          fi
+          # release.sh refuses to start without them, so say so before the build rather than after.
+          if [[ ! -f "docs/releases/$version.md" ]]; then
+            echo "::error::There are no release notes for $version. Write them in docs/releases/$version.md, beside the version change."
+            exit 1
+          fi
+          # Sparkle offers an update only when its build number is higher than the one installed.
+          published="$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/appcast.xml" 2>/dev/null \
+            | sed -n 's|.*<sparkle:version>\([0-9]*\)</sparkle:version>.*|\1|p' | head -1 || true)"
+          if [[ -n "$published" && "$build" -le "$published" ]]; then
+            message="Build $build isn't higher than the published release's ($published), so no installed copy would update to it. Scripts/set-version.sh raises it."
+            if [[ "$GITHUB_REF_TYPE" == tag ]]; then echo "::error::$message"; exit 1; fi
+            echo "::warning::$message"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # A keychain of its own for the Developer ID certificate, with the intermediate it chains to.
+      - name: Install the signing certificate
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -base64 24)"
+          echo "::add-mask::$password"
+          umask 077
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          curl -fsSL -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$keychain" -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/developer-id.p12"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Write the notarization and Sparkle keys
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle.key"
+
+      # Signs with Developer ID alone (no development certificate here), so the API key only
+      # notarizes. The token is for Scripts/release-notes.sh, which renders the notes with
+      # GitHub's Markdown renderer.
+      - name: Build, sign and notarize
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SIGNING: manual
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          SPARKLE_KEY_FILE: ${{ runner.temp }}/sparkle.key
+        run: Scripts/release.sh
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Mimamori $VERSION"
+            echo
+            echo "- DMG: \`Mimamori-$VERSION.dmg\`, SHA-256 \`$(shasum -a 256 "build/Mimamori-$VERSION.dmg" | cut -d' ' -f1)\`"
+            echo "- Built from \`$(git rev-parse --short=8 HEAD)\` with $(xcodebuild -version | head -1)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The release page gets the same notes as the update window. They can still be edited in
+      # the draft before it is published.
+      - name: Draft the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "build/Mimamori-$VERSION.dmg" build/appcast.xml \
+            --draft --verify-tag --title "Mimamori $VERSION" --notes-file "docs/releases/$VERSION.md"
+
+      - name: Keep the rehearsal's DMG and appcast
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v5
+        with:
+          name: Mimamori-${{ steps.version.outputs.version }}-rehearsal
+          path: |
+            build/Mimamori-${{ steps.version.outputs.version }}.dmg
+            build/appcast.xml
+          retention-days: 7
+
+      - name: Remove the keys
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/sparkle.key" "$RUNNER_TEMP/developer-id.p12"

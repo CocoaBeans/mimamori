@@ -15,7 +15,8 @@
 #   - A "Developer ID Application" certificate for the project's team: in the login keychain, or
 #     cloud-managed, which xcodebuild can sign with when the API key below has the Admin role.
 #   - Sparkle's signing key, made once with Sparkle's generate_keys --account mimamori, in the
-#     login keychain (its public half is SUPublicEDKey in Resources/Info.plist).
+#     login keychain (its public half is SUPublicEDKey in Resources/Info.plist), or exported to
+#     a file that SPARKLE_KEY_FILE names, as the release workflow does.
 #   - An App Store Connect API key, for xcodebuild's signing and for notarytool:
 #       ASC_KEY_ID      the key id (the file is read from
 #                       ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8,
@@ -25,6 +26,11 @@
 # Usage: ASC_KEY_ID=XXXXXXXXXX ASC_ISSUER_ID=... Scripts/release.sh
 #        RELEASE_DRY_RUN=1 Scripts/release.sh
 #
+# On a Mac, Xcode signs the archive with your Apple Development certificate and the export with
+# Developer ID. RELEASE_SIGNING=manual signs both with Developer ID instead (RELEASE_IDENTITY,
+# by name or SHA-1, "Developer ID Application" if unset), for a machine with no development
+# certificate, such as the release workflow's runner. The API key then only notarizes.
+#
 # A dry run exports with the everyday development signing and skips notarization, to check the
 # archive, the entitlements and the DMG without a Developer ID certificate. A release refuses a
 # working tree with uncommitted changes, so the commit in About is the one released.
@@ -32,6 +38,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DRY_RUN="${RELEASE_DRY_RUN:-0}"
+SIGNING="${RELEASE_SIGNING:-automatic}"
+SIGNING_IDENTITY="${RELEASE_IDENTITY:-Developer ID Application}"
 setting() { grep -m1 -o "$1 = [^;]*" Mimamori.xcodeproj/project.pbxproj | sed "s/^$1 = //" }
 VERSION="$(setting MARKETING_VERSION)"
 BUILD="$(setting CURRENT_PROJECT_VERSION)"
@@ -117,10 +125,12 @@ notarize() {
 
 rm -rf $OUT
 mkdir -p $OUT
+ARCHIVE_SIGNING=()
+[[ $SIGNING == manual ]] && ARCHIVE_SIGNING=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=$SIGNING_IDENTITY")
 echo "Archiving Mimamori $VERSION ($BUILD) from $COMMIT…"
 xcodebuild -project Mimamori.xcodeproj -scheme Mimamori -configuration Release -archivePath $ARCHIVE \
   -derivedDataPath build/DerivedData MIMAMORI_COMMIT="$COMMIT" MIMAMORI_RELEASE_BUILD=YES \
-  MIMAMORI_FEED_URL="$FEED" "${AUTH[@]}" -quiet archive
+  MIMAMORI_FEED_URL="$FEED" "${ARCHIVE_SIGNING[@]}" "${AUTH[@]}" -quiet archive
 
 # Xcode signs every part of the app, inside out, for the chosen way of distributing it.
 cat > $OUT/ExportOptions.plist <<PLIST
@@ -130,7 +140,8 @@ cat > $OUT/ExportOptions.plist <<PLIST
 <dict>
   <key>method</key><string>$([[ $DRY_RUN == 1 ]] && echo debugging || echo developer-id)</string>
   <key>teamID</key><string>$TEAM</string>
-  <key>signingStyle</key><string>automatic</string>
+  <key>signingStyle</key><string>$SIGNING</string>
+$([[ $SIGNING == manual ]] && echo "  <key>signingCertificate</key><string>$SIGNING_IDENTITY</string>")
   <key>destination</key><string>export</string>
 </dict>
 </plist>
@@ -183,9 +194,12 @@ if [[ $DRY_RUN != 1 ]]; then
 fi
 
 # Sparkle checks an update against the app's public key before it installs anything, so the
-# DMG, as stapled, is signed with the private key in the keychain. The appcast offers it.
+# DMG, as stapled, is signed with the private key: from the keychain, or from SPARKLE_KEY_FILE.
+# The appcast offers it.
 SPARKLE=build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin
-ENCLOSURE="$($SPARKLE/sign_update --account mimamori $DMG)"
+SPARKLE_KEY=(--account mimamori)
+[[ -n "${SPARKLE_KEY_FILE:-}" ]] && SPARKLE_KEY=(--ed-key-file "$SPARKLE_KEY_FILE")
+ENCLOSURE="$($SPARKLE/sign_update "${SPARKLE_KEY[@]}" $DMG)"
 [[ $ENCLOSURE == *edSignature=* ]] || { echo "Sparkle could not sign the DMG: $ENCLOSURE" >&2; exit 1; }
 cat > $APPCAST <<XML
 <?xml version="1.0" encoding="utf-8"?>

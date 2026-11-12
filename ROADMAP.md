@@ -19,7 +19,9 @@ cask. These items gate it.
 - [x] Publish 1.0.0 on GitHub Releases, from the public repository.
 - [x] Publish a Homebrew cask (`brew install --cask cocoabeans/tap/mimamori`).
 - [x] Add automatic updates with Sparkle (signed appcast), published with each GitHub release.
-- [ ] Release workflow in CI: build, sign, notarize, attach the DMG, update the appcast and cask.
+- [x] Release workflow in CI: build, sign and notarize, then attach the DMG and the appcast to a draft
+      release (`.github/workflows/release.yml`).
+- [ ] Have the release workflow bump the cask in `CocoaBeans/homebrew-tap` too.
 
 ### First run and hooks
 
