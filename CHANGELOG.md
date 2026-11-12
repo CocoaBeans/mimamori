@@ -24,7 +24,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Qwen Code reports to Mimamori: Settings › Agents › Other Agents has hooks to add to
   `~/.qwen/settings.json` (and the setup prompt covers it), which show each Qwen Code session's
   turns, steps, edited files, permission requests, questions and subagents on its card. Mimamori
-  also recognizes a running Qwen Code without them.
+  also recognizes a running Qwen Code without them
+  ([#95](https://github.com/CocoaBeans/mimamori/pull/95)).
 
 ### Fixed
 
