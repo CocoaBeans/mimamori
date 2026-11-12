@@ -18,7 +18,7 @@ struct AgentActionsView: View {
                 if let agent {
                     Section {
                         AgentCardView(agent: agent, detailed: true, now: context.date,
-                                      answer: agent.permissionRequest.flatMap { model.answers[$0.id] }) { reply in
+                                      answer: agent.permissionRequest.flatMap { model.answers[$0.id] }, inList: true) { reply in
                             if let request = agent.permissionRequest {
                                 Task { await model.answer(request, reply) }
                             }

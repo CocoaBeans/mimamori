@@ -49,6 +49,9 @@ struct AgentCardView: View {
     let now: Date
     /// What this phone sent for the agent's permission request, if anything.
     var answer: AnswerState? = nil
+    /// A row of a List, which clips it to its section's rounded shape: the card takes that shape
+    /// rather than its own, so the section doesn't cut off its corners and border.
+    var inList = false
     /// Allow (true) or Deny (false) for the agent's permission request.
     var onAnswer: ((CompanionReply) -> Void)? = nil
 
@@ -105,8 +108,7 @@ struct AgentCardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, detailed ? 10 : 8)
         .labelStyle(CardLabelStyle())
-        .background(agent.state.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(agent.state.tint.opacity(0.22)))
+        .background { CardFrame(tint: agent.state.tint, inList: inList) }
     }
 
     private var summary: some View {
@@ -251,6 +253,22 @@ struct AgentCardView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 2)
+        }
+    }
+}
+
+/// The card's tinted fill and border: rounded on its own, or the shape of the List section it sits in.
+private struct CardFrame: View {
+    let tint: Color
+    let inList: Bool
+
+    var body: some View {
+        if inList {
+            ContainerRelativeShape().fill(tint.opacity(0.08))
+                .overlay(ContainerRelativeShape().strokeBorder(tint.opacity(0.22)))
+        } else {
+            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(tint.opacity(0.22)))
         }
     }
 }
