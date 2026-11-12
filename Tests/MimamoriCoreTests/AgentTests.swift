@@ -502,8 +502,10 @@ struct AgentStatusMachineTests {
         let dialog = machine.apply(event(.notification, message: "Claude Code needs your input", type: "elicitation_dialog", at: 2))
         #expect(machine.status?.activity == .askedQuestion(detail: "Claude Code needs your input"))
         #expect(dialog.first?.kind == .waiting)
-        let other = machine.apply(event(.notification, message: "Signed in", type: "auth_success", at: 3))
+        let other = machine.apply(event(.notification, message: "Update available", type: "update_available", at: 3))
         #expect(other.first?.kind == .notification)
+        // Signing in is not news: Qwen Code says so at the start of every session.
+        #expect(machine.apply(event(.notification, message: "Signed in", type: "auth_success", at: 4)).isEmpty)
     }
 
     @Test func notificationsWithoutATypeFallBackToTheMessage() {

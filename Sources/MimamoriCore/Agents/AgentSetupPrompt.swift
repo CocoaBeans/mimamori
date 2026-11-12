@@ -41,7 +41,7 @@ public enum AgentSetupPrompt {
 
     private static func steps(for recipe: AgentHookRecipe, setup: String, address: String) -> String {
         switch recipe {
-        case .codex, .gemini, .cursor:
+        case .codex, .gemini, .cursor, .qwen:
             let file = recipe.file ?? "the agent's settings"
             return """
             Add these hooks to \(file). If it exists, add each entry under its "hooks" key, beside any hooks already \

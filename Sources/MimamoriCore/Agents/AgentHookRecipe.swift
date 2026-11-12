@@ -4,7 +4,7 @@ import Foundation
 /// file and its events reach Mimamori's socket. Every one runs the same command; only the agent's
 /// file format and event names differ. pi's and OMP's hooks are code, so theirs is an extension instead.
 public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
-    case codex, gemini, cursor, pi, omp, other
+    case codex, gemini, cursor, qwen, pi, omp, other
 
     public var id: String { rawValue }
 
@@ -22,6 +22,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: "Codex"
         case .gemini: "Gemini CLI"
         case .cursor: "Cursor"
+        case .qwen: "Qwen Code"
         case .pi: "pi"
         case .omp: "OMP"
         case .other: "Any other agent"
@@ -34,6 +35,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: "~/.codex/hooks.json"
         case .gemini: "~/.gemini/settings.json"
         case .cursor: "~/.cursor/hooks.json"
+        case .qwen: "~/.qwen/settings.json"
         case .pi, .omp: extensionHost?.file
         case .other: nil
         }
@@ -76,6 +78,10 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .cursor:
             ["sessionStart", "beforeSubmitPrompt", "preToolUse", "postToolUse", "postToolUseFailure", "subagentStop", "stop",
              "sessionEnd"]
+        case .qwen:
+            // Claude Code's names, which Qwen Code uses.
+            ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest",
+             "Notification", "Stop", "StopFailure", "SubagentStop", "SessionEnd"]
         case .pi, .omp:
             PiExtension.events
         case .other:
@@ -92,6 +98,8 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
             "If settings.json already exists, add these entries under its \"hooks\" key. Gemini CLI's /hooks panel lists them."
         case .cursor:
             "Cursor reloads hooks.json when you save it. If the file already exists, add these entries under its \"hooks\" key."
+        case .qwen:
+            "Qwen Code reads its hooks when a session starts. If settings.json already exists, add each entry under its \"hooks\" key, beside any hooks already there for the same event: other apps, such as Orca, may have their own."
         case .pi:
             "pi loads extensions when a session starts, and /reload loads a new one into a running session. Delete the file to stop."
         case .omp:
@@ -121,6 +129,7 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
         case .codex: AgentKind.codex.id
         case .gemini: AgentKind.gemini.id
         case .cursor: AgentKind.cursor.id
+        case .qwen: AgentKind.qwen.id
         case .pi: AgentKind.pi.id
         case .omp: AgentKind.omp.id
         case .other: "my-agent"
@@ -150,6 +159,12 @@ public enum AgentHookRecipe: String, CaseIterable, Identifiable, Sendable {
                 hooks[event] = [["command": command, "timeout": 5]]
             }
             return Self.json(["version": 1, "hooks": hooks])
+        case .qwen:
+            // Qwen Code's timeouts are in milliseconds.
+            for event in events {
+                hooks[event] = [["hooks": [["name": "mimamori", "type": "command", "command": command, "timeout": 5000]]]]
+            }
+            return Self.json(["hooks": hooks])
         case .pi, .omp:
             return PiExtension.source(for: extensionHost ?? .pi, socketPath: socketPath, home: home)
         case .other:

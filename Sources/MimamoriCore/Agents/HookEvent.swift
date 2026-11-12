@@ -222,8 +222,8 @@ public struct HookEvent: Sendable, Hashable {
     /// Tools that stop and ask you something; the agent is blocked until you answer.
     public var isQuestionTool: Bool { toolName.map(Self.questionTools.contains) ?? false }
 
-    /// Claude Code's AskUserQuestion, OMP's ask.
-    static let questionTools: Set<String> = ["AskUserQuestion", "ask"]
+    /// Claude Code's AskUserQuestion, OMP's ask, Qwen Code's ask_user_question.
+    static let questionTools: Set<String> = ["AskUserQuestion", "ask", "ask_user_question"]
 
     static let mutatingTools: Set<String> = [
         // Claude Code
@@ -236,6 +236,8 @@ public struct HookEvent: Sendable, Hashable {
         "run_shell_command", "replace",
         // OMP
         "bash", "edit", "write", "ast_edit", "eval", "task",
+        // Qwen Code (with Gemini CLI's and Hermes's names above)
+        "notebook_edit", "agent",
     ]
 }
 

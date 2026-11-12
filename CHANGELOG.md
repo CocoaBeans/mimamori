@@ -21,6 +21,10 @@ the ones the update window and the release page show, are in [docs/releases](doc
   instructions to paste into Codex, Gemini CLI, Cursor, pi, OMP or any other agent, which then sets
   up its own hooks, keeping what its settings already hold, and checks that Mimamori answers
   ([#91](https://github.com/CocoaBeans/mimamori/pull/91)).
+- Qwen Code reports to Mimamori: Settings › Agents › Other Agents has hooks to add to
+  `~/.qwen/settings.json` (and the setup prompt covers it), which show each Qwen Code session's
+  turns, steps, edited files, permission requests, questions and subagents on its card. Mimamori
+  also recognizes a running Qwen Code without them.
 
 ### Fixed
 

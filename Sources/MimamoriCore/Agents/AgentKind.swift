@@ -21,10 +21,11 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
     public static let hermes = AgentKind(id: "hermes", displayName: "Hermes")
     public static let omp = AgentKind(id: "omp", displayName: "OMP")
     public static let pi = AgentKind(id: "pi", displayName: "pi")
+    public static let qwen = AgentKind(id: "qwen", displayName: "Qwen Code")
     /// An agent whose events did not say which agent it is.
     public static let unnamed = AgentKind(id: "agent", displayName: "Agent")
 
-    public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes, .omp, .pi]
+    public static let known: [AgentKind] = [.claudeCode, .codex, .aider, .cursor, .gemini, .goose, .opencode, .amp, .hermes, .omp, .pi, .qwen]
 
     /// The SF Symbol that stands for this agent wherever it appears. Generic symbols, never a
     /// product's logo; an agent Mimamori does not know gets the circled first letter of its name.
@@ -40,6 +41,7 @@ public struct AgentKind: Hashable, Sendable, Codable, Identifiable {
         case Self.opencode.id: "chevron.left.forwardslash.chevron.right"
         case Self.amp.id: "bolt"
         case Self.pi.id: "pi"
+        case Self.qwen.id: "hexagon"
         case Self.omp.id: "pi.circle"
         default:
             if let letter = displayName.lowercased().first(where: { $0.isLetter && $0.isASCII }) { "\(letter).circle" } else { "person.crop.circle" }
@@ -96,9 +98,15 @@ public struct AgentClassifier: Sendable {
         ("hermes", .hermes),
         ("omp", .omp),
         ("pi-coding-agent", .pi), ("pi", .pi),
+        ("qwen-code", .qwen), ("qwen", .qwen),
     ]
-    /// Names too short to stand for an agent with anything after them: `pi_calc.py` isn't pi.
-    private static let exactOnly: Set<String> = ["pi"]
+    /// Names too short to stand for an agent with anything after them: `pi_calc.py` isn't pi, and
+    /// `qwen_vl.py` isn't Qwen Code.
+    private static let exactOnly: Set<String> = ["pi", "qwen"]
+
+    /// Folders a standalone install keeps its entry point under (`<folder>/lib/cli-entry.js`),
+    /// with no package manager's folder to name it: Qwen Code's installer puts it in `qwen-code`.
+    private static let installFolders: [String: AgentKind] = ["qwen-code": .qwen]
 
     public func classify(executable: String, arguments: [String]) -> AgentKind? {
         let name = (executable as NSString).lastPathComponent
@@ -182,7 +190,7 @@ public struct AgentClassifier: Sendable {
     private static let helperScripts: Set<String> = ["hermes_kernel_runner"]
 
     /// Entry points too generic to name a program: the package around them does.
-    private static let genericEntries: Set<String> = ["cli", "index", "main", "__main__", "entry", "run", "app", "start", "bin"]
+    private static let genericEntries: Set<String> = ["cli", "cli-entry", "index", "main", "__main__", "entry", "run", "app", "start", "bin"]
 
     /// The agent a script is: by its own name, or for a generic entry point such as `cli.js`, by the
     /// package it's installed as: the folder after `node_modules` (with its scope) or `site-packages`.
@@ -199,6 +207,10 @@ public struct AgentClassifier: Sendable {
             var package = components[index + 1]
             if package.hasPrefix("@"), index + 2 < components.count - 1 { package = components[index + 2] }
             return match(name: package)
+        }
+        // A standalone install: `…/qwen-code/lib/cli-entry.js`, the folder named exactly.
+        if components.count >= 3, ["lib", "dist"].contains(components[components.count - 2]) {
+            return Self.installFolders[components[components.count - 3]]
         }
         return nil
     }

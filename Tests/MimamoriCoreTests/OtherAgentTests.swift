@@ -531,6 +531,89 @@ struct PiTests {
     }
 }
 
+@Suite("Qwen Code")
+struct QwenCodeTests {
+    private func translate(_ json: String) -> HookEvent? {
+        AgentEventTranslator.translate(Data(json.utf8), agent: AgentKind.named("qwen"))
+    }
+
+    @Test func theProcessIsRecognisedButNotEverythingCalledQwen() {
+        let classifier = AgentClassifier()
+        let node = "/Users/someone/.local/lib/qwen-code/node/bin/node"
+        // The standalone installer's layout, and an npm install.
+        #expect(classifier.classify(executable: node, arguments: [node, "/Users/someone/.local/lib/qwen-code/lib/cli-entry.js"]) == .qwen)
+        #expect(classifier.classify(executable: "/usr/local/bin/node",
+                                    arguments: ["node", "/usr/local/lib/node_modules/@qwen-code/qwen-code/cli.js"]) == .qwen)
+        #expect(classifier.classify(executable: "/usr/local/bin/qwen", arguments: ["qwen"]) == .qwen)
+        // A model's own scripts, and anyone's cli-entry.js, are not the agent.
+        #expect(classifier.classify(executable: "/usr/bin/python3", arguments: ["python3", "qwen_vl.py"]) == nil)
+        #expect(classifier.classify(executable: "/usr/local/bin/node", arguments: ["node", "/work/my-tool/lib/cli-entry.js"]) == nil)
+        #expect(AgentKind.named("qwen-code") == .qwen)
+        #expect(AgentKind.named("Qwen Code") == .qwen)
+    }
+
+    @Test func itsSetupUsesClaudeCodesNamesAndMilliseconds() throws {
+        let socket = "/Users/someone/Library/Application Support/Mimamori/mimamori.sock"
+        let text = AgentHookRecipe.qwen.setup(socketPath: socket, home: "/Users/someone")
+        let object = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        let hooks = try #require(object["hooks"] as? [String: [[String: Any]]])
+        #expect(hooks.keys.contains("PreToolUse") && hooks.keys.contains("Stop") && hooks.keys.contains("PermissionRequest"))
+        let hook = try #require((hooks["Stop"]?.first?["hooks"] as? [[String: Any]])?.first)
+        #expect(hook["timeout"] as? Int == 5000)
+        #expect((hook["command"] as? String)?.contains("?agent=qwen") == true)
+        #expect(AgentSetupPrompt.text(for: .qwen, socketPath: socket, home: "/Users/someone").contains("~/.qwen/settings.json"))
+    }
+
+    @Test func itsStepsReadLikeAnyAgents() throws {
+        let edit = try #require(translate(#"{"hook_event_name":"PreToolUse","session_id":"q1","cwd":"/repo","tool_name":"edit","tool_use_id":"t1","tool_input":{"file_path":"/repo/src/a.ts","old_string":"x","new_string":"y"}}"#))
+        #expect(edit.agent == .qwen)
+        #expect(edit.name == .preToolUse)
+        #expect(edit.filePath == "/repo/src/a.ts")
+        #expect(edit.isMutatingTool)
+        let shell = try #require(translate(#"{"hook_event_name":"PreToolUse","session_id":"q1","cwd":"/repo","tool_name":"run_shell_command","tool_input":{"command":"npm test"}}"#))
+        #expect(shell.command == "npm test")
+        #expect(shell.isMutatingTool)
+        let sub = try #require(translate(#"{"hook_event_name":"PreToolUse","session_id":"q1","cwd":"/repo","tool_name":"read_file","agent_id":"a1","agent_type":"Explorer","tool_input":{"file_path":"README.md"}}"#))
+        #expect(sub.agentID == "a1")
+        #expect(!sub.isMutatingTool)
+    }
+
+    @Test func signingInIsNotNews() throws {
+        var machine = AgentStatusMachine()
+        let start = try #require(translate(#"{"hook_event_name":"SessionStart","session_id":"q1","cwd":"/repo","source":"startup"}"#))
+        _ = machine.apply(start)
+        let signedIn = try #require(translate(#"{"hook_event_name":"Notification","session_id":"q1","cwd":"/repo","notification_type":"auth_success","message":"Successfully authenticated with openai"}"#))
+        let before = machine.status?.activity
+        #expect(machine.apply(signedIn).isEmpty)
+        #expect(machine.status?.activity == before)
+    }
+
+    @Test func aPromptHandedBackAfterAToolIsTheSameTurn() throws {
+        // Qwen Code sends an empty UserPromptSubmit when it gives the model a tool's result.
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try #require(translate(#"{"hook_event_name":"UserPromptSubmit","session_id":"q1","cwd":"/repo","prompt":"Run cat a.txt"}"#)))
+        _ = machine.apply(try #require(translate(#"{"hook_event_name":"PreToolUse","session_id":"q1","cwd":"/repo","tool_name":"run_shell_command","tool_use_id":"t1","tool_input":{"command":"cat a.txt"}}"#)))
+        _ = machine.apply(try #require(translate(#"{"hook_event_name":"PostToolUse","session_id":"q1","cwd":"/repo","tool_name":"run_shell_command","tool_use_id":"t1"}"#)))
+        _ = machine.apply(try #require(translate(#"{"hook_event_name":"UserPromptSubmit","session_id":"q1","cwd":"/repo","prompt":""}"#)))
+        #expect(machine.status?.task == "Run cat a.txt")
+        #expect(machine.status?.toolCallsThisTurn == 1)
+    }
+
+    @Test func itsQuestionsNeedYouUntilAnswered() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try #require(translate(#"{"hook_event_name":"UserPromptSubmit","session_id":"q1","cwd":"/repo","prompt":"Ship it"}"#)))
+        let ask = try #require(translate(#"{"hook_event_name":"PreToolUse","session_id":"q1","cwd":"/repo","tool_name":"ask_user_question","tool_use_id":"t2","tool_input":{"questions":[{"question":"Which branch?","header":"Branch","options":[{"label":"main","description":"the main branch"},{"label":"dev","description":"the dev branch"}],"multiSelect":false}]}}"#))
+        #expect(ask.isQuestionTool)
+        #expect(ask.questions?.first?.question == "Which branch?")
+        _ = machine.apply(ask)
+        #expect(machine.status?.activity == .askedQuestion(detail: "Which branch?"))
+        _ = machine.apply(try #require(translate(#"{"hook_event_name":"PostToolUse","session_id":"q1","cwd":"/repo","tool_name":"ask_user_question","tool_use_id":"t2"}"#)))
+        #expect(machine.status?.activity == .working(tool: nil, detail: nil))
+        _ = machine.apply(try #require(translate(#"{"hook_event_name":"Stop","session_id":"q1","cwd":"/repo"}"#)))
+        #expect(machine.status?.activity == .ready)
+    }
+}
+
 @Suite("Agent glyphs")
 struct AgentGlyphTests {
     @Test func everyAgentHasASymbolThatExists() {

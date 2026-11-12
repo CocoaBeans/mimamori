@@ -579,6 +579,9 @@ public struct AgentStatusMachine: Sendable {
                 // "Claude is waiting for your input": a nudge some time after the turn ended,
                 // not a question. Nothing new to say beyond the turn having finished.
                 set(.ready)
+            case .signedIn:
+                // Nothing to tell you: Qwen Code says so at the start of every session.
+                break
             case .other:
                 notes.append(AgentNote(kind: .notification, title: "\(agentName): \(event.message ?? "notification")"))
             }
@@ -695,13 +698,14 @@ public struct AgentStatusMachine: Sendable {
     }
 
     private enum NotificationKind {
-        case permission, question, idleReminder, other
+        case permission, question, idleReminder, signedIn, other
 
         init(_ event: HookEvent) {
             switch event.notificationType {
             case "permission_prompt": self = .permission
             case "idle_prompt": self = .idleReminder
             case "elicitation_dialog", "question": self = .question
+            case "auth_success": self = .signedIn
             case .some: self = .other
             case nil:
                 // Older Claude Code versions send only the message.
