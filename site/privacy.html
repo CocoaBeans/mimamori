@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mimamori Privacy Policy</title>
+<meta name="description" content="Mimamori for Mac and Mimamori Companion for iPhone collect nothing about you: no account, no analytics, no tracking.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0e1124" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6efe1" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="media/favicon-64.png">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<style>
+  /* The home page's palette, night and dawn. */
+  :root {
+    --sky-top: #262b57;
+    --sky: #0e1124;
+    --sky-deep: #0a0d1c;
+    --surface: rgba(255, 255, 255, 0.045);
+    --surface-line: rgba(255, 255, 255, 0.09);
+    --text: #e6e9f5;
+    --muted: #a3aac4;
+    --faint: #6f7796;
+    --glow: #ffc761;
+    --link: #ffd58c;
+    --code-bg: rgba(0, 0, 0, 0.35);
+    --body-bg: linear-gradient(180deg, var(--sky-top) 0%, var(--sky) 38rem, var(--sky-deep) 100%);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --sky-top: #fbf3df;
+      --sky: #f6efe1;
+      --sky-deep: #efe6d2;
+      --surface: rgba(255, 255, 255, 0.6);
+      --surface-line: rgba(60, 40, 20, 0.12);
+      --text: #1e2140;
+      --muted: #545a78;
+      --faint: #7d8099;
+      --glow: #f2a23c;
+      --link: #a8401f;
+      --code-bg: rgba(30, 33, 64, 0.06);
+    }
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--sky-deep);
+    background-image: var(--body-bg);
+    background-repeat: no-repeat;
+    color: var(--text);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--link); text-underline-offset: 3px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; border-radius: 6px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em;
+         background: var(--code-bg); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+  .wrap { width: min(760px, 100% - 32px); margin-inline: auto; }
+
+  header.top { padding: 18px 0; }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 650; letter-spacing: 0.01em; }
+  .brand img { width: 30px; height: 30px; }
+  nav.links { display: flex; gap: 22px; font-size: 15px; }
+  nav.links a { color: var(--muted); text-decoration: none; }
+  nav.links a:hover { color: var(--text); }
+
+  main { padding: 40px 0 0; }
+  h1 { font-size: clamp(34px, 6vw, 48px); line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 750; }
+  .updated { color: var(--faint); font-size: 15px; margin: 0 0 28px; }
+  .summary { padding: 22px 24px; border-radius: 16px; background: var(--surface); border: 1px solid var(--surface-line); font-size: 18px; margin: 0 0 12px; }
+  h2 { font-size: 24px; line-height: 1.25; letter-spacing: -0.01em; margin: 44px 0 10px; font-weight: 700; }
+  p, li { color: var(--muted); }
+  p strong, li strong { color: var(--text); font-weight: 600; }
+  ul { padding-left: 22px; }
+  li + li { margin-top: 8px; }
+
+  footer { margin-top: 90px; padding: 32px 0 48px; border-top: 1px solid var(--surface-line); color: var(--faint); font-size: 14.5px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
+  footer a { color: var(--muted); }
+  footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
+
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    nav.links { gap: 16px; font-size: 14px; }
+    main { padding-top: 20px; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="media/icon-512.png" alt="" width="30" height="30">Mimamori</a>
+    <nav class="links" aria-label="Site">
+      <a href="./">Home</a>
+      <a href="https://github.com/CocoaBeans/mimamori">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Mimamori for Mac and Mimamori Companion for iPhone · Updated November 14, 2026</p>
+
+    <p class="summary">Mimamori collects nothing about you. There is no account, no analytics, no advertising and no tracking, and no server of ours that your data could reach. What it sees stays on your Mac, and on the iPhones you pair with it.</p>
+
+    <h2>Mimamori for Mac</h2>
+    <p>Mimamori watches the git repositories you add to it, and the coding agents working in them, so it can show you what they change. To do that it:</p>
+    <ul>
+      <li><strong>Reads your repositories</strong> with your own <code>git</code>, on your Mac. It never sends their contents anywhere, except to an iPhone you paired (below).</li>
+      <li><strong>Hears from your agents</strong> through a socket on your Mac that only your own processes can use.</li>
+      <li><strong>Keeps its settings and history on your Mac</strong>, in <code>~/Library/Application Support/Mimamori/</code>: the repositories it watches, your review notes, and the activity feed, kept for the number of days you choose.</li>
+      <li><strong>Checks for updates</strong>, in official release builds only, by fetching the list of releases from GitHub when you choose Check for Updates, or once a day if you agreed to it. Nothing about you or your Mac is sent with the request. GitHub's own <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">privacy statement</a> covers that request.</li>
+    </ul>
+
+    <h2>Mimamori Companion for iPhone</h2>
+    <p>The iPhone app shows the agents on your Mac, tells you when one needs you, and lets you answer their requests. It talks only to the Macs you paired it with, over your own network, and to nothing on the internet.</p>
+    <ul>
+      <li><strong>Pairing.</strong> Scanning the code in Mimamori's Settings › iPhone gives your iPhone and your Mac a shared random key. Each keeps it in its Keychain. Every connection between them is encrypted with that key, so nobody else on the network can read what is sent.</li>
+      <li><strong>What your Mac sends it.</strong> Your agents and their state, the names of the worktrees they work in, and, if you turn on "Show tasks and steps in widgets" on your Mac, their tasks, steps and changed files. A permission request's command or file is sent so you can see what you would allow.</li>
+      <li><strong>What stays on your iPhone.</strong> The list of Macs you paired, and your notification and display settings. Notifications are made on your iPhone, from what your Mac sends; none come through a server.</li>
+      <li><strong>Face ID.</strong> Before you allow an agent's request or answer its question, iOS asks for Face ID or your passcode. The app only learns whether you passed; your face data never leaves Apple's Secure Enclave.</li>
+      <li><strong>Local network.</strong> iOS asks your permission before the app looks for your Mac with Bonjour. It is used for nothing else.</li>
+    </ul>
+
+    <h2>Information we collect</h2>
+    <p>None. Neither app collects, stores or shares personal information on any server, uses third-party analytics or advertising code, or tracks you across apps and websites. If you choose to share crash reports and usage data with app developers in your iPhone's settings, Apple may pass anonymous crash reports on to us, under <a href="https://www.apple.com/legal/privacy/">Apple's privacy policy</a>.</p>
+
+    <h2>Removing your data</h2>
+    <ul>
+      <li><strong>On your Mac,</strong> Remove… in Settings › iPhone deletes a paired iPhone's key and cuts it off, and Mimamori's Uninstall removes its settings, its history and every paired key.</li>
+      <li><strong>On your iPhone,</strong> deleting the app removes everything it keeps.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>Mimamori is a tool for software developers and isn't directed at children. It collects no information from anyone, children included.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the new version will be posted on this page with a new date. Every earlier version is kept in the project's <a href="https://github.com/CocoaBeans/mimamori/commits/main/site/privacy.html">public history</a>.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about privacy are welcome as an <a href="https://github.com/CocoaBeans/mimamori/issues">issue on GitHub</a>. To report a security problem privately, see the <a href="https://github.com/CocoaBeans/mimamori/security">security policy</a>.</p>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Mimamori is free and open source, under the MIT license.</span>
+    <nav aria-label="Project">
+      <a href="https://github.com/CocoaBeans/mimamori">Source</a>
+      <a href="https://github.com/CocoaBeans/mimamori/issues">Issues</a>
+      <a href="https://github.com/CocoaBeans/mimamori/security">Security</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
