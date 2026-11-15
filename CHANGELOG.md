@@ -8,6 +8,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Added
+
+- Try the iPhone app without a Mac: **Try the Demo**, under the pairing steps or in the Mac menu,
+  shows a sample Mac's agents, which you can allow, deny and answer, Face ID included, without
+  anything leaving the iPhone ([#99](https://github.com/CocoaBeans/mimamori/pull/99)).
+
 ## [1.4.0] - 2026-11-11
 
 ### Added
