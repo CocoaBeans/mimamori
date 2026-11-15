@@ -8,6 +8,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-15
+
 ### Added
 
 - See your agents on the iPhone away from home, over Tailscale: with Tailscale on the Mac and the
