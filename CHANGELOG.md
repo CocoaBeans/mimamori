@@ -8,6 +8,11 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Added
+
+- The iPhone app's settings link to Mimamori's privacy policy and to support
+  ([#107](https://github.com/CocoaBeans/mimamori/pull/107)).
+
 ## [1.5.0] - 2026-11-15
 
 ### Added
