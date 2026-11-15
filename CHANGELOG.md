@@ -17,7 +17,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   "turn 4m · session 1h 12m", beside the timer that restarts at each step
   ([#102](https://github.com/CocoaBeans/mimamori/pull/102)).
 - A **Waiting on tasks** group, on the Mac and the iPhone, for agents done with their own part
-  while subagents or background commands they started still run.
+  while subagents or background commands they started still run
+  ([#103](https://github.com/CocoaBeans/mimamori/pull/103)).
 
 ## [1.4.0] - 2026-11-11
 
