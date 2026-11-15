@@ -10,8 +10,6 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Added
 
-- With several repositories under **Not Watched Yet**, the ✕ in its header dismisses them all at
-  once: **Not Now** or **Don't Ask Again** for every one.
 - Try the iPhone app without a Mac: **Try the Demo**, under the pairing steps or in the Mac menu,
   shows a sample Mac's agents, which you can allow, deny and answer, Face ID included, without
   anything leaving the iPhone ([#99](https://github.com/CocoaBeans/mimamori/pull/99)).
@@ -21,6 +19,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - A **Waiting on tasks** group, on the Mac and the iPhone, for agents done with their own part
   while subagents or background commands they started still run
   ([#103](https://github.com/CocoaBeans/mimamori/pull/103)).
+- With several repositories under **Not Watched Yet**, the ✕ in its header dismisses them all at
+  once: **Not Now** or **Don't Ask Again** for every one
+  ([#104](https://github.com/CocoaBeans/mimamori/pull/104)).
 
 ## [1.4.0] - 2026-11-11
 
