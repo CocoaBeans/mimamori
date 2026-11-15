@@ -45,8 +45,12 @@ final class CompanionModel {
     @ObservationIgnored private var allServices: [String] = []
     /// Attempts at the chosen Mac since it last connected, to try the next service each time.
     @ObservationIgnored private var attempts = 0
-    private(set) var status: Status = .unpaired
-    private(set) var snapshot: AgentWidgetSnapshot?
+    private(set) var status: Status = .unpaired {
+        didSet { if status != oldValue { updateLiveActivity() } }
+    }
+    private(set) var snapshot: AgentWidgetSnapshot? {
+        didSet { updateLiveActivity() }
+    }
     /// When the last snapshot arrived, and how long after the Mac wrote it.
     private(set) var receivedAt: Date?
     private(set) var delay: TimeInterval?
@@ -82,6 +86,8 @@ final class CompanionModel {
     @ObservationIgnored private let keychain = CompanionKeychain.standard
     /// Tells you as agents change.
     @ObservationIgnored let notifier = AgentNotifier()
+    /// Shows the agents on the Lock Screen and in the Dynamic Island, in builds kept running.
+    @ObservationIgnored let liveActivity = LiveActivityController()
     @ObservationIgnored private let defaults = UserDefaults.standard
 
     /// The Mac to show: the one last chosen, or the first paired.
@@ -210,6 +216,14 @@ final class CompanionModel {
         justPaired = nil
         choose(mac)
         return true
+    }
+
+    /// Brings the Live Activity in line with the Mac on screen: the demo's or the chosen one's,
+    /// marked out of touch while not connected.
+    func updateLiveActivity() {
+        let connected = if case .connected = status { true } else { false }
+        let macName = status == .unpaired ? nil : demo?.macName ?? chosen?.name
+        liveActivity.show(macName: macName, snapshot: snapshot, connected: connected)
     }
 
     func dismissJustPaired() {

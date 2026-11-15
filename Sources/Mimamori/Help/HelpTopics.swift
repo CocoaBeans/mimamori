@@ -237,6 +237,9 @@ struct HelpTopic: Identifiable {
             ## Notifications
             The iPhone tells you when an agent needs you, finishes a turn, or edits the same file as another, as your Mac does; the gear on the iPhone chooses which. They come while Mimamori is open on the iPhone, or always with **Stay connected in the background** on there: Mimamori then keeps running after you leave it, playing silence so iOS doesn't suspend it, which uses more battery. That switch is in builds made from source; the App Store version can't keep running in the background, so its notifications come only while it's open.
 
+            ## On the Lock Screen
+            With **Stay connected in the background** on, the iPhone shows your agents as a Live Activity: on the Lock Screen, in the Dynamic Island and on an Apple Watch, with how many need you and are working, and the most pressing agents with their timers. It starts while Mimamori is open on the iPhone, and says so if the iPhone loses touch with your Mac. **Show agents on the Lock Screen** in the iPhone's settings turns it off. Like staying connected, it's in builds made from source.
+
             To keep your agents in view on a stand beside your Mac, turn on **Keep the screen on** in the iPhone's settings: it doesn't dim or lock while Mimamori is open, by default only while it's charging.
 
             ## If it doesn't connect

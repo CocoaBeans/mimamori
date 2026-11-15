@@ -1,3 +1,4 @@
+import ActivityKit
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -12,9 +13,12 @@ struct CompanionSettingsSheet: View {
     @AppStorage(CompanionNotificationSetting.turnFinished) private var turnFinished = false
     @AppStorage(CompanionNotificationSetting.collision) private var collision = true
     @AppStorage(CompanionNotificationSetting.staysConnected) private var staysConnected = false
+    @AppStorage(LiveActivitySetting.shows) private var showsLiveActivity = true
     @AppStorage(ScreenKeeper.keepsScreenOn) private var keepsScreenOn = false
     @AppStorage(ScreenKeeper.onlyWhileCharging) private var onlyWhileCharging = true
     @State private var notificationsDenied = false
+    /// Live Activities are off for Mimamori in Settings.
+    private var liveActivitiesDenied: Bool { !ActivityAuthorizationInfo().areActivitiesEnabled }
 
     var body: some View {
         NavigationStack {
@@ -47,6 +51,20 @@ struct CompanionSettingsSheet: View {
                             .help("Keep running after you leave Mimamori, to tell you when an agent needs you")
                     } footer: {
                         Text("Mimamori keeps running after you leave it, playing silence so iOS doesn't suspend it, and keeps in touch with your Mac so it can tell you when an agent needs you. Your own music keeps playing. It uses more battery: turn it off when you don't need it.")
+                    }
+
+                    Section {
+                        Toggle("Show agents on the Lock Screen", isOn: $showsLiveActivity)
+                            .disabled(!staysConnected)
+                            .help("A Live Activity with your agents, on the Lock Screen and in the Dynamic Island")
+                        if liveActivitiesDenied {
+                            Button("Turn On Live Activities in Settings…") {
+                                if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                            }
+                            .help("Live Activities for Mimamori are off in Settings")
+                        }
+                    } footer: {
+                        Text("A Live Activity shows who needs you and who's working, on the Lock Screen, in the Dynamic Island and on an Apple Watch. It needs Stay connected in the background, which keeps it current.")
                     }
                 }
 

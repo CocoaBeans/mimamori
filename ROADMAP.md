@@ -95,8 +95,11 @@ state, never on a loop.
 - [x] On the iPhone companion, tap an agent's card for its list of actions: each step of its turn,
       then the turns before it, with what each acted on and whether it failed
       ([An agent's actions](docs/plans/iphone-companion.md#an-agents-actions)).
-- [ ] The iPhone companion over cellular, through Tailscale, and a Live Activity; later,
-      notifications through CloudKit for an App Store build
+- [x] A Live Activity on the iPhone, in builds of your own: your agents on the Lock Screen, in the
+      Dynamic Island and on an Apple Watch, while the app stays connected in the background
+      ([Staying connected](docs/plans/iphone-companion.md#staying-connected-in-the-background-builds-of-your-own)).
+- [x] The iPhone companion over cellular, through Tailscale.
+- [ ] For an App Store build: notifications through CloudKit, and a Live Activity through a relay
       ([Steps](docs/plans/iphone-companion.md#steps)).
 - [ ] On the iPhone companion, an agent's changed files and their diffs: the list as the Mac shows
       it, with flags and review state, and a diff to read on the phone. A large piece, still to be

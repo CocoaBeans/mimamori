@@ -13,7 +13,9 @@
 > keep-alive with "needs you" notifications, then Tailscale, which is built too: the Mac keeps its
 > port and tells a proved phone its tailnet addresses (`CompanionReach`), and the phone tries them
 > when Bonjour doesn't find the Mac (`CompanionRoute`). CloudKit and a relay wait for an App
-> Store build.
+> Store build. Step 3's Live Activity is built too, for builds of your own: a widget extension
+> (`Sources/MimamoriLiveActivity`) draws `AgentsActivityState`, which the app starts while it's open
+> and updates from each snapshot while the keep-alive runs.
 > The Mac side stays on macOS 15 with `NWListener` (see "Decided").
 
 ## Goal
@@ -176,7 +178,9 @@ The next two are for an App Store build, which can't keep itself running:
    on the Lock Screen and in the Dynamic Island means updating a Live Activity while the app is in
    the background. That takes pushes from a server holding an APNs key, and the key can't ship in
    an open-source Mac app. So this needs a small relay (a Cloudflare Worker would do), with the
-   payload encrypted end to end by the paired key so the relay sees only ciphertext. It also
+   payload encrypted end to end by the paired key so the relay sees only ciphertext. That part
+   needs a spike: a Live Activity's push goes straight to its widget, with no service extension to
+   decrypt it first, so the widget's view would have to decrypt it as it draws. It also
    needs an APNs key of its own; the Mac's App Store Connect key can't send pushes.
 
 ## Away from home with iCloud
@@ -315,7 +319,8 @@ reach. The companion changes that, so:
    - Allow and Deny with Face ID, and the auto-answer countdown.
    - The Settings tab, Help and README text, and Uninstall.
 3. **Staying connected, in builds of your own.** Port the silent-audio keep-alive into its own
-   build configuration, then local notifications with Allow and Deny, then the Live Activity.
+   build configuration, then local notifications with Allow and Deny, then the Live Activity
+   (built).
    Measure the battery cost over an afternoon of agents.
 4. **Cellular through Tailscale.** Done, without "Connect to a host": the Mac tells the phone its
    tailnet addresses and a port it keeps, and the phone uses them when Bonjour doesn't find the

@@ -8,6 +8,7 @@ struct MimamoriCompanionApp: App {
     @State private var model = CompanionModel()
     @State private var keepAlive = BackgroundKeepAlive()
     @AppStorage(CompanionNotificationSetting.staysConnected) private var staysConnected = false
+    @AppStorage(LiveActivitySetting.shows) private var showsLiveActivity = true
     @State private var screen = ScreenKeeper()
     @AppStorage(ScreenKeeper.keepsScreenOn) private var keepsScreenOn = false
     @AppStorage(ScreenKeeper.onlyWhileCharging) private var onlyWhileCharging = true
@@ -46,19 +47,25 @@ struct MimamoriCompanionApp: App {
                     case .active:
                         let keptAlive = keepAlive.isRunning
                         keepAlive.stop()
+                        model.liveActivity.appIsActive = true
                         model.resume(keptAlive: keptAlive)
+                        model.updateLiveActivity()
                     case .background:
-                        // Staying connected, the app keeps running and tells you as agents change;
-                        // otherwise iOS suspends it, so it lets go of the Mac first.
-                        if staysConnected, BackgroundKeepAlive.isAvailable, model.chosen != nil {
+                        model.liveActivity.appIsActive = false
+                        // Staying connected, the app keeps running and tells you as agents change,
+                        // the demo's too; otherwise iOS suspends it, so it lets go of the Mac first,
+                        // and takes down a Live Activity that nothing would update.
+                        if staysConnected, BackgroundKeepAlive.isAvailable, model.chosen != nil || model.demo != nil {
                             keepAlive.start()
                         } else {
+                            model.liveActivity.end()
                             model.suspend()
                         }
                     default:
                         break
                     }
                 }
+                .onChange(of: [staysConnected, showsLiveActivity]) { model.updateLiveActivity() }
         }
     }
 }
