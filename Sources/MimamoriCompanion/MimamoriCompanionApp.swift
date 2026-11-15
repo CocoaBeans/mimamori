@@ -22,7 +22,11 @@ struct MimamoriCompanionApp: App {
         WindowGroup {
             AgentsScreen(model: model)
                 .task {
-                    // For screenshots: `-companionDemo YES` opens in the demo, as Try the Demo does.
+                    // `-companionDemo YES` opens in the demo, as Try the Demo does. In debug builds,
+                    // `-companionDemo screenshots` opens the App Store screenshots' own sample Mac.
+                    #if DEBUG
+                    if UserDefaults.standard.string(forKey: "companionDemo") == "screenshots" { model.startDemo(.screenshots) }
+                    #endif
                     if UserDefaults.standard.bool(forKey: "companionDemo") { model.startDemo() }
                     model.start()
                     #if DEBUG
@@ -182,7 +186,7 @@ private struct StatusRow: View {
                   systemImage: "magnifyingglass")
         case .connecting(let name):
             Label(model.pairing != nil ? "Finishing pairing with \(name)…" : "Connecting to \(name)…", systemImage: "network")
-        case .connected where model.demo != nil:
+        case .connected where model.demo?.sample == .tryIt:
             DemoBanner(model: model)
         case .connected(let name):
             VStack(alignment: .leading, spacing: 2) {
@@ -244,7 +248,7 @@ private struct DemoBanner: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Label(CompanionDemo.macName, systemImage: "sparkles.rectangle.stack")
+                Label(model.demo?.macName ?? "Demo", systemImage: "sparkles.rectangle.stack")
                 Text("Sample agents, to try Mimamori without a Mac. Allow, Deny and answers go nowhere.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

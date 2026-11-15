@@ -229,7 +229,8 @@ final class CompanionModel {
     // MARK: The demo
 
     /// Shows the sample Mac's agents in place of a real Mac's, which it lets go of meanwhile.
-    func startDemo() {
+    /// `.screenshots` is the App Store screenshots' own Mac, which looks like any connected Mac.
+    func startDemo(_ sample: CompanionDemo.Sample = .tryIt) {
         guard demo == nil else { return }
         retry?.cancel()
         disconnect()
@@ -237,9 +238,11 @@ final class CompanionModel {
         answers = [:]
         actions = nil
         notifier.reset()
-        demo = CompanionDemo()
-        status = .connected(CompanionDemo.macName)
-        delay = nil
+        let demo = CompanionDemo(sample: sample)
+        self.demo = demo
+        status = .connected(demo.macName)
+        // A connected Mac's status line says how quickly changes arrive.
+        delay = sample == .screenshots ? 0.014 : nil
         publishDemo()
         Task { await notifier.requestAuthorizationIfNeeded() }
         demoTicker = Task { [weak self] in
@@ -260,6 +263,7 @@ final class CompanionModel {
         actions = nil
         answers = [:]
         receivedAt = nil
+        delay = nil
         notifier.reset()
         status = chosen == nil ? .unpaired : .searching
         guard reconnecting else { return }
