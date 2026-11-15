@@ -10,6 +10,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Added
 
+- See your agents on the iPhone away from home, over Tailscale: with Tailscale on the Mac and the
+  iPhone, the iPhone reaches the Mac from any network, cellular included, with nothing to set up
+  ([#100](https://github.com/CocoaBeans/mimamori/pull/100)).
 - Try the iPhone app without a Mac: **Try the Demo**, under the pairing steps or in the Mac menu,
   shows a sample Mac's agents, which you can allow, deny and answer, Face ID included, without
   anything leaving the iPhone ([#99](https://github.com/CocoaBeans/mimamori/pull/99)).
