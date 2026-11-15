@@ -50,6 +50,26 @@ struct CompanionSettingsView: View {
             } footer: {
                 Text("Install Mimamori on your iPhone, then choose Pair iPhone… and scan the code with the iPhone's camera. Tasks and steps reach the iPhone only when \u{201C}Show tasks and steps in widgets\u{201D} is on, in Settings › Agents.")
             }
+
+            Section {
+                // Tailscale comes and goes, so look again every few seconds while this is open.
+                TimelineView(.periodic(from: .now, by: 5)) { _ in
+                    if let reach = companion.reach {
+                        Label("Reachable over Tailscale at \(reach.hosts[0]), port \(String(reach.port))",
+                              systemImage: "network")
+                            .textSelection(.enabled)
+                            .help("The address your paired iPhones use when they can't find this Mac on their network")
+                    } else {
+                        Label("Not on a tailnet", systemImage: "network.slash")
+                            .foregroundStyle(.secondary)
+                            .help("Turn on Tailscale on this Mac to reach it from your iPhone away from this network")
+                    }
+                }
+            } header: {
+                Text("Away from this network")
+            } footer: {
+                Text("With Tailscale on this Mac and your iPhone, signed in to the same tailnet, your iPhone reaches Mimamori from anywhere. Paired iPhones learn this Mac's tailnet address when they connect here, and use it when they can't find the Mac on their network; the connection stays encrypted with the pairing's key. An iPhone shows your agents this way while Mimamori is open on it.")
+            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $pairing, onDismiss: { companion.endPairing() }) {

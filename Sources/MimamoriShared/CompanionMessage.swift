@@ -30,6 +30,9 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
     public var challenge: Challenge?
     /// The phone's proof of which pairing it is (`CompanionProof`); phone to Mac.
     public var proof: Proof?
+    /// Where the phone can reach the Mac away from its network, once the phone has proved its
+    /// pairing; Mac to phone. Nil from a Mac before it, or with no tailnet address.
+    public var reach: CompanionReach?
 
     /// Base64 in the JSON, as `Data` is by default.
     public struct Challenge: Codable, Sendable, Equatable {
@@ -105,7 +108,7 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
 
     public init(snapshot: AgentWidgetSnapshot? = nil, wantsSnapshot: Bool? = nil, hello: Hello? = nil,
                 answer: Answer? = nil, answerResult: AnswerResult? = nil, challenge: Challenge? = nil, proof: Proof? = nil,
-                watchActions: String? = nil, actions: AgentActions? = nil) {
+                watchActions: String? = nil, actions: AgentActions? = nil, reach: CompanionReach? = nil) {
         self.version = Self.currentVersion
         self.snapshot = snapshot
         self.wantsSnapshot = wantsSnapshot
@@ -116,6 +119,7 @@ public struct CompanionMessage: Codable, Sendable, Equatable {
         self.proof = proof
         self.watchActions = watchActions
         self.actions = actions
+        self.reach = reach
     }
 
     /// The message as one line, ending in a newline. JSON escapes newlines inside strings, so

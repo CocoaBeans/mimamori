@@ -10,6 +10,9 @@ struct PairedMac: Codable, Hashable, Identifiable {
     var macID: String
     var name: String
     var pairingID: String
+    /// Where to reach it away from its network, as it last said; nil from a Mac with no tailnet
+    /// address, or one from before.
+    var reach: CompanionReach?
     var id: String { macID }
 }
 
@@ -83,6 +86,10 @@ final class CompanionModel {
 
     /// The Mac to show: the one last chosen, or the first paired.
     private(set) var chosen: PairedMac?
+    /// The connection goes over the Mac's tailnet address rather than this network.
+    private(set) var isAway = false
+    /// When browsing started, to give Bonjour its moment before going the long way.
+    @ObservationIgnored private var browsingSince: Date?
 
     var connectedMac: String? {
         if case .connected(let name) = status { name } else { nil }
@@ -114,6 +121,7 @@ final class CompanionModel {
         }
         browser.start(queue: .main)
         self.browser = browser
+        browsingSince = Date()
     }
 
     /// The app came back to the front: connect afresh. A connection kept from before iOS
@@ -194,7 +202,7 @@ final class CompanionModel {
         if let old = pairedMacs.first(where: { $0.macID == code.macID }), old.pairingID != code.key.identity {
             keychain.delete(old.pairingID)
         }
-        let mac = PairedMac(macID: code.macID, name: code.macName, pairingID: code.key.identity)
+        let mac = PairedMac(macID: code.macID, name: code.macName, pairingID: code.key.identity, reach: code.reach)
         pairedMacs.removeAll { $0.macID == mac.macID }
         pairedMacs.append(mac)
         savePairedMacs()
@@ -220,6 +228,15 @@ final class CompanionModel {
             chosen = pairedMacs.first
             if chosen == nil { status = .unpaired } else { connectToChosen() }
         }
+    }
+
+    /// Where the connected Mac says it can be reached away from its network, for next time.
+    private func remember(_ reach: CompanionReach) {
+        guard let mac = chosen, mac.reach != reach,
+              let index = pairedMacs.firstIndex(where: { $0.macID == mac.macID }) else { return }
+        pairedMacs[index].reach = reach
+        chosen = pairedMacs[index]
+        savePairedMacs()
     }
 
     private func savePairedMacs() {
@@ -359,27 +376,45 @@ final class CompanionModel {
             status = .unpaired
             return
         }
-        // The Mac by its id; failing that, each Mimamori in turn: TLS lets in only the one that
-        // holds this pairing's key.
-        let candidates = foundMacs[mac.macID].map { [$0] } ?? allServices
-        guard !candidates.isEmpty else {
-            if case .unavailable = status { return }
-            status = .searching
-            return
-        }
-        let service = candidates[attempts % candidates.count]
         guard let key = keychain.key(for: mac.pairingID) else {
             status = .unavailable("This iPhone has lost its pairing with \(mac.name). Pair it again from the Mac.")
             return
         }
+        let browsing = Date().timeIntervalSince(browsingSince ?? .distantPast)
+        switch CompanionRoute.next(own: foundMacs[mac.macID], others: allServices, reach: mac.reach,
+                                   attempts: attempts, browsing: browsing) {
+        case .service(let service):
+            // The service by name, not the browse result's endpoint, which is tied to the interface
+            // it was found on: found over a USB cable, that connection never came up.
+            open(.service(name: service, type: CompanionMessage.serviceType, domain: "local.", interface: nil),
+                 to: mac, key: key, away: false)
+        case .away(let host, let port):
+            // Not on this network: the long way, over the tailnet.
+            open(.hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port) ?? .any),
+                 to: mac, key: key, away: true)
+        case .wait(let seconds):
+            // Bonjour gets its moment to find the Mac here first.
+            if case .unavailable = status {} else { status = .searching }
+            retry?.cancel()
+            retry = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(seconds))
+                guard !Task.isCancelled, let self, self.connection == nil else { return }
+                self.connectToChosen()
+            }
+        case .none:
+            if case .unavailable = status { return }
+            status = .searching
+        }
+    }
+
+    /// Connects to `mac` at `endpoint`: a Bonjour service on this network, or, `away`, its tailnet address.
+    private func open(_ endpoint: NWEndpoint, to mac: PairedMac, key: CompanionKey, away: Bool) {
         retry?.cancel()
         disconnect()
         reader = CompanionLineReader()
         notifier.reset()
+        isAway = away
         status = .connecting(mac.name)
-        // The service by name, not the browse result's endpoint, which is tied to the interface it
-        // was found on: found over a USB cable, that connection never came up.
-        let endpoint = NWEndpoint.service(name: service, type: CompanionMessage.serviceType, domain: "local.", interface: nil)
         let connection = NWConnection(to: endpoint, using: CompanionTLS.parameters(keys: [key]))
         connection.stateUpdateHandler = { [weak self] state in
             MainActor.assumeIsolated { self?.connectionChanged(state, connection: connection, mac: mac) }
@@ -390,7 +425,9 @@ final class CompanionModel {
         timeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.connectTimeout))
             guard !Task.isCancelled, let self, connection === self.connection, connection.state != .ready else { return }
-            self.lost(connection, mac: mac, reason: "Can't reach \(mac.name). Trying again…")
+            self.lost(connection, mac: mac, reason: away
+                      ? "Can't reach \(mac.name) here or over Tailscale. Is Tailscale on, on both? Trying again…"
+                      : "Can't reach \(mac.name). Trying again…")
         }
     }
 
@@ -398,6 +435,7 @@ final class CompanionModel {
         timeout?.cancel()
         connection?.cancel()
         connection = nil
+        isAway = false
     }
 
     private func connectionChanged(_ state: NWConnection.State, connection: NWConnection, mac: PairedMac) {
@@ -486,6 +524,7 @@ final class CompanionModel {
             guard let message = try? CompanionMessage(line: line) else { continue }
             if let challenge = message.challenge { prove(challenge) }
             if let result = message.answerResult { answerResultArrived(result) }
+            if let reach = message.reach { remember(reach) }
             if let actions = message.actions, actions.worktreePath == watching { self.actions = actions }
             guard let snapshot = message.snapshot else { continue }
             let now = Date()

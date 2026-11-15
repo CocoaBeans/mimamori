@@ -2,8 +2,10 @@ import Foundation
 import Security
 
 /// What the Mac's pairing QR code holds, as a link the iPhone's camera opens in the companion:
-/// `mimamori-companion://pair?v=1&mac=…&name=…&id=…&key=…`. The key is the pairing's secret, so
-/// the code is shown only while you pair, and works for one phone.
+/// `mimamori-companion://pair?v=1&mac=…&name=…&id=…&key=…`, then `host=…` for each of the Mac's
+/// tailnet addresses and `port=…`, when it has some. The key is the pairing's secret, so the code
+/// is shown only while you pair, and works for one phone. A phone from before the addresses ignores
+/// them.
 public struct CompanionPairingCode: Sendable, Hashable {
     public static let scheme = "mimamori-companion"
     public static let version = 1
@@ -13,11 +15,14 @@ public struct CompanionPairingCode: Sendable, Hashable {
     /// The Mac's name, to show on the phone.
     public var macName: String
     public var key: CompanionKey
+    /// Where to reach the Mac away from its network; nil when it has no tailnet address.
+    public var reach: CompanionReach?
 
-    public init(macID: String, macName: String, key: CompanionKey) {
+    public init(macID: String, macName: String, key: CompanionKey, reach: CompanionReach? = nil) {
         self.macID = macID
         self.macName = macName
         self.key = key
+        self.reach = reach
     }
 
     public var url: URL {
@@ -31,6 +36,10 @@ public struct CompanionPairingCode: Sendable, Hashable {
             URLQueryItem(name: "id", value: key.identity),
             URLQueryItem(name: "key", value: Self.base64URL(key.secret)),
         ]
+        if let reach, !reach.hosts.isEmpty {
+            components.queryItems? += reach.hosts.map { URLQueryItem(name: "host", value: $0) }
+            components.queryItems?.append(URLQueryItem(name: "port", value: String(reach.port)))
+        }
         return components.url!
     }
 
@@ -44,7 +53,12 @@ public struct CompanionPairingCode: Sendable, Hashable {
         }
         guard value("v") == String(Self.version), let macID = value("mac"), let identity = value("id"),
               let secret = value("key").flatMap(Self.data(base64URL:)), secret.count == 32 else { return nil }
-        self.init(macID: macID, macName: value("name") ?? "Mac", key: CompanionKey(identity: identity, secret: secret))
+        let hosts = items.filter { $0.name == "host" }.compactMap { $0.value.flatMap { $0.isEmpty ? nil : $0 } }
+        let reach = value("port").flatMap(UInt16.init).flatMap { port in
+            hosts.isEmpty || port == 0 ? nil : CompanionReach(hosts: hosts, port: port)
+        }
+        self.init(macID: macID, macName: value("name") ?? "Mac", key: CompanionKey(identity: identity, secret: secret),
+                  reach: reach)
     }
 
     private static func base64URL(_ data: Data) -> String {

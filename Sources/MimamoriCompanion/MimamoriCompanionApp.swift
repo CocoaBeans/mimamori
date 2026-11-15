@@ -182,17 +182,21 @@ private struct StatusRow: View {
             PairingHelp(model: model)
         case .searching:
             Label(model.pairing.map { "Finishing pairing: looking for \($0.name) on this network…" }
-                  ?? "Looking for \(model.chosen?.name ?? "your Mac") on this network…",
+                  ?? (model.chosen?.reach != nil
+                      ? "Looking for \(model.chosen?.name ?? "your Mac") on this network, then over Tailscale…"
+                      : "Looking for \(model.chosen?.name ?? "your Mac") on this network…"),
                   systemImage: "magnifyingglass")
         case .connecting(let name):
-            Label(model.pairing != nil ? "Finishing pairing with \(name)…" : "Connecting to \(name)…", systemImage: "network")
+            Label(model.pairing != nil ? "Finishing pairing with \(name)…"
+                  : model.isAway ? "Connecting to \(name) over Tailscale…" : "Connecting to \(name)…",
+                  systemImage: "network")
         case .connected where model.demo?.sample == .tryIt:
             DemoBanner(model: model)
         case .connected(let name):
             VStack(alignment: .leading, spacing: 2) {
                 Label(name, systemImage: "lock.desktopcomputer")
                 if let receivedAt = model.receivedAt, let delay = model.delay {
-                    Text("Updated \(receivedAt.formatted(date: .omitted, time: .standard)), \(Self.milliseconds(delay)) after the Mac sent it")
+                    Text("\(model.isAway ? "Over Tailscale. " : "")Updated \(receivedAt.formatted(date: .omitted, time: .standard)), \(Self.milliseconds(delay)) after the Mac sent it")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

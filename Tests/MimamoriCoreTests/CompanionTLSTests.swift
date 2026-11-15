@@ -158,6 +158,19 @@ struct CompanionPairingsTests {
         #expect(CompanionPairings.load(from: url) == pairings)
     }
 
+    /// A file from before the port gets one, in the dynamic range, and keeps the rest.
+    @Test func aFileFromBeforeThePortGetsOne() throws {
+        let url = temporaryURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"macID":"mac-1","phones":[]}"#.utf8).write(to: url)
+        let pairings = CompanionPairings.load(from: url)
+        #expect(pairings.macID == "mac-1")
+        #expect(pairings.port >= 49_152)
+        try pairings.save(to: url)
+        #expect(CompanionPairings.load(from: url).port == pairings.port)
+    }
+
     @Test func aMissingOrUnreadableFileStartsAfreshWithAMacID() throws {
         let url = temporaryURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }

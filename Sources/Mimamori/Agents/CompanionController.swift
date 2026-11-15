@@ -48,6 +48,22 @@ final class CompanionController {
         }
         publisher.onGoodbye = { [weak self] id in self?.left(id) }
         publisher.onProblem = { [weak self] problem in self?.problem = problem }
+        publisher.onPort = { [weak self] port in self?.listening(on: port) }
+        publisher.reach = { [weak self] in self?.reach }
+    }
+
+    /// Where a paired phone can reach this Mac away from its network: its tailnet addresses, read
+    /// when asked, since Tailscale can come and go, and the port it keeps.
+    var reach: CompanionReach? {
+        let hosts = CompanionReach.currentTailnetAddresses()
+        return hosts.isEmpty ? nil : CompanionReach(hosts: hosts, port: pairings.port)
+    }
+
+    /// The listener is up: keep its port, so phones away from home find it there next time too.
+    /// Saved each time, which is rare, so a file from before the port gets it too.
+    private func listening(on port: UInt16) {
+        pairings.port = port
+        save()
     }
 
     /// An agent's list of actions, by worktree, for a phone showing it.
@@ -100,7 +116,8 @@ final class CompanionController {
             return
         }
         if let old = pairingCode { forget(unusedCode: old) }
-        pairingCode = CompanionPairingCode(macID: pairings.macID, macName: Host.current().localizedName ?? "Mac", key: key)
+        pairingCode = CompanionPairingCode(macID: pairings.macID, macName: Host.current().localizedName ?? "Mac", key: key,
+                                           reach: reach)
         pairingStartedAt = Date()
         justPaired = nil
         restart()
@@ -150,7 +167,7 @@ final class CompanionController {
     private func restart() {
         guard isOn else { return }
         connected.removeAll()
-        publisher.start(macID: pairings.macID, keys: keys)
+        publisher.start(macID: pairings.macID, keys: keys, port: pairings.port)
     }
 
     private func said(_ hello: CompanionMessage.Hello) {

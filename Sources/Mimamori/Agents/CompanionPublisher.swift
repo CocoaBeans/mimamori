@@ -28,8 +28,15 @@ final class CompanionPublisher {
     var onProblem: ((String?) -> Void)?
     /// An agent's list of actions, by worktree, for a phone showing it.
     var actionsFor: ((String) -> AgentActions?)?
+    /// The port listened on, once listening.
+    var onPort: ((UInt16) -> Void)?
+    /// Where a phone can reach the Mac away from its network, told to each phone that proves its
+    /// pairing; nil when the Mac has no tailnet address.
+    var reach: (() -> CompanionReach?)?
 
     private var listener: NWListener?
+    /// What the listener was last started with, to start it again on another port.
+    private var started: (macID: String, keys: [CompanionKey], port: UInt16?)?
     private var phones: [ObjectIdentifier: Phone] = [:]
     private var latest: [AgentWidgetSnapshot.Agent] = []
     private var sent: [AgentWidgetSnapshot.Agent]?
@@ -50,14 +57,17 @@ final class CompanionPublisher {
 
     var isRunning: Bool { listener != nil }
 
-    /// Listens on a port the system picks, advertised under the Mac's name with `macID` in its
-    /// record, accepting phones that hold one of `keys`. Starting again with other keys drops the
-    /// phones connected so far, so a removed phone is cut off; the others reconnect at once.
-    func start(macID: String, keys: [CompanionKey]) {
+    /// Listens on `port`, or on one the system picks when it's nil or taken, advertised under the
+    /// Mac's name with `macID` in its record, accepting phones that hold one of `keys`. Starting
+    /// again with other keys drops the phones connected so far, so a removed phone is cut off; the
+    /// others reconnect at once.
+    func start(macID: String, keys: [CompanionKey], port: UInt16? = nil) {
         stop()
+        started = (macID, keys, port)
         let listener: NWListener
         do {
-            listener = try NWListener(using: CompanionTLS.parameters(keys: keys))
+            let on = port.flatMap(NWEndpoint.Port.init(rawValue:)) ?? .any
+            listener = try NWListener(using: CompanionTLS.parameters(keys: keys), on: on)
         } catch {
             Log.companion.error("Could not listen for the companion: \(error.localizedDescription, privacy: .public)")
             onProblem?("Mimamori couldn't listen for your iPhone: \(error.localizedDescription)")
@@ -91,6 +101,13 @@ final class CompanionPublisher {
         switch state {
         case .ready:
             onProblem?(nil)
+            if let port = listener?.port?.rawValue { onPort?(port) }
+        case .failed(.posix(.EADDRINUSE)) where started?.port != nil:
+            // Something else took the port since: listen on another, which phones learn when they
+            // next connect at home.
+            guard let started else { return }
+            Log.companion.notice("Companion port \(started.port ?? 0, privacy: .public) is taken; listening on another")
+            start(macID: started.macID, keys: started.keys, port: nil)
         case .waiting(let error), .failed(let error):
             // Most often local network access turned off for Mimamori in System Settings.
             onProblem?("Your iPhone can't reach Mimamori (\(error.localizedDescription)). "
@@ -247,6 +264,11 @@ final class CompanionPublisher {
     private func greet(_ hello: CompanionMessage.Hello, from id: ObjectIdentifier) {
         phones[id]?.pairingID = hello.pairingID
         onHello?(hello)
+        // Only to a phone that proved its pairing: where to find this Mac away from home.
+        if let connection = phones[id]?.connection, let reach = reach?(),
+           let line = try? CompanionMessage(reach: reach).line() {
+            send(line, to: connection)
+        }
     }
 
     private func send(_ line: Data, to connection: NWConnection) {

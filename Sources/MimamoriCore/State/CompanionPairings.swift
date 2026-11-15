@@ -24,16 +24,27 @@ public struct CompanionPairings: Codable, Hashable, Sendable {
     /// Mac is called.
     public var macID: String
     public var phones: [Phone]
+    /// The port the Mac listens on, kept from one launch to the next, so a phone away from the
+    /// network, which can't look it up with Bonjour, finds it where it was. Made once, at random
+    /// among the ports nothing registers; replaced by the one the system picks if it's ever taken.
+    public var port: UInt16
 
-    public init(macID: String = UUID().uuidString, phones: [Phone] = []) {
+    public init(macID: String = UUID().uuidString, phones: [Phone] = [], port: UInt16 = Self.newPort()) {
         self.macID = macID
         self.phones = phones
+        self.port = port
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         macID = c.decode(.macID, or: UUID().uuidString)
         phones = c.decode(.phones, or: [])
+        port = c.decode(.port, or: Self.newPort())
+    }
+
+    /// A port in the dynamic range (49152–65535), which nothing claims for itself.
+    public static func newPort() -> UInt16 {
+        UInt16.random(in: 49_152...65_535)
     }
 
     /// The file's pairings, or none with a new Mac id when there is no file yet or it can't be read.
