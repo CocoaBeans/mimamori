@@ -259,7 +259,7 @@ Mimamori lets a request go with no decision as soon as the session moves on (you
 
 When an agent starts work in a git repository Mimamori doesn't watch, **Settings › Agents › Hooks › New Repositories** decides what happens:
 
-- **Offer to watch it** (the default): the repository appears at the top of the sidebar under **Not Watched Yet**, with **Watch**, **Not Now** and **Don't Ask Again**. Mimamori also posts a notification with the same buttons, if you allow notifications.
+- **Offer to watch it** (the default): the repository appears at the top of the sidebar under **Not Watched Yet**, with **Watch**, **Not Now** and **Don't Ask Again**; with several there, the ✕ in the section's header answers Not Now or Don't Ask Again for all of them at once. Mimamori also posts a notification with the same buttons, if you allow notifications.
 - **Watch it**: Mimamori adds it straight away, without changing what you are looking at.
 - **Do nothing**: its events stay in Recent Events as not placed.
 

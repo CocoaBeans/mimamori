@@ -80,6 +80,19 @@ extension AppModel {
         }
     }
 
+    /// Not Now or Don't Ask Again for every repository offered, at once: one settings write
+    /// however many there are.
+    func dismissAllOffers(_ answer: RepositoryOfferAnswer) {
+        guard answer != .watch, !repositoryOffers.isEmpty else { return }
+        let roots = repositoryOffers.map(\.root)
+        repositoryOffers.removeAll()
+        for root in roots { notifier.withdrawOffer(root: root) }
+        guard answer == .never else { return }
+        var copy = settings
+        copy.ignoredAgentRepositories += roots.filter { !copy.ignoredAgentRepositories.contains($0) }
+        updateSettings(copy)
+    }
+
     /// A folder or file opened with Mimamori from outside it: dropped on its Dock icon, chosen in
     /// Finder's Open With, or `open -a Mimamori <folder>`. Its repository is watched and shown.
     func openFromOutside(_ url: URL) {

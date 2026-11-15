@@ -10,6 +10,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Added
 
+- With several repositories under **Not Watched Yet**, the ✕ in its header dismisses them all at
+  once: **Not Now** or **Don't Ask Again** for every one.
 - Try the iPhone app without a Mac: **Try the Demo**, under the pairing steps or in the Mac menu,
   shows a sample Mac's agents, which you can allow, deny and answer, Face ID included, without
   anything leaving the iPhone ([#99](https://github.com/CocoaBeans/mimamori/pull/99)).

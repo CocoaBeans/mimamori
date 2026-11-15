@@ -7,8 +7,10 @@ struct SidebarView: View {
     var body: some View {
         List(selection: Binding(get: { model.selectedWorktreeID }, set: { model.select(worktree: $0) })) {
             if !model.repositoryOffers.isEmpty {
-                Section("Not Watched Yet") {
+                Section {
                     ForEach(model.repositoryOffers) { RepositoryOfferRow(offer: $0) }
+                } header: {
+                    RepositoryOffersHeader(count: model.repositoryOffers.count)
                 }
             }
             ForEach(model.repositories) { repo in
@@ -313,6 +315,33 @@ struct ReviewCountBadge: View {
         } else {
             CountChip(symbol: "eye", count: left, tint: .accentColor)
                 .help("\(left) of \(total) changed files left to review")
+        }
+    }
+}
+
+/// "Not Watched Yet", with a menu that dismisses every offer at once when there are several; one
+/// alone has its own ✕.
+struct RepositoryOffersHeader: View {
+    @Environment(AppModel.self) private var model
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("Not Watched Yet")
+            Spacer(minLength: 4)
+            if count > 1 {
+                Menu {
+                    Button("Not Now for All \(count)") { model.dismissAllOffers(.notNow) }
+                    Button("Don't Ask Again for All \(count)") { model.dismissAllOffers(.never) }
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Dismiss all \(count) repositories: not now, or don't ask again for any of them")
+                .accessibilityLabel("Dismiss all")
+            }
         }
     }
 }
