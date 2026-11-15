@@ -22,6 +22,8 @@ struct MimamoriCompanionApp: App {
         WindowGroup {
             AgentsScreen(model: model)
                 .task {
+                    // For screenshots: `-companionDemo YES` opens in the demo, as Try the Demo does.
+                    if UserDefaults.standard.bool(forKey: "companionDemo") { model.startDemo() }
                     model.start()
                     #if DEBUG
                     // For scripted runs: `-pairingLink <link>` pairs as opening the link does.
@@ -173,13 +175,15 @@ private struct StatusRow: View {
     var body: some View {
         switch model.status {
         case .unpaired:
-            PairingHelp()
+            PairingHelp(model: model)
         case .searching:
             Label(model.pairing.map { "Finishing pairing: looking for \($0.name) on this network…" }
                   ?? "Looking for \(model.chosen?.name ?? "your Mac") on this network…",
                   systemImage: "magnifyingglass")
         case .connecting(let name):
             Label(model.pairing != nil ? "Finishing pairing with \(name)…" : "Connecting to \(name)…", systemImage: "network")
+        case .connected where model.demo != nil:
+            DemoBanner(model: model)
         case .connected(let name):
             VStack(alignment: .leading, spacing: 2) {
                 Label(name, systemImage: "lock.desktopcomputer")
@@ -200,8 +204,10 @@ private struct StatusRow: View {
     }
 }
 
-/// How to pair, before any Mac is.
+/// How to pair, before any Mac is, and a demo to try meanwhile.
 private struct PairingHelp: View {
+    let model: CompanionModel
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Pair with your Mac", systemImage: "desktopcomputer.and.iphone")
@@ -216,6 +222,38 @@ private struct PairingHelp: View {
             Text("Your iPhone and Mac need to be on the same network.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+            Divider()
+            HStack {
+                Text("No Mac at hand? See it with sample agents.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button("Try the Demo") { model.startDemo() }
+                    .buttonStyle(.bordered)
+                    .help("Show sample agents, to see how Mimamori works without a Mac")
+                    .accessibilityHint("Shows sample agents instead of your Mac's")
+            }
+        }
+    }
+}
+
+/// Says the agents on screen are the demo's, with the way out.
+private struct DemoBanner: View {
+    let model: CompanionModel
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Label(CompanionDemo.macName, systemImage: "sparkles.rectangle.stack")
+                Text("Sample agents, to try Mimamori without a Mac. Allow, Deny and answers go nowhere.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button("End Demo") { model.endDemo() }
+                .buttonStyle(.bordered)
+                .help(model.pairedMacs.isEmpty ? "Back to pairing with your Mac" : "Back to your Mac's agents")
+                .accessibilityHint("Leaves the demo")
         }
     }
 }
@@ -231,7 +269,7 @@ private struct MacPicker: View {
                 Button {
                     model.choose(mac)
                 } label: {
-                    if mac.macID == model.chosen?.macID {
+                    if mac.macID == model.chosen?.macID, model.demo == nil {
                         Label(mac.name, systemImage: "checkmark")
                     } else if model.foundMacs[mac.macID] == nil {
                         Text("\(mac.name) (not found)")
@@ -240,7 +278,13 @@ private struct MacPicker: View {
                     }
                 }
             }
-            if let chosen = model.chosen {
+            if !model.pairedMacs.isEmpty { Divider() }
+            if model.demo != nil {
+                Button("End Demo", systemImage: "xmark.rectangle") { model.endDemo() }
+            } else {
+                Button("Try the Demo", systemImage: "sparkles.rectangle.stack") { model.startDemo() }
+            }
+            if let chosen = model.chosen, model.demo == nil {
                 Divider()
                 Button("Forget \(chosen.name)…", systemImage: "xmark.circle", role: .destructive) {
                     forgetting = chosen
@@ -249,8 +293,7 @@ private struct MacPicker: View {
         } label: {
             Image(systemName: "desktopcomputer")
         }
-        .disabled(model.pairedMacs.isEmpty)
-        .help("Choose a Mac")
+        .help("Choose a Mac, or try the demo")
         .accessibilityLabel("Choose a Mac")
         .confirmationDialog("Forget \(forgetting?.name ?? "this Mac")?", isPresented: Binding(
             get: { forgetting != nil }, set: { if !$0 { forgetting = nil } }), titleVisibility: .visible) {

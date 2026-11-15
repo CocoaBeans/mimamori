@@ -79,6 +79,11 @@ extension CompanionModel {
 
     /// Sends the answer and waits for the Mac's word on it. Nil once the Mac took it.
     private func send(requestID: String, allow: Bool, answers: [String: String]? = nil) async -> String? {
+        if demo != nil {
+            // A moment, as the round trip to a Mac takes.
+            try? await Task.sleep(for: .milliseconds(300))
+            return answerDemo(requestID: requestID, allow: allow)
+        }
         let mac = chosen?.name ?? "your Mac"
         guard connectedMac != nil else { return "Not connected to \(mac), so your answer wasn't sent." }
         guard await sendNow(CompanionMessage(answer: .init(requestID: requestID, allow: allow, answers: answers))) else {

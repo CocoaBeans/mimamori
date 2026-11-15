@@ -64,6 +64,11 @@ final class CompanionModel {
     /// The worktree whose agent's actions are on screen, and those actions once they arrive.
     private(set) var watching: String?
     private(set) var actions: AgentActions?
+    /// The sample Mac shown instead of a real one, to try the app without a Mac: for App Review,
+    /// and for screenshots. Nothing goes over the network while it's on.
+    private(set) var demo: CompanionDemo?
+    /// Moves the demo's agents on, once a second.
+    @ObservationIgnored private var demoTicker: Task<Void, Never>?
 
     @ObservationIgnored private var browser: NWBrowser?
     @ObservationIgnored private var connection: NWConnection?
@@ -97,7 +102,7 @@ final class CompanionModel {
 
     /// Starts browsing, which asks for local network access the first time.
     func start() {
-        guard browser == nil else { return }
+        guard browser == nil, demo == nil else { return }
         restartBrowser?.cancel()
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: CompanionMessage.serviceType, domain: nil), using: .tcp)
         // Handlers run on the main queue, where this object lives.
@@ -116,6 +121,10 @@ final class CompanionModel {
     /// `keptAlive`: the app stayed running in the background, so its connection is current and
     /// only needs asking for what's new.
     func resume(keptAlive: Bool = false) {
+        if demo != nil {
+            publishDemo()
+            return
+        }
         if keptAlive, connection != nil, case .connected = status {
             refresh()
             return
@@ -130,6 +139,7 @@ final class CompanionModel {
     /// The app went to the background, where iOS suspends it: say goodbye, so the Mac lets go at
     /// once rather than when TCP notices.
     func suspend() {
+        guard demo == nil else { return }
         retry?.cancel()
         disconnect()
         // A suspended app's link to Bonjour dies with it (DefunctConnection), and a browser on it
@@ -140,7 +150,11 @@ final class CompanionModel {
 
     /// Asks the Mac for a snapshot now.
     func refresh() {
-        send(CompanionMessage(wantsSnapshot: true))
+        if demo != nil {
+            publishDemo()
+        } else {
+            send(CompanionMessage(wantsSnapshot: true))
+        }
     }
 
     /// Shows `worktree`'s agent's actions: the Mac sends them now and as they change. Nil stops.
@@ -148,10 +162,15 @@ final class CompanionModel {
         guard worktree != watching else { return }
         watching = worktree
         if actions?.worktreePath != worktree { actions = nil }
+        if let demo {
+            actions = worktree.flatMap { demo.actions(for: $0) }
+            return
+        }
         send(CompanionMessage(watchActions: worktree ?? ""))
     }
 
     func choose(_ mac: PairedMac) {
+        endDemo(reconnecting: false)
         chosen = mac
         defaults.set(mac.macID, forKey: Self.chosenMacKey)
         disconnect()
@@ -205,6 +224,71 @@ final class CompanionModel {
 
     private func savePairedMacs() {
         defaults.set(try? JSONEncoder().encode(pairedMacs), forKey: Self.pairedMacsKey)
+    }
+
+    // MARK: The demo
+
+    /// Shows the sample Mac's agents in place of a real Mac's, which it lets go of meanwhile.
+    func startDemo() {
+        guard demo == nil else { return }
+        retry?.cancel()
+        disconnect()
+        stopBrowsing()
+        answers = [:]
+        actions = nil
+        notifier.reset()
+        demo = CompanionDemo()
+        status = .connected(CompanionDemo.macName)
+        delay = nil
+        publishDemo()
+        Task { await notifier.requestAuthorizationIfNeeded() }
+        demoTicker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                self?.publishDemo()
+            }
+        }
+    }
+
+    /// Back to the paired Mac, if there is one. `reconnecting` false leaves connecting to the caller.
+    func endDemo(reconnecting: Bool = true) {
+        guard demo != nil else { return }
+        demoTicker?.cancel()
+        demoTicker = nil
+        demo = nil
+        snapshot = nil
+        actions = nil
+        answers = [:]
+        receivedAt = nil
+        notifier.reset()
+        status = chosen == nil ? .unpaired : .searching
+        guard reconnecting else { return }
+        start()
+        connectToChosen()
+    }
+
+    /// Settles an answer in the demo, as the Mac would. Nil once taken; otherwise why not.
+    func answerDemo(requestID: String, allow: Bool) -> String? {
+        guard demo != nil else { return "The demo has ended." }
+        let refusal = demo?.answer(requestID: requestID, allow: allow)
+        publishDemo()
+        return refusal
+    }
+
+    /// The demo's agents as they stand now, when they've changed, as a snapshot from the Mac is taken.
+    private func publishDemo() {
+        guard let demo else { return }
+        let now = Date()
+        if let watching {
+            let current = demo.actions(for: watching, at: now)
+            if current != actions { actions = current }
+        }
+        let next = demo.snapshot(at: now)
+        guard next.agents != snapshot?.agents else { return }
+        snapshot = next
+        notifier.update(next)
+        receivedAt = now
+        settleAnswers(with: next)
     }
 
     // MARK: Browsing
@@ -266,6 +350,7 @@ final class CompanionModel {
     // MARK: The connection
 
     private func connectToChosen() {
+        guard demo == nil else { return }
         guard let mac = chosen else {
             status = .unpaired
             return

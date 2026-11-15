@@ -217,6 +217,8 @@ struct HelpTopic: Identifiable {
 
             The iPhone then shows your agents whenever it's on the same network as your Mac, grouped and drawn as the Agents window draws them. Tap **Details** for each agent's task, steps and files, or turn it off for one line each.
 
+            To see how it works before pairing, tap **Try the Demo** on the iPhone: it shows a sample Mac's agents, which you can allow, deny and answer without anything reaching your Mac.
+
             ## Who can see
             Only paired iPhones: each connects with a key of its own, which only it and your Mac keep, in their Keychains, and everything sent is encrypted. Off, Mimamori doesn't listen on the network at all. Tasks and steps reach the iPhone only when **Show tasks and steps in widgets** is on, in Settings › Agents; the command a permission request asks to run always does, so you can see what you'd allow.
 
