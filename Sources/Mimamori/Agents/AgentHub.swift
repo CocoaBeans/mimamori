@@ -44,6 +44,19 @@ struct AgentPresence: Hashable {
     /// Commands it runs in the background, running or lately finished.
     var commands: [BackgroundCommand] = []
     var backgroundCommands: Int { commands.filter(\.isRunning).count }
+    /// The agent stopped while its subagents ran: its turn ends when the last of them does.
+    var waitingOnSubagents = false
+
+    /// Its own part done, the agent waits on what it started: subagents still running after it
+    /// stopped, or commands it runs in the background once the turn is yours again.
+    var waitsOnBackground: Bool {
+        guard source == .hooks else { return false }
+        return switch activity {
+        case .working: waitingOnSubagents
+        case .ready: backgroundCommands > 0 || subagents.contains(where: \.isRunning)
+        case .needsPermission, .askedQuestion, .idle: false
+        }
+    }
 
     /// Its commands running, and those finished in the last minute, so their end shows.
     func shownCommands(at now: Date) -> [BackgroundCommand] {
@@ -1135,7 +1148,8 @@ final class AgentHub {
                              awaitingCallID: status.pendingPermission?.callID,
                              permissionRequestID: pendingPermissions[status.key]?.id,
                              answersInOwnPrompt: steppedBack.contains(status.key) && pendingPermissions[status.key] == nil,
-                             subagents: status.subagents, commands: status.commands)
+                             subagents: status.subagents, commands: status.commands,
+                             waitingOnSubagents: status.waitingOnSubagents)
     }
 
     private func processPresence(_ running: [AgentProcess]) -> AgentPresence {

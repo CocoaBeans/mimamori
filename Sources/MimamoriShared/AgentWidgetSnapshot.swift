@@ -160,12 +160,15 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         public var subagents: [Subagent]?
         /// Commands it runs in the background, running or finished in the last minute.
         public var commands: [Command]?
+        /// Its own part done, it waits on subagents or background commands it started; nil from
+        /// a Mac before the Waiting on tasks group.
+        public var waitsOnBackground: Bool?
 
         public init(reportsSteps: Bool, turnUnderway: Bool, turnStartedAt: Date? = nil, turnEndedAt: Date? = nil,
                     sessionStartedAt: Date? = nil, calls: [AgentToolCall] = [],
                     callsThisTurn: Int = 0, waitingCallID: String? = nil, lastCall: AgentToolCall? = nil,
                     files: [File] = [], changes: Changes = Changes(), others: [Other] = [],
-                    subagents: [Subagent]? = nil, commands: [Command]? = nil) {
+                    subagents: [Subagent]? = nil, commands: [Command]? = nil, waitsOnBackground: Bool? = nil) {
             self.reportsSteps = reportsSteps
             self.turnUnderway = turnUnderway
             self.turnStartedAt = turnStartedAt
@@ -180,6 +183,7 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
             self.others = others
             self.subagents = subagents
             self.commands = commands
+            self.waitsOnBackground = waitsOnBackground
         }
 
         /// A subagent, in a line: what kind, what it was asked, how far it has got.

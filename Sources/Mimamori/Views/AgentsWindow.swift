@@ -481,10 +481,19 @@ struct AgentDashboardRow: View {
 
 /// The Agents window's groups, in the order it lists them.
 enum AgentSection: Int, Hashable, CaseIterable {
-    case needsYou, working, ready, ended
+    case needsYou, working, waitingOnTasks, ready, ended
 
     init(_ presence: AgentPresence) {
-        self = AgentSection(rawValue: min(presence.urgency, AgentSection.ended.rawValue)) ?? .ended
+        if presence.collision == nil, presence.waitsOnBackground {
+            self = .waitingOnTasks
+            return
+        }
+        self = switch presence.urgency {
+        case 0: .needsYou
+        case 1: .working
+        case 2: .ready
+        default: .ended
+        }
     }
 
     /// What the settings remember a collapsed section by.
@@ -494,6 +503,7 @@ enum AgentSection: Int, Hashable, CaseIterable {
         switch self {
         case .needsYou: "Needs you"
         case .working: "Working"
+        case .waitingOnTasks: "Waiting on tasks"
         case .ready: "Ready"
         case .ended: "Ended"
         }
@@ -503,6 +513,7 @@ enum AgentSection: Int, Hashable, CaseIterable {
         switch self {
         case .needsYou: .orange
         case .working: .blue
+        case .waitingOnTasks: .teal
         case .ready: .green
         case .ended: .secondary
         }
@@ -559,7 +570,10 @@ struct AgentSectionHeader: View {
         .onHover { hovering = $0 }
         .padding(.top, 6)
         .padding(.bottom, 2)
-        .help(collapsed ? "Show these agents" : "Fold these agents away")
+        .help(section == .waitingOnTasks
+              ? (collapsed ? "Show the agents waiting on subagents or background commands they started"
+                           : "Agents done with their own part, waiting on subagents or background commands they started. Click to fold them away.")
+              : (collapsed ? "Show these agents" : "Fold these agents away"))
         .accessibilityLabel("\(section.title), \(rows.count == 1 ? "1 agent" : "\(rows.count) agents")")
         .accessibilityValue(collapsed ? "collapsed" : "expanded")
         .accessibilityAddTraits(.isHeader)

@@ -339,7 +339,8 @@ extension AppModel {
                       status: AgentText.shortenPaths(other.statusText, in: worktree), since: other.since)
             },
             subagents: companionSubagents(presence, details: details, worktree: worktree),
-            commands: companionCommands(presence, details: details))
+            commands: companionCommands(presence, details: details),
+            waitsOnBackground: presence.waitsOnBackground)
     }
 
     /// The card's subagents, as the Mac's card lists them; without `details`, their kind, steps and

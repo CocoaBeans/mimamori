@@ -171,9 +171,9 @@ struct HelpTopic: Identifiable {
             Settings › Agents › Hooks can also answer by itself after a wait you choose, but never allows a call that matches one of your ask rules, or a command too long (over 64 KB) to check against them.
 
             ## Subagents
-            When Claude Code hands work to subagents, an agent stays in Working while any of them runs, "waiting on 2 subagents", and "finished a turn" waits for the last. Its card in the Agents window, and the banner above the diff, list its subagents: what kind each is, what it was asked, its steps and time, and its latest step.
+            When Claude Code hands work to subagents and stops, an agent moves to Waiting on tasks while any of them runs, "waiting on 2 subagents", and "finished a turn" waits for the last. Its card in the Agents window, and the banner above the diff, list its subagents: what kind each is, what it was asked, its steps and time, and its latest step.
 
-            Commands it runs in the background are listed under **In the background**, with how long each has run and how it ended. They leave the agent Ready, "ready · 2 running in the background", since the turn is yours again. The iPhone shows both lists on its cards.
+            Commands it runs in the background are listed under **In the background**, with how long each has run and how it ended. They leave the agent Ready, "ready · 2 running in the background", since the turn is yours again, and it waits under Waiting on tasks until they end. The iPhone shows both lists on its cards.
 
             ## Several agents in one worktree
             Mimamori keeps each session apart, and names a Claude Code session by its title, as the Claude desktop app does, so you can tell which one is asking. When two of them edit the same file, the banner warns you and names the files, since one may undo the other's work.
@@ -194,7 +194,7 @@ struct HelpTopic: Identifiable {
             markdown: """
             ## The menu bar
             The eye in the menu bar shows how many files changed, how many need a look, and how many agents are waiting for you. Click it for each agent at work, with a live timer, its task and its latest steps, then every repository and worktree. Click an agent or a worktree to open it.
-            - Agents are grouped under Needs you, Working, Ready and Ended, as in the Agents window.
+            - Agents are grouped under Needs you, Working, Waiting on tasks, Ready and Ended, as in the Agents window.
             - Fold the Agents or Worktrees section, or one of the agents' groups, away by its heading.
             - The pin at the bottom keeps it open as a small window above the others. It opens again at launch until you unpin it.
             - **Settings › General › Show in menu bar** hides it.

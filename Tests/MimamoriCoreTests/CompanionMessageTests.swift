@@ -40,7 +40,8 @@ struct CompanionMessageTests {
             files: [.init(path: "Sources/Checkout.swift", additions: 40, deletions: 2), .init(path: "logo.png"),
                     .init(path: ".env", additions: 1, deletions: 0, flagged: true)],
             changes: .init(files: 3, toReview: 2, flagged: 1, additions: 41, deletions: 2),
-            others: [.init(agent: "Codex", symbol: "terminal", state: .working, status: "working · Edit", since: now)])
+            others: [.init(agent: "Codex", symbol: "terminal", state: .working, status: "working · Edit", since: now)],
+            waitsOnBackground: true)
         let snapshot = AgentWidgetSnapshot(writtenAt: now, agents: [
             .init(worktreePath: "/repo", repository: "shop", worktree: "main", agent: "Claude Code", state: .needsYou,
                   status: "needs permission · Bash swift test", since: now.addingTimeInterval(-30), card: card),
@@ -51,6 +52,7 @@ struct CompanionMessageTests {
         #expect(decoded == snapshot)
         #expect(decoded.agents[0].card?.files.map(\.name) == ["Checkout.swift", "logo.png", ".env"])
         #expect(decoded.agents[0].card?.sessionStartedAt == now.addingTimeInterval(-3600))
+        #expect(decoded.agents[0].card?.waitsOnBackground == true)
     }
 
     @Test func aCardFromAMacBeforeTheClocksHasNone() throws {
@@ -63,6 +65,7 @@ struct CompanionMessageTests {
         #expect(older.turnStartedAt == card.turnStartedAt)
         #expect(older.turnEndedAt == nil)
         #expect(older.sessionStartedAt == nil)
+        #expect(older.waitsOnBackground == nil)
     }
 
     @Test func aWidgetSnapshotCarriesNoCards() throws {

@@ -1,11 +1,16 @@
 import MimamoriShared
 import SwiftUI
 
-/// The Agents window's groups, in its order.
+/// The Agents window's groups, in its order. Folded groups are remembered by their numbers, so
+/// each keeps its own: Waiting on tasks came later.
 enum AgentGroup: Int, CaseIterable, Identifiable {
-    case needsYou, working, ready, ended
+    case needsYou = 0, working = 1, waitingOnTasks = 4, ready = 2, ended = 3
 
     init(_ agent: AgentWidgetSnapshot.Agent) {
+        if agent.collision == nil, agent.card?.waitsOnBackground == true {
+            self = .waitingOnTasks
+            return
+        }
         switch agent.state {
         case .needsYou: self = .needsYou
         case .working, .running: self = .working
@@ -20,6 +25,7 @@ enum AgentGroup: Int, CaseIterable, Identifiable {
         switch self {
         case .needsYou: "Needs you"
         case .working: "Working"
+        case .waitingOnTasks: "Waiting on tasks"
         case .ready: "Ready"
         case .ended: "Ended"
         }
@@ -29,6 +35,7 @@ enum AgentGroup: Int, CaseIterable, Identifiable {
         switch self {
         case .needsYou: .orange
         case .working: .blue
+        case .waitingOnTasks: .teal
         case .ready: .green
         case .ended: .secondary
         }

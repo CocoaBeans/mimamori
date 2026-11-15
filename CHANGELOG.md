@@ -16,6 +16,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Agent cards, on the Mac and the iPhone, show how long the turn and the session have run,
   "turn 4m · session 1h 12m", beside the timer that restarts at each step
   ([#102](https://github.com/CocoaBeans/mimamori/pull/102)).
+- A **Waiting on tasks** group, on the Mac and the iPhone, for agents done with their own part
+  while subagents or background commands they started still run.
 
 ## [1.4.0] - 2026-11-11
 
