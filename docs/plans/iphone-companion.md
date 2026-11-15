@@ -171,12 +171,70 @@ The next two are for an App Store build, which can't keep itself running:
    - The cost: today's signing needs no provisioning profile at all. CloudKit needs an iCloud
      container and a Developer ID provisioning profile in `Scripts/release.sh` and CI, and the
      production CloudKit environment for release builds.
+   - Chosen as the way to reach you away from home: see "Away from home with iCloud" below.
 3. **A relay of our own, for Live Activities and the Watch.** "Claude Code · working · 4m · Edit"
    on the Lock Screen and in the Dynamic Island means updating a Live Activity while the app is in
    the background. That takes pushes from a server holding an APNs key, and the key can't ship in
    an open-source Mac app. So this needs a small relay (a Cloudflare Worker would do), with the
    payload encrypted end to end by the paired key so the relay sees only ciphertext. It also
    needs an APNs key of its own; the Mac's App Store Connect key can't send pushes.
+
+## Away from home with iCloud
+
+The design for step 5, chosen on 2026-11-15 (see "Decided"). Neither device holds a connection
+open: the Mac writes to your private iCloud database when something you'd want to know about
+changes, and Apple's push service, which iOS keeps up for every app anyway, wakes the phone. So it
+costs the phone's battery next to nothing, and it reaches a phone whose app isn't running, which
+nothing else can for an App Store build. On the same network, the direct connection stays as it
+is and wins whenever it's up.
+
+**What goes where.** One record zone, `Mimamori`, in the private database of the iCloud account
+both devices are signed in to:
+- `Status`, one per paired phone, written by the Mac: who needs you and the requests waiting,
+  each with what a card shows of it. Written when that changes, as the companion's urgent sends
+  are today, not on every step.
+- `Snapshot`, one per paired phone, written by the Mac: the agents as the cards draw them, for the
+  away view. At most once a minute, and only when something shown changed, so a busy afternoon
+  costs the Mac a handful of small writes.
+- `Answer`, written by the phone: Allow, Deny or a question's answers, for one request. The Mac
+  deletes it once it has acted on it.
+
+Records are overwritten, not added to, so the database stays a few kilobytes, which counts
+against your iCloud storage only in name.
+
+**Encrypted with the pairing's key.** Each record's payload is sealed with AES-GCM under a key
+derived (HKDF) from that phone's pairing secret, so Apple stores only ciphertext, and a phone
+reads only its own records. That's why there's one record per paired phone. An `Answer` carries
+the same proof the connection's challenge does (`CompanionProof`), over its request id and a fresh
+nonce, so the Mac takes it only from the phone it names, and only once.
+
+**Notifications.** The phone subscribes to its `Status` record (`CKQuerySubscription`) with a
+visible push whose text is generic ("An agent needs you"), since Apple can't read the payload. A
+Notification Service Extension decrypts the record and fills in the agent, the tool and the command,
+with Allow and Deny on it as today's local notifications have. Answering from the notification
+writes an `Answer`.
+
+**Answers on the Mac.** The Mac subscribes to `Answer` records too (a silent push to a running
+Mimamori), and while a request waits it also looks every few seconds, in case a push is late. Both
+end well inside Claude Code's 590 s wait. Answers go through `CompanionAnswerCheck` as the direct
+connection's do.
+
+**The away view.** Opened away from home, the app shows the latest `Snapshot` and fetches it again
+every few seconds while it's open, with "as of" the time the Mac wrote it. So it's nearly live, not
+the stream the direct connection gives.
+
+**What it needs.**
+- An iCloud container (`iCloud.com.kevinross.Mimamori`) and push entitlements on both apps. The
+  Mac app, signed with Developer ID, then needs a provisioning profile, which `Scripts/release.sh`
+  and the release workflow don't handle today: the riskiest part, so the spike starts there.
+- Both devices signed in to the same Apple ID. Settings on both say so plainly when they aren't,
+  or iCloud is off for Mimamori.
+- The schema deployed to CloudKit's production environment before a release. Debug builds use
+  the development environment.
+
+**Spike, later.** Sign the Developer ID Mac app with the container through `release.sh`, write one
+`Status` record, and receive it as a push on the phone with the app closed. Then measure what a day
+of agents costs the Mac in energy, as the 2026-11-05 audit did.
 
 ## An agent's actions
 
@@ -278,6 +336,14 @@ On 2026-11-05:
   pairing, and Tailscale after them.
 - **macOS 15 with `NWListener`** on the Mac side, so the companion needs nothing newer than
   Mimamori does, and builds with both of CI's Xcodes.
+
+On 2026-11-15:
+- **iCloud for away from home.** Tailscale works (#100) and stays, for people who already run it,
+  but its own app keeps a VPN up, and its reviewers mention the battery. iCloud keeps nothing open
+  on either device and also reaches a closed App Store app, so it becomes the main way. A relay of
+  our own and an embedded Tailscale node (TailscaleKit) were weighed and set aside: a server to run,
+  or an always-on node on the Mac.
+- **The spike waits** until after the first App Store release.
 
 ## References
 
