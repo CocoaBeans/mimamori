@@ -120,12 +120,13 @@
     </ul>
 
     <h2>Mimamori Companion for iPhone</h2>
-    <p>The iPhone app shows the agents on your Mac, tells you when one needs you, and lets you answer their requests. It talks only to the Macs you paired it with, over your own network, and to nothing on the internet.</p>
+    <p>The iPhone app shows the agents on your Mac, tells you when one needs you, and lets you answer their requests. It talks only to the Macs you paired it with: over your own network, or, if you use Tailscale, over your tailnet. It talks to nothing else on the internet.</p>
     <ul>
       <li><strong>Pairing.</strong> Scanning the code in Mimamori's Settings › iPhone gives your iPhone and your Mac a shared random key. Each keeps it in its Keychain. Every connection between them is encrypted with that key, so nobody else on the network can read what is sent.</li>
       <li><strong>What your Mac sends it.</strong> Your agents and their state, the names of the worktrees they work in, and, if you turn on "Show tasks and steps in widgets" on your Mac, their tasks, steps and changed files. A permission request's command or file is sent so you can see what you would allow.</li>
       <li><strong>What stays on your iPhone.</strong> The list of Macs you paired, and your notification and display settings. Notifications are made on your iPhone, from what your Mac sends; none come through a server.</li>
       <li><strong>Face ID.</strong> Before you allow an agent's request or answer its question, iOS asks for Face ID or your passcode. The app only learns whether you passed; your face data never leaves Apple's Secure Enclave.</li>
+      <li><strong>Tailscale.</strong> If your Mac is on a tailnet, it tells your paired iPhone its tailnet address, so the iPhone can reach it away from home. The address is kept with the pairing on your iPhone, and the connection stays encrypted with the pairing's key. Tailscale's own <a href="https://tailscale.com/privacy-policy">privacy policy</a> covers the tailnet.</li>
       <li><strong>Local network.</strong> iOS asks your permission before the app looks for your Mac with Bonjour. It is used for nothing else.</li>
     </ul>
 

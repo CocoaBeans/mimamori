@@ -207,7 +207,7 @@ struct HelpTopic: Identifiable {
 
         HelpTopic(
             id: .iPhone, title: "Your iPhone", symbol: "iphone",
-            summary: "See your agents on your iPhone, on the same network as your Mac.",
+            summary: "See your agents on your iPhone, on the same network as your Mac or over Tailscale.",
             actions: [.settings(.companion, "iPhone Settings…")],
             markdown: """
             ## Pairing
@@ -216,6 +216,9 @@ struct HelpTopic: Identifiable {
             3. Point the iPhone's Camera at the code, and tap the link to open it in Mimamori.
 
             The iPhone then shows your agents whenever it's on the same network as your Mac, grouped and drawn as the Agents window draws them. Tap **Details** for each agent's task, steps and files, or turn it off for one line each.
+
+            ## Away from home
+            With Tailscale on your Mac and your iPhone, signed in to the same tailnet, the iPhone reaches your Mac from any network, cellular included. There's nothing to set up: the iPhone learns your Mac's tailnet address when it connects at home, and uses it when it can't find the Mac on its own network. **Away from this network** in Settings › iPhone shows the address. The connection stays encrypted with the pairing's key. The App Store version shows your agents this way while it's open.
 
             To see how it works before pairing, tap **Try the Demo** on the iPhone: it shows a sample Mac's agents, which you can allow, deny and answer without anything reaching your Mac.
 
@@ -237,7 +240,8 @@ struct HelpTopic: Identifiable {
             To keep your agents in view on a stand beside your Mac, turn on **Keep the screen on** in the iPhone's settings: it doesn't dim or lock while Mimamori is open, by default only while it's charging.
 
             ## If it doesn't connect
-            - The iPhone and the Mac need to be on the same network, and the iPhone unplugged from the Mac's cable works best.
+            - The iPhone and the Mac need to be on the same network, or both on Tailscale, and the iPhone unplugged from the Mac's cable works best.
+            - Away from home over Tailscale, the iPhone needs to have connected to the Mac at home once since this version, to learn its address.
             - Both ask, the first time, to find devices on your local network. If you said no, turn Mimamori on in **Privacy & Security › Local Network**: System Settings on the Mac, Settings on the iPhone.
             """),
 

@@ -10,7 +10,9 @@
 > since TLS alone shows only that a phone holds one of the keys; the phone's `hello` (its name,
 > and for a new phone the end of pairing) counts only once that proof holds. Then an agent's list of actions,
 > which completes step 2. Builds of your own come first: same network, then the silent-audio
-> keep-alive with "needs you" notifications, then Tailscale. CloudKit and a relay wait for an App
+> keep-alive with "needs you" notifications, then Tailscale, which is built too: the Mac keeps its
+> port and tells a proved phone its tailnet addresses (`CompanionReach`), and the phone tries them
+> when Bonjour doesn't find the Mac (`CompanionRoute`). CloudKit and a relay wait for an App
 > Store build.
 > The Mac side stays on macOS 15 with `NWListener` (see "Decided").
 
@@ -257,8 +259,10 @@ reach. The companion changes that, so:
 3. **Staying connected, in builds of your own.** Port the silent-audio keep-alive into its own
    build configuration, then local notifications with Allow and Deny, then the Live Activity.
    Measure the battery cost over an afternoon of agents.
-4. **Cellular through Tailscale.** "Connect to a host", reconnecting when the network changes, and
-   a clear "can't reach your Mac" state.
+4. **Cellular through Tailscale.** Done, without "Connect to a host": the Mac tells the phone its
+   tailnet addresses and a port it keeps, and the phone uses them when Bonjour doesn't find the
+   Mac, with a clear "can't reach your Mac" state. A field to type an address waits until someone
+   needs one.
 5. **For an App Store build: notifications through CloudKit.** The container and provisioning
    profile, the records and subscription, and notification actions for Allow and Deny.
 6. **Later, if wanted.** The relay for an App Store build's Live Activity, and a Watch app.
