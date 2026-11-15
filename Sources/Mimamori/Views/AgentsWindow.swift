@@ -285,10 +285,7 @@ struct AgentDashboardRow: View {
     /// ended. Only hooks report calls.
     private var timeline: TurnTimeline? {
         guard presence.source == .hooks else { return nil }
-        let underway: Bool = switch presence.activity {
-        case .working, .needsPermission, .askedQuestion: true
-        case .ready, .idle: false
-        }
+        let underway = presence.turnUnderway
         // With no turn start known, the strip starts at the first step it has.
         guard presence.turnStartedAt != nil ? underway || !presence.turnSteps.isEmpty : !presence.turnSteps.isEmpty else { return nil }
         return TurnTimeline(calls: presence.turnSteps, turnStartedAt: presence.turnStartedAt, end: underway ? now : presence.since,
@@ -435,6 +432,7 @@ struct AgentDashboardRow: View {
                     .help("Commands it runs in the background; the details show them")
             }
             Spacer(minLength: 6)
+            AgentClocks(parts: presence.clockParts(now: now))
             ChangeSummary(session: row.session)
         }
         .font(.caption)
@@ -469,6 +467,9 @@ struct AgentDashboardRow: View {
         }
         HStack(spacing: 8) {
             answerButton
+            AgentClocks(parts: presence.clockParts(now: now))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer(minLength: 6)
             ChangeSummary(session: row.session)
                 .font(.caption)

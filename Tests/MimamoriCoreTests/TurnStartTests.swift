@@ -299,6 +299,59 @@ struct TurnStartTests {
         #expect(!claudeMoved)
     }
 
+    @Test func aSessionsClockStartsAtItsSessionStart() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.sessionStart, message: "startup", at: 0))
+        _ = machine.apply(event(.userPromptSubmit, message: "task", at: 10))
+        #expect(machine.status?.sessionStartedAt == date(0))
+        #expect(machine.status?.sessionStartUnheard == false)
+        // Claude Code starts the session again after compacting it; its clock keeps running.
+        _ = machine.apply(event(.sessionStart, message: "compact", at: 50))
+        #expect(machine.status?.sessionStartedAt == date(0))
+        // Another session takes the worktree over, and its clock starts afresh.
+        _ = machine.apply(event(.sessionStart, session: "s2", message: "clear", at: 80))
+        #expect(machine.status?.sessionStartedAt == date(80))
+        #expect(machine.status?.sessionStartUnheard == false)
+    }
+
+    @Test func aSessionJoinedMidwayStartsWhenFirstHeard() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(event(.preToolUse, tool: "Bash", at: 100))
+        #expect(machine.status?.sessionStartedAt == date(100))
+        #expect(machine.status?.sessionStartUnheard == true)
+        _ = machine.apply(event(.stop, at: 120))
+        _ = machine.apply(event(.userPromptSubmit, message: "next", at: 200))
+        #expect(machine.status?.sessionStartedAt == date(100))
+    }
+
+    @Test func aSessionRecordGivesItsStart() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.adopt(ClaudeSessionRecord(pid: 7, sessionID: "s1", status: "idle", statusUpdatedAt: date(300),
+                                              startedAt: date(20)))
+        #expect(machine.status?.sessionStartedAt == date(20))
+        #expect(machine.status?.sessionStartUnheard == false)
+        // Its hooks take over, and the start stays.
+        _ = machine.apply(event(.userPromptSubmit, message: "task", at: 400))
+        #expect(machine.status?.sessionStartedAt == date(20))
+        // A record that gives no start: the session began no later than the record says it was idle.
+        var bare = AgentStatusMachine()
+        _ = bare.adopt(ClaudeSessionRecord(pid: 8, sessionID: "s1", status: "idle", statusUpdatedAt: date(300)))
+        #expect(bare.status?.sessionStartedAt == date(300))
+        #expect(bare.status?.sessionStartUnheard == true)
+    }
+
+    @Test func aHermesLeaseKeepsTheSessionsEarliestStart() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.adopt(turn(startedAt: 100))
+        #expect(machine.status?.sessionStartedAt == date(100))
+        #expect(machine.status?.sessionStartUnheard == true)
+        _ = machine.adopt(turn(startedAt: 200))
+        #expect(machine.status?.sessionStartedAt == date(100))
+        // Another session's lease starts its own clock.
+        _ = machine.adopt(turn("h2", startedAt: 300))
+        #expect(machine.status?.sessionStartedAt == date(300))
+    }
+
     @Test func aDeclinedCallEndsTheTurn() throws {
         var machine = AgentStatusMachine()
         _ = machine.apply(event(.preToolUse, tool: "Bash", at: 100))

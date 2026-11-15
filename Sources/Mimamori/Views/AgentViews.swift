@@ -53,6 +53,22 @@ extension AgentPresence {
         }
     }
 
+    /// A turn is under way: from your prompt until the agent hands the turn back.
+    var turnUnderway: Bool {
+        guard source == .hooks else { return false }
+        return switch activity {
+        case .working, .needsPermission, .askedQuestion: true
+        case .ready, .idle: false
+        }
+    }
+
+    /// ["turn 4m", "session 1h 12m"], as `AgentClockText` words them.
+    func clockParts(now: Date) -> [String] {
+        guard source == .hooks else { return [] }
+        return AgentClockText.parts(turnStartedAt: turnStartedAt, turnEndedAt: turnEndedAt, turnUnderway: turnUnderway,
+                                    sessionStartedAt: sessionStartedAt, sessionEndedAt: activity == .idle ? since : nil, now: now)
+    }
+
     var timingHelp: String {
         switch source {
         case .process: "Time since the oldest agent process in this worktree started. Install hooks to see what it is doing."
@@ -528,6 +544,9 @@ struct AgentStatusBanner: View {
             FileChips(files: details.files, onOpen: details.onOpenFile)
                 .padding(.top, 1)
         }
+        AgentClocks(parts: presence.clockParts(now: now))
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
 

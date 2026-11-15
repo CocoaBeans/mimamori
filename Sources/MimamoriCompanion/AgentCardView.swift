@@ -88,6 +88,14 @@ struct AgentCardView: View {
         return "quiet \(Format.duration(quiet))"
     }
 
+    /// "turn 4m", "session 1h 12m": a Mac before the card's clocks sends the turn's start only.
+    private var clocks: [String] {
+        guard let card, card.reportsSteps else { return [] }
+        return AgentClockText.parts(turnStartedAt: card.turnStartedAt, turnEndedAt: card.turnEndedAt,
+                                    turnUnderway: card.turnUnderway, sessionStartedAt: card.sessionStartedAt,
+                                    sessionEndedAt: agent.state == .ended ? agent.since : nil, now: now)
+    }
+
     /// The last tool call, for an agent between turns, when the status line doesn't name it.
     private var lastCall: String? {
         guard agent.state != .working, agent.state != .needsYou, let call = card?.lastCall else { return nil }
@@ -216,6 +224,7 @@ struct AgentCardView: View {
                     .foregroundStyle(AgentToolCategory.command.color)
             }
             Spacer(minLength: 6)
+            AgentClocks(parts: clocks)
             if let changes = card?.changes { WorktreeChangeSummary(changes: changes) }
         }
         .font(.caption)
@@ -247,11 +256,12 @@ struct AgentCardView: View {
                 TouchedFileChips(files: card.files)
             }
             HStack {
+                AgentClocks(parts: clocks)
                 Spacer(minLength: 6)
                 WorktreeChangeSummary(changes: card.changes)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
+            .font(.caption)
+            .foregroundStyle(.secondary)
             .padding(.top, 2)
         }
     }

@@ -158,7 +158,7 @@ struct HelpTopic: Identifiable {
 
             ## Keep an eye on them
             - The pill in the toolbar names the agent waiting on you longest, or how many are working. Click it for each agent's task, steps and files.
-            - **Window › Agents** (⇧⌘A) shows every agent as a card: what it's doing and for how long, its task, its latest steps, and the files it touched this turn. **Go to agent** brings its terminal or app to the front, and **Keep on Top** keeps the window above the others.
+            - **Window › Agents** (⇧⌘A) shows every agent as a card: what it's doing and for how long, how long its turn and its session have run (on the iPhone's cards too), its task, its latest steps, and the files it touched this turn. **Go to agent** brings its terminal or app to the front, and **Keep on Top** keeps the window above the others.
             - Settings › Agents › Notifications can tell you when an agent needs permission, asks a question or finishes a turn.
 
             ## Answer permission requests

@@ -120,6 +120,11 @@ public struct AgentStatus: Sendable, Hashable, Codable {
     public var turnStartUnheard = false
     /// When the session's previous turn ended, as far as Mimamori heard.
     public var lastTurnEndedAt: Date?
+    /// When the session began: its SessionStart, the start its agent's own record gives, or else
+    /// when Mimamori first heard from it.
+    public var sessionStartedAt: Date?
+    /// Mimamori did not hear the session start, so `sessionStartedAt` may be later than it was.
+    public var sessionStartUnheard = false
     /// Subagents the session started, running or lately finished.
     public var subagents: [Subagent] = []
     /// Agent calls in the foreground whose subagent hasn't been heard from yet.
@@ -275,6 +280,12 @@ public struct AgentStatusMachine: Sendable {
             current.commands = []
             current.waitingOnSubagents = false
             current.deferredStopFailure = nil
+        }
+        // A session's clock starts at its first event, which is its SessionStart unless Mimamori
+        // joined it midway. A later SessionStart from it (Claude Code sends one after compacting) leaves it.
+        if !heardBefore || current.sessionStartedAt == nil {
+            current.sessionStartedAt = now
+            current.sessionStartUnheard = event.name != .sessionStart
         }
         current.agent = event.agent
         current.lastEventAt = now
@@ -738,6 +749,9 @@ public struct AgentStatusMachine: Sendable {
         }
         var fresh = AgentStatus(agent: .claudeCode, activity: activity, since: at, lastEventAt: at, sessionID: record.sessionID)
         fresh.fromSessionRecord = true
+        // The record's start is its process's, which began the session.
+        fresh.sessionStartedAt = record.startedAt ?? at
+        fresh.sessionStartUnheard = record.startedAt == nil
         status = fresh
         return true
     }
@@ -760,6 +774,10 @@ public struct AgentStatusMachine: Sendable {
         fresh.lastTurnStartedAt = turn.startedAt
         fresh.fromSessionRecord = true
         fresh.turnStartUnheard = true
+        // The lease tells only when this turn began; the session began no later.
+        let known = status.flatMap { $0.sessionID == turn.sessionID ? $0.sessionStartedAt : nil }
+        fresh.sessionStartedAt = min(known ?? turn.startedAt, turn.startedAt)
+        fresh.sessionStartUnheard = true
         status = fresh
         return true
     }

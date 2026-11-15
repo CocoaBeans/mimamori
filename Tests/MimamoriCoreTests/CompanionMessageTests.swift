@@ -34,7 +34,8 @@ struct CompanionMessageTests {
         let test = AgentToolCall(id: "c2", toolName: "Bash", summary: "swift test", filePath: nil,
                                  startedAt: now.addingTimeInterval(-30))
         let card = AgentWidgetSnapshot.Card(
-            reportsSteps: true, turnUnderway: true, turnStartedAt: now.addingTimeInterval(-60), calls: [edit, test],
+            reportsSteps: true, turnUnderway: true, turnStartedAt: now.addingTimeInterval(-60),
+            sessionStartedAt: now.addingTimeInterval(-3600), calls: [edit, test],
             callsThisTurn: 14, waitingCallID: "c2", lastCall: test,
             files: [.init(path: "Sources/Checkout.swift", additions: 40, deletions: 2), .init(path: "logo.png"),
                     .init(path: ".env", additions: 1, deletions: 0, flagged: true)],
@@ -49,6 +50,19 @@ struct CompanionMessageTests {
         let decoded = try #require(try CompanionMessage(line: lines[0]).snapshot)
         #expect(decoded == snapshot)
         #expect(decoded.agents[0].card?.files.map(\.name) == ["Checkout.swift", "logo.png", ".env"])
+        #expect(decoded.agents[0].card?.sessionStartedAt == now.addingTimeInterval(-3600))
+    }
+
+    @Test func aCardFromAMacBeforeTheClocksHasNone() throws {
+        let card = AgentWidgetSnapshot.Card(reportsSteps: true, turnUnderway: false, turnStartedAt: now.addingTimeInterval(-60),
+                                            turnEndedAt: now, sessionStartedAt: now.addingTimeInterval(-3600))
+        var object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(card)) as? [String: Any])
+        object["turnEndedAt"] = nil
+        object["sessionStartedAt"] = nil
+        let older = try JSONDecoder().decode(AgentWidgetSnapshot.Card.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(older.turnStartedAt == card.turnStartedAt)
+        #expect(older.turnEndedAt == nil)
+        #expect(older.sessionStartedAt == nil)
     }
 
     @Test func aWidgetSnapshotCarriesNoCards() throws {

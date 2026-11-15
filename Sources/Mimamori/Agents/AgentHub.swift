@@ -20,6 +20,10 @@ struct AgentPresence: Hashable {
     /// That turn's tool calls, oldest first.
     var turnSteps: [AgentToolCall] = []
     var turnStartedAt: Date? = nil
+    /// When that turn ended; nil while it runs.
+    var turnEndedAt: Date? = nil
+    /// When the session began, as far as Mimamori can tell.
+    var sessionStartedAt: Date? = nil
     /// Agent processes running in the worktree, for finding the app they run in.
     var processIDs: [Int32] = []
     /// The step waiting on your permission, when it is known.
@@ -1116,11 +1120,17 @@ final class AgentHub {
 
     private func sessionPresence(_ status: AgentStatus, processIDs: [Int32], running: [AgentProcess]) -> AgentPresence {
         let own = running.filter { processIDs.contains($0.pid) }
+        // A session Mimamori joined midway began no later than its process did.
+        var starts = own.map(\.startedAt)
+        if let heard = status.sessionStartedAt { starts.append(heard) }
+        let sessionStart = status.sessionStartUnheard ? starts.min() : status.sessionStartedAt
+        let turnEnd = status.turnStartedAt == nil ? status.lastTurnEndedAt : nil
         return AgentPresence(kind: status.agent, source: .hooks, activity: status.activity, since: status.since,
                              processCount: own.count, isBusy: own.contains(where: \.isBusy),
                              lastToolCall: status.recentToolCalls.last, toolCallsThisTurn: status.toolCallsThisTurn,
                              task: status.task, title: status.title, turnSteps: status.turnToolCalls,
                              turnStartedAt: status.turnStartedAt ?? status.lastTurnStartedAt,
+                             turnEndedAt: turnEnd, sessionStartedAt: sessionStart,
                              processIDs: processIDs,
                              awaitingCallID: status.pendingPermission?.callID,
                              permissionRequestID: pendingPermissions[status.key]?.id,

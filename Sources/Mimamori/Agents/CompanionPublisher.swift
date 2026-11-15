@@ -321,14 +321,11 @@ extension AppModel {
             copy.filePath = nil
             return copy
         }
-        let underway: Bool = switch presence.activity {
-        case .working, .needsPermission, .askedQuestion: true
-        case .ready, .idle: false
-        }
         let hooks = presence.source == .hooks
         let changes = row.session.changes
         return AgentWidgetSnapshot.Card(
-            reportsSteps: hooks, turnUnderway: hooks && underway, turnStartedAt: presence.turnStartedAt,
+            reportsSteps: hooks, turnUnderway: presence.turnUnderway, turnStartedAt: presence.turnStartedAt,
+            turnEndedAt: hooks ? presence.turnEndedAt : nil, sessionStartedAt: hooks ? presence.sessionStartedAt : nil,
             calls: hooks ? presence.turnSteps.map(call) : [], callsThisTurn: presence.toolCallsThisTurn,
             waitingCallID: presence.awaitingCallID, lastCall: hooks ? presence.lastToolCall.map(call) : nil,
             files: details ? row.files.map { file in

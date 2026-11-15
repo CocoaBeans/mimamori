@@ -90,8 +90,11 @@ public struct CompanionDemo: Sendable {
             files: role.files.count, toReview: role.toReview, flagged: role.files.filter(\.flagged).count,
             additions: role.files.compactMap(\.additions).reduce(0, +),
             deletions: role.files.compactMap(\.deletions).reduce(0, +))
+        // Each sample session began a little before its first turn.
         let card = AgentWidgetSnapshot.Card(
-            reportsSteps: true, turnUnderway: underway, turnStartedAt: t(role.turnStart), calls: calls,
+            reportsSteps: true, turnUnderway: underway, turnStartedAt: t(role.turnStart),
+            turnEndedAt: underway ? nil : calls.last?.finishedAt ?? since,
+            sessionStartedAt: t((role.earlier?.start ?? role.turnStart) - 240), calls: calls,
             callsThisTurn: calls.count, lastCall: underway ? nil : calls.last, files: role.files, changes: changes,
             subagents: [], commands: [])
         return AgentWidgetSnapshot.Agent(

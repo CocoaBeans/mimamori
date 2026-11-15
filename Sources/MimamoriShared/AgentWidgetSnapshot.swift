@@ -137,6 +137,10 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         /// A turn is under way (working, or waiting on you): its timeline runs to now.
         public var turnUnderway: Bool
         public var turnStartedAt: Date?
+        /// When that turn ended; nil while it runs, and from a Mac before the card's clocks.
+        public var turnEndedAt: Date?
+        /// When the session began, as far as the Mac can tell; nil from a Mac before the card's clocks.
+        public var sessionStartedAt: Date?
         /// The turn's tool calls, oldest first, paths relative to the worktree. Without their
         /// targets when tasks and steps are kept on the Mac.
         public var calls: [AgentToolCall]
@@ -157,13 +161,16 @@ public struct AgentWidgetSnapshot: Codable, Sendable, Hashable {
         /// Commands it runs in the background, running or finished in the last minute.
         public var commands: [Command]?
 
-        public init(reportsSteps: Bool, turnUnderway: Bool, turnStartedAt: Date? = nil, calls: [AgentToolCall] = [],
+        public init(reportsSteps: Bool, turnUnderway: Bool, turnStartedAt: Date? = nil, turnEndedAt: Date? = nil,
+                    sessionStartedAt: Date? = nil, calls: [AgentToolCall] = [],
                     callsThisTurn: Int = 0, waitingCallID: String? = nil, lastCall: AgentToolCall? = nil,
                     files: [File] = [], changes: Changes = Changes(), others: [Other] = [],
                     subagents: [Subagent]? = nil, commands: [Command]? = nil) {
             self.reportsSteps = reportsSteps
             self.turnUnderway = turnUnderway
             self.turnStartedAt = turnStartedAt
+            self.turnEndedAt = turnEndedAt
+            self.sessionStartedAt = sessionStartedAt
             self.calls = calls
             self.callsThisTurn = callsThisTurn
             self.waitingCallID = waitingCallID
