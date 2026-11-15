@@ -33,13 +33,21 @@ struct CompanionSettingsSheet: View {
                 } header: {
                     Text("Notify me when")
                 } footer: {
-                    Text("As your Mac does. Without staying connected below, they come only while Mimamori is open.")
+                    if BackgroundKeepAlive.isAvailable {
+                        Text("As your Mac does. Without staying connected below, they come only while Mimamori is open.")
+                    } else {
+                        Text("As your Mac does, while Mimamori is open.")
+                    }
                 }
 
-                Section {
-                    Toggle("Stay connected in the background", isOn: $staysConnected)
-                } footer: {
-                    Text("Mimamori keeps running after you leave it, playing silence so iOS doesn't suspend it, and keeps in touch with your Mac so it can tell you when an agent needs you. Your own music keeps playing. It uses more battery: turn it off when you don't need it.")
+                // App Store builds can't keep running in the background, so they have no switch for it.
+                if BackgroundKeepAlive.isAvailable {
+                    Section {
+                        Toggle("Stay connected in the background", isOn: $staysConnected)
+                            .help("Keep running after you leave Mimamori, to tell you when an agent needs you")
+                    } footer: {
+                        Text("Mimamori keeps running after you leave it, playing silence so iOS doesn't suspend it, and keeps in touch with your Mac so it can tell you when an agent needs you. Your own music keeps playing. It uses more battery: turn it off when you don't need it.")
+                    }
                 }
 
                 Section {

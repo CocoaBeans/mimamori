@@ -44,7 +44,7 @@ struct MimamoriCompanionApp: App {
                     case .background:
                         // Staying connected, the app keeps running and tells you as agents change;
                         // otherwise iOS suspends it, so it lets go of the Mac first.
-                        if staysConnected, model.chosen != nil {
+                        if staysConnected, BackgroundKeepAlive.isAvailable, model.chosen != nil {
                             keepAlive.start()
                         } else {
                             model.suspend()

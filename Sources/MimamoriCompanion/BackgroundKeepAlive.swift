@@ -5,12 +5,20 @@ import os
 /// and can tell you when an agent needs you. iOS doesn't suspend an app that is playing audio.
 ///
 /// For builds of your own only: App Review allows background audio only for audio you can hear
-/// (guideline 2.5.4), so an App Store build leaves the `audio` background mode and this out. It
-/// mixes with other audio, so your own music keeps playing, and stops when the app comes back to
-/// the front, where it isn't needed.
+/// (guideline 2.5.4), so an App Store build leaves the `audio` background mode out of its
+/// Info.plist, and with it this. It mixes with other audio, so your own music keeps playing, and
+/// stops when the app comes back to the front, where it isn't needed.
 @MainActor
 final class BackgroundKeepAlive {
     private static let log = Logger(subsystem: "com.kevinross.Mimamori.Companion", category: "keep-alive")
+
+    /// Whether this build may keep running in the background: only with the `audio` background
+    /// mode, which the App Store configuration's Info.plist leaves out. The plist is the one switch,
+    /// so the setting and the keep-alive can't disagree with what the build declares.
+    static let isAvailable: Bool = {
+        let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] ?? []
+        return modes.contains("audio")
+    }()
 
     private var player: AVAudioPlayer?
     private var observers: [NSObjectProtocol] = []

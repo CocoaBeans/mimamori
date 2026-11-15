@@ -95,6 +95,7 @@
 		7A1C00000000000000000016 /* MimamoriWidgets-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MimamoriWidgets-Info.plist"; sourceTree = "<group>"; };
 		7A1C00000000000000000004 /* MimamoriShared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MimamoriShared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A1C00000000000000000005 /* MimamoriCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MimamoriCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1C00000000000000000018 /* MimamoriCompanion-AppStore-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MimamoriCompanion-AppStore-Info.plist"; sourceTree = "<group>"; };
 		7A1C00000000000000000017 /* MimamoriCompanion-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MimamoriCompanion-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -197,6 +198,7 @@
 				7A1C00000000000000000011 /* AppIcon.icns */,
 				7A1C00000000000000000012 /* Info.plist */,
 				7A1C00000000000000000014 /* Mimamori.entitlements */,
+				7A1C00000000000000000018 /* MimamoriCompanion-AppStore-Info.plist */,
 				7A1C00000000000000000017 /* MimamoriCompanion-Info.plist */,
 				7A1C00000000000000000016 /* MimamoriWidgets-Info.plist */,
 				7A1C00000000000000000015 /* MimamoriWidgets.entitlements */,
@@ -559,6 +561,29 @@
 			};
 			name = Release;
 		};
+		7A1C00000000000000000C03 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 6;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 555LXJXR4U;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.3.0;
+				MIMAMORI_FEED_URL = "https://github.com/CocoaBeans/mimamori/releases/latest/download/appcast.xml";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+			};
+			name = AppStore;
+		};
 		7A1C00000000000000000C11 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -593,6 +618,23 @@
 			};
 			name = Release;
 		};
+		7A1C00000000000000000C13 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/Mimamori.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = AppStore;
+		};
 		7A1C00000000000000000C21 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -618,6 +660,19 @@
 				SWIFT_INSTALL_OBJC_HEADER = NO;
 			};
 			name = Release;
+		};
+		7A1C00000000000000000C23 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACH_O_TYPE = staticlib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Core;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SKIP_INSTALL = YES;
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+			};
+			name = AppStore;
 		};
 		7A1C00000000000000000C31 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -655,6 +710,24 @@
 			};
 			name = Release;
 		};
+		7A1C00000000000000000C33 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Resources/MimamoriWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = "Resources/MimamoriWidgets-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = AppStore;
+		};
 		7A1C00000000000000000C41 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -688,6 +761,23 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		7A1C00000000000000000C43 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MACH_O_TYPE = staticlib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Shared;
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_INSTALL_OBJC_HEADER = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = AppStore;
 		};
 		7A1C00000000000000000C51 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -739,6 +829,31 @@
 			};
 			name = Release;
 		};
+		7A1C00000000000000000C53 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Resources/MimamoriCompanion-AppStore-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Mimamori;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Mimamori finds the Macs running Mimamori on your network, to show their agents.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kevinross.Mimamori.Companion;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = AppStore;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -747,6 +862,7 @@
 			buildConfigurations = (
 				7A1C00000000000000000C11 /* Debug */,
 				7A1C00000000000000000C12 /* Release */,
+				7A1C00000000000000000C13 /* AppStore */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -756,6 +872,7 @@
 			buildConfigurations = (
 				7A1C00000000000000000C21 /* Debug */,
 				7A1C00000000000000000C22 /* Release */,
+				7A1C00000000000000000C23 /* AppStore */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -765,6 +882,7 @@
 			buildConfigurations = (
 				7A1C00000000000000000C01 /* Debug */,
 				7A1C00000000000000000C02 /* Release */,
+				7A1C00000000000000000C03 /* AppStore */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -774,6 +892,7 @@
 			buildConfigurations = (
 				7A1C00000000000000000C31 /* Debug */,
 				7A1C00000000000000000C32 /* Release */,
+				7A1C00000000000000000C33 /* AppStore */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -783,6 +902,7 @@
 			buildConfigurations = (
 				7A1C00000000000000000C41 /* Debug */,
 				7A1C00000000000000000C42 /* Release */,
+				7A1C00000000000000000C43 /* AppStore */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -792,6 +912,7 @@
 			buildConfigurations = (
 				7A1C00000000000000000C51 /* Debug */,
 				7A1C00000000000000000C52 /* Release */,
+				7A1C00000000000000000C53 /* AppStore */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -230,7 +230,7 @@ struct HelpTopic: Identifiable {
             Tap an agent on the iPhone to see its list of actions: every step of the turn under way, newest first, then the turns before it under their prompts, with when each step ran, how long it took, and whether it failed or waits on you. With **Show tasks and steps in widgets** off, the steps keep their kind and times but not what they acted on.
 
             ## Notifications
-            The iPhone tells you when an agent needs you, finishes a turn, or edits the same file as another, as your Mac does; the gear on the iPhone chooses which. They come while Mimamori is open on the iPhone, or always with **Stay connected in the background** on there: Mimamori then keeps running after you leave it, playing silence so iOS doesn't suspend it, which uses more battery.
+            The iPhone tells you when an agent needs you, finishes a turn, or edits the same file as another, as your Mac does; the gear on the iPhone chooses which. They come while Mimamori is open on the iPhone, or always with **Stay connected in the background** on there: Mimamori then keeps running after you leave it, playing silence so iOS doesn't suspend it, which uses more battery. That switch is in builds made from source; the App Store version can't keep running in the background, so its notifications come only while it's open.
 
             To keep your agents in view on a stand beside your Mac, turn on **Keep the screen on** in the iPhone's settings: it doesn't dim or lock while Mimamori is open, by default only while it's charging.
 
