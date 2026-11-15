@@ -14,7 +14,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   shows a sample Mac's agents, which you can allow, deny and answer, Face ID included, without
   anything leaving the iPhone ([#99](https://github.com/CocoaBeans/mimamori/pull/99)).
 - Agent cards, on the Mac and the iPhone, show how long the turn and the session have run,
-  "turn 4m · session 1h 12m", beside the timer that restarts at each step.
+  "turn 4m · session 1h 12m", beside the timer that restarts at each step
+  ([#102](https://github.com/CocoaBeans/mimamori/pull/102)).
 
 ## [1.4.0] - 2026-11-11
 
