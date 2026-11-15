@@ -59,6 +59,22 @@ struct CompanionSettingsSheet: View {
                 } footer: {
                     Text("While Mimamori is open, the iPhone doesn't dim or lock, so your agents stay in view on a stand beside your Mac. Only while charging saves your battery when it's unplugged.")
                 }
+
+                // The App Store asks for the privacy policy within the app too (guideline 5.1.1).
+                Section {
+                    Link(destination: Self.privacyPolicy) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                    }
+                    .help("Read what Mimamori keeps and sends, on its website")
+                    .accessibilityHint("Opens the privacy policy in Safari")
+                    Link(destination: Self.support) {
+                        Label("Support", systemImage: "questionmark.circle")
+                    }
+                    .help("Ask a question or report a problem on GitHub")
+                    .accessibilityHint("Opens Mimamori's issues on GitHub in Safari")
+                } footer: {
+                    Text("Mimamori collects nothing about you: it talks only to the Macs you pair it with.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -77,6 +93,9 @@ struct CompanionSettingsSheet: View {
             }
         }
     }
+
+    static let privacyPolicy = URL(string: "https://cocoabeans.github.io/mimamori/privacy.html")!
+    static let support = URL(string: "https://github.com/CocoaBeans/mimamori/issues")!
 
     private func checkNotifications() async {
         notificationsDenied = await Self.authorizationStatus() == .denied
