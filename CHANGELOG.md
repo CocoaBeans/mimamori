@@ -20,6 +20,13 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - The iPhone app's settings link to Mimamori's privacy policy and to support
   ([#107](https://github.com/CocoaBeans/mimamori/pull/107)).
 
+### Fixed
+
+- The iPhone's Live Activity no longer goes stale while the app runs in the background: it's
+  updated at once when who needs you changes, and otherwise at most every 30 seconds, as iOS
+  stopped taking updates sent with every step. The background log says whether iOS takes them
+  ([#109](https://github.com/CocoaBeans/mimamori/pull/109)).
+
 ## [1.5.0] - 2026-11-15
 
 ### Added
