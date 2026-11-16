@@ -14,6 +14,11 @@ struct MimamoriCompanionApp: App {
     @AppStorage(ScreenKeeper.onlyWhileCharging) private var onlyWhileCharging = true
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // Opens the background log, which notes the start and whether iOS ended the app before.
+        _ = BackgroundLog.shared
+    }
+
     private var screenStaysOn: Bool {
         ScreenKeeper.staysOn(asked: keepsScreenOn, onlyWhileCharging: onlyWhileCharging,
                              active: scenePhase == .active, charging: screen.isCharging)
@@ -45,6 +50,7 @@ struct MimamoriCompanionApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .active:
+                        BackgroundLog.shared.cameToFront()
                         let keptAlive = keepAlive.isRunning
                         keepAlive.stop()
                         model.liveActivity.appIsActive = true
@@ -58,6 +64,9 @@ struct MimamoriCompanionApp: App {
                         if staysConnected, BackgroundKeepAlive.isAvailable, model.chosen != nil || model.demo != nil {
                             keepAlive.start()
                         } else {
+                            BackgroundLog.shared.add(.app, BackgroundKeepAlive.isAvailable && !staysConnected
+                                ? "Went to the background, not staying connected: Stay connected is off"
+                                : "Went to the background, not staying connected")
                             model.liveActivity.end()
                             model.suspend()
                         }

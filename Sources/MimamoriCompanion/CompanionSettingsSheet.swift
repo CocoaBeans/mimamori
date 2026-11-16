@@ -78,6 +78,18 @@ struct CompanionSettingsSheet: View {
                     Text("While Mimamori is open, the iPhone doesn't dim or lock, so your agents stay in view on a stand beside your Mac. Only while charging saves your battery when it's unplugged.")
                 }
 
+                Section {
+                    NavigationLink {
+                        BackgroundLogView(log: BackgroundLog.shared)
+                    } label: {
+                        Label("Background Log", systemImage: "list.bullet.rectangle")
+                    }
+                    .help("What the app did in the background, and when it stopped running")
+                    .accessibilityHint("Shows what the app did in the background")
+                } footer: {
+                    Text("When the Live Activity says it hasn't been updated lately, this says when the app stopped running, and why if iOS said. It stays on this iPhone.")
+                }
+
                 // The App Store asks for the privacy policy within the app too (guideline 5.1.1).
                 Section {
                     Link(destination: Self.privacyPolicy) {

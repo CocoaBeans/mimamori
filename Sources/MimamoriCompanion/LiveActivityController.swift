@@ -40,6 +40,8 @@ final class LiveActivityController {
     private var sending: Task<Void, Never>?
     private var refresher: Task<Void, Never>?
     private var watcher: Task<Void, Never>?
+    /// The background log already says Live Activities are off.
+    private var loggedDisabled = false
     /// Whether the app is in front.
     var appIsActive = true
 
@@ -69,6 +71,8 @@ final class LiveActivityController {
         }
         let state = AgentsActivityState(snapshot: snapshot, connected: connected)
         if let activity, activity.attributes.macName != macName || isDueForRenewal {
+            BackgroundLog.shared.add(.liveActivity, isDueForRenewal ? "Renewing the Live Activity before iOS's 8 hours run out"
+                                                                   : "Another Mac: starting its own Live Activity")
             end()
         }
         latest = state
@@ -89,6 +93,7 @@ final class LiveActivityController {
     /// Takes the Live Activity down at once.
     func end() {
         guard let activity else { return }
+        BackgroundLog.shared.add(.liveActivity, "Took the Live Activity down")
         clear()
         Task { await activity.end(nil, dismissalPolicy: .immediate) }
     }
@@ -99,7 +104,12 @@ final class LiveActivityController {
     }
 
     private func start(macName: String, state: AgentsActivityState) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            if !loggedDisabled { BackgroundLog.shared.add(.liveActivity, "Live Activities are off for Mimamori in Settings") }
+            loggedDisabled = true
+            return
+        }
+        loggedDisabled = false
         do {
             let activity = try Activity.request(attributes: AgentsActivityAttributes(macName: macName),
                                                 content: Self.content(state), pushType: nil)
@@ -108,8 +118,10 @@ final class LiveActivityController {
             sent = state
             watch(activity)
             keepFresh()
+            BackgroundLog.shared.add(.liveActivity, "Started the Live Activity for \(macName)")
         } catch {
             Self.log.error("Couldn't start the Live Activity: \(error.localizedDescription, privacy: .public)")
+            BackgroundLog.shared.add(.liveActivity, "Couldn't start the Live Activity: \(error.localizedDescription)")
         }
     }
 
@@ -154,10 +166,18 @@ final class LiveActivityController {
     private func watch(_ activity: Activity<AgentsActivityAttributes>) {
         watcher?.cancel()
         watcher = Task { [weak self] in
-            for await state in activity.activityStateUpdates where state == .dismissed || state == .ended {
+            for await state in activity.activityStateUpdates {
                 guard let self, self.activity?.id == activity.id else { return }
-                self.clear()
-                return
+                switch state {
+                case .dismissed, .ended:
+                    BackgroundLog.shared.add(.liveActivity, state == .dismissed ? "The Live Activity was swiped away" : "iOS ended the Live Activity")
+                    self.clear()
+                    return
+                case .stale:
+                    BackgroundLog.shared.add(.liveActivity, "The Live Activity went stale: not updated for \(CompanionEventLog.duration(Self.staleAfter))")
+                default:
+                    break
+                }
             }
         }
     }

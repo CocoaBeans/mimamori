@@ -46,8 +46,14 @@ final class CompanionModel {
     /// Attempts at the chosen Mac since it last connected, to try the next service each time.
     @ObservationIgnored private var attempts = 0
     private(set) var status: Status = .unpaired {
-        didSet { if status != oldValue { updateLiveActivity() } }
+        didSet {
+            guard status != oldValue else { return }
+            updateLiveActivity()
+            noteConnection()
+        }
     }
+    /// The last connection change the background log has, so retries don't repeat it.
+    @ObservationIgnored private var lastConnectionNote: String?
     private(set) var snapshot: AgentWidgetSnapshot? {
         didSet { updateLiveActivity() }
     }
@@ -220,6 +226,21 @@ final class CompanionModel {
 
     /// Brings the Live Activity in line with the Mac on screen: the demo's or the chosen one's,
     /// marked out of touch while not connected.
+    /// Puts connection changes in the background log: connected, lost touch, looking. Connecting
+    /// attempts aren't worth a line each.
+    private func noteConnection() {
+        let note: String? = switch status {
+        case .connected(let name): demo != nil ? "Showing the demo" : "Connected to \(name)\(isAway ? " over Tailscale" : "")"
+        case .unavailable(let reason): "Not connected: \(reason)"
+        case .searching: "Looking for \(chosen?.name ?? "the Mac")"
+        case .unpaired: "Not paired with a Mac"
+        case .connecting: nil
+        }
+        guard let note, note != lastConnectionNote else { return }
+        lastConnectionNote = note
+        BackgroundLog.shared.add(.connection, note)
+    }
+
     func updateLiveActivity() {
         let connected = if case .connected = status { true } else { false }
         let macName = status == .unpaired ? nil : demo?.macName ?? chosen?.name

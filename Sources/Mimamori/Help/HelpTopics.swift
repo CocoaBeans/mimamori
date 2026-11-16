@@ -244,6 +244,7 @@ struct HelpTopic: Identifiable {
 
             ## If it doesn't connect
             - The iPhone and the Mac need to be on the same network, or both on Tailscale, and the iPhone unplugged from the Mac's cable works best.
+            - **Background Log**, in the iPhone's settings, shows when the app connected, lost touch or stopped running in the background, and why if iOS said: the place to look when its Live Activity says it hasn't been updated lately.
             - Away from home over Tailscale, the iPhone needs to have connected to the Mac at home once since this version, to learn its address.
             - Both ask, the first time, to find devices on your local network. If you said no, turn Mimamori on in **Privacy & Security › Local Network**: System Settings on the Mac, Settings on the iPhone.
             """),
