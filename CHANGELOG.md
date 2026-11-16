@@ -10,6 +10,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Added
 
+- **Background Log** in the iPhone's settings: what the app did in the background, and when and
+  why it stopped running, to see why its Live Activity says it hasn't been updated lately
+  ([#108](https://github.com/CocoaBeans/mimamori/pull/108)).
 - A Live Activity on the iPhone: with **Stay connected in the background** on, your agents show on
   the Lock Screen, in the Dynamic Island and on an Apple Watch, who needs you first, with their
   timers. In builds of your own, as staying connected is
