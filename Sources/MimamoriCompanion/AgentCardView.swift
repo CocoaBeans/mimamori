@@ -213,29 +213,54 @@ struct AgentCardView: View {
         }
     }
 
+    /// One line when it fits. Otherwise what the agent is doing gets a line of its own and the
+    /// clocks and changes go below it: squeezed beside them, "26 tool calls this turn" wrapped a
+    /// word to a line.
     private var compactFooter: some View {
-        HStack(spacing: 8) {
-            if let lastCall {
-                Text(lastCall)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } else if let count = card?.callsThisTurn, card?.reportsSteps == true, count > 0 {
-                Text(count == 1 ? "1 tool call this turn" : "\(count) tool calls this turn")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                footerActivity
+                Spacer(minLength: 6)
+                footerStatus
             }
-            if let running = card?.subagents?.filter({ $0.finishedAt == nil }).count, running > 0 {
-                Label(running == 1 ? "1 subagent" : "\(running) subagents", systemImage: AgentToolCategory.subagent.symbol)
-                    .foregroundStyle(AgentToolCategory.subagent.color)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) { footerActivity }
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    footerStatus
+                }
             }
-            if let running = card?.commands?.filter({ $0.finishedAt == nil }).count, running > 0 {
-                Label("\(running) in the background", systemImage: AgentToolCategory.command.symbol)
-                    .foregroundStyle(AgentToolCategory.command.color)
-            }
-            Spacer(minLength: 6)
-            AgentClocks(parts: clocks)
-            if let changes = card?.changes { WorktreeChangeSummary(changes: changes) }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
+    }
+
+    /// The last call or the turn's count, and subagents and commands still running; one line each.
+    @ViewBuilder private var footerActivity: some View {
+        if let lastCall {
+            Text(lastCall)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        } else if let count = card?.callsThisTurn, card?.reportsSteps == true, count > 0 {
+            Text(count == 1 ? "1 tool call this turn" : "\(count) tool calls this turn")
+                .lineLimit(1)
+        }
+        if let running = card?.subagents?.filter({ $0.finishedAt == nil }).count, running > 0 {
+            Label(running == 1 ? "1 subagent" : "\(running) subagents", systemImage: AgentToolCategory.subagent.symbol)
+                .foregroundStyle(AgentToolCategory.subagent.color)
+                .lineLimit(1)
+        }
+        if let running = card?.commands?.filter({ $0.finishedAt == nil }).count, running > 0 {
+            Label("\(running) in the background", systemImage: AgentToolCategory.command.symbol)
+                .foregroundStyle(AgentToolCategory.command.color)
+                .lineLimit(1)
+        }
+    }
+
+    /// How long the turn and session have run, and what changed in the worktree.
+    @ViewBuilder private var footerStatus: some View {
+        AgentClocks(parts: clocks)
+        if let changes = card?.changes { WorktreeChangeSummary(changes: changes) }
     }
 
     @ViewBuilder private var details: some View {
