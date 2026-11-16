@@ -22,6 +22,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- On the iPhone, a compact agent card no longer squeezes "26 tool calls this turn" into a column a
+  word wide beside its clocks: when they don't fit, the clocks and changes go on a line below
+  ([#110](https://github.com/CocoaBeans/mimamori/pull/110)).
 - The iPhone's Live Activity no longer goes stale while the app runs in the background: it's
   updated at once when who needs you changes, and otherwise at most every 30 seconds, as iOS
   stopped taking updates sent with every step. The background log says whether iOS takes them
