@@ -26,6 +26,35 @@ struct AgentsActivityStateTests {
         #expect(state.summary == "1 needs you · 2 working")
     }
 
+    /// Who needs you goes out at once; a step moving on waits for the next routine update.
+    @Test func onlyChangesInWhoNeedsYouOrWhatAgentsDoAreUrgent() {
+        let working = agent(.working, path: "/repo/a", steps: [.init(tool: "Edit", target: "Cart.swift", running: true)])
+        let base = AgentsActivityState(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [working]), connected: true)
+        #expect(base.isUrgent(comparedTo: nil))
+        #expect(!base.isUrgent(comparedTo: base))
+
+        // The next step, a new status line and a later start: routine.
+        var stepped = working
+        stepped.steps = [.init(tool: "Bash", target: "swift test", running: true)]
+        stepped.status = "working · Bash"
+        stepped.since = now.addingTimeInterval(30)
+        let next = AgentsActivityState(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [stepped]), connected: true)
+        #expect(!next.isUrgent(comparedTo: base))
+
+        // It needs you, finishes its turn, another agent appears, or the phone loses touch: urgent.
+        let needs = AgentsActivityState(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [agent(.needsYou, path: "/repo/a")]),
+                                        connected: true)
+        #expect(needs.isUrgent(comparedTo: base))
+        let ready = AgentsActivityState(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [agent(.ready, path: "/repo/a")]),
+                                        connected: true)
+        #expect(ready.isUrgent(comparedTo: base))
+        let two = AgentsActivityState(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [working, agent(.working, path: "/repo/b")]),
+                                      connected: true)
+        #expect(two.isUrgent(comparedTo: base))
+        let lost = AgentsActivityState(snapshot: AgentWidgetSnapshot(writtenAt: now, agents: [working]), connected: false)
+        #expect(lost.isUrgent(comparedTo: base))
+    }
+
     @Test func summarySaysHowManyWhenNoneNeedYouOrWork() {
         #expect(AgentsActivityState(snapshot: nil, connected: true).summary == "No agents at work")
         let ready = AgentWidgetSnapshot(writtenAt: now, agents: [agent(.ready, path: "/repo/a"), agent(.ready, path: "/repo/b")])

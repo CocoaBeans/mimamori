@@ -43,6 +43,19 @@ public struct AgentsActivityState: Codable, Sendable, Hashable {
     /// The agent the Dynamic Island shows: the most pressing.
     public var featured: AgentWidgetSnapshot.Agent? { agents.first }
 
+    /// Whether going from `old` to this should reach the Lock Screen at once: who needs you, the
+    /// connection, which agents are shown, or one of them changing state (working, ready, needs
+    /// you). A step or a task moving on can wait for the next routine update, as iOS limits how
+    /// often an app may update a Live Activity; the timers count by themselves meanwhile.
+    public func isUrgent(comparedTo old: AgentsActivityState?) -> Bool {
+        guard let old else { return true }
+        if connected != old.connected || needingYou != old.needingYou || working != old.working || total != old.total {
+            return true
+        }
+        guard agents.map(\.id) == old.agents.map(\.id) else { return true }
+        return zip(agents, old.agents).contains { $0.state != $1.state }
+    }
+
     /// "1 needs you · 2 working", or how many agents there are; "No agents at work" with none.
     public var summary: String {
         var parts: [String] = []
