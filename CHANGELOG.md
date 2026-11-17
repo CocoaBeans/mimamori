@@ -8,6 +8,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-16
+
 ### Added
 
 - **Background Log** in the iPhone's settings: what the app did in the background, and when and
@@ -304,7 +306,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Markdown.
 - Automatic updates through Sparkle.
 
-[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/CocoaBeans/mimamori/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/CocoaBeans/mimamori/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/CocoaBeans/mimamori/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/CocoaBeans/mimamori/compare/v1.2.1...v1.3.0
