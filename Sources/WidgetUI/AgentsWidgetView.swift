@@ -160,6 +160,8 @@ struct StateBadge: View {
 /// for what is going on now; a time of day, which never goes stale, for the rest.
 struct StateTimer: View {
     let agent: AgentWidgetSnapshot.Agent
+    /// In place of the state's colour, as for `StateBadge`: the companion's Waiting on tasks teal.
+    var tint: Color? = nil
 
     var body: some View {
         HStack(spacing: 3) {
@@ -176,7 +178,7 @@ struct StateTimer: View {
                 Text(agent.since, style: .time)
             }
         }
-        .foregroundStyle(agent.state.tint)
+        .foregroundStyle(tint ?? agent.state.tint)
     }
 }
 

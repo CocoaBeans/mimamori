@@ -6,7 +6,10 @@ import MimamoriCore
 // CPU core; the tint and the status text already change as the agent does.
 extension AgentPresence {
     var tint: Color {
-        switch (source, activity) {
+        // Its own part done, waiting on what it started: the Waiting on tasks group's teal, so the
+        // card, its timer and its icon match the group it's listed under, not plain ready green.
+        if collision == nil, waitsOnBackground { return .teal }
+        return switch (source, activity) {
         case (.hooks, .working): .blue
         case (.hooks, .needsPermission): .orange
         case (.hooks, .askedQuestion): .orange

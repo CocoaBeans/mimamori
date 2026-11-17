@@ -123,12 +123,18 @@ struct AgentCardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, detailed ? 10 : 8)
         .labelStyle(CardLabelStyle())
-        .background { CardFrame(tint: agent.state.tint, inList: inList) }
+        .background { CardFrame(tint: tint, inList: inList) }
     }
+
+    /// The card's colour: its state's, or the Waiting on tasks group's teal while it waits on what
+    /// it started, so the card matches the group it's listed under.
+    private var waitsOnTasks: Bool { AgentGroup(agent) == .waitingOnTasks }
+    private var tint: Color { waitsOnTasks ? AgentGroup.waitingOnTasks.tint : agent.state.tint }
 
     private var summary: some View {
         HStack(alignment: .top, spacing: 10) {
-            StateBadge(state: agent.state, symbol: agent.symbol, collision: agent.collision != nil, size: 28)
+            StateBadge(state: agent.state, symbol: agent.symbol, collision: agent.collision != nil, size: 28,
+                       tint: waitsOnTasks ? tint : nil)
             VStack(alignment: .leading, spacing: detailed ? 5 : 3) {
                 header
                 Text("\(agent.agent) · \(statusText)")
@@ -191,12 +197,12 @@ struct AgentCardView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize()
                 }
-                StateTimer(agent: agent)
+                StateTimer(agent: agent, tint: waitsOnTasks ? tint : nil)
                     .font(.caption.weight(.medium))
                     .lineLimit(1)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(agent.state.tint.opacity(0.16), in: Capsule())
+                    .background(tint.opacity(0.16), in: Capsule())
                     .fixedSize()
             }
             HStack(spacing: 4) {
