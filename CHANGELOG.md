@@ -22,6 +22,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ### Fixed
 
+- An agent under **Waiting on tasks** is tinted teal like its group, on the Mac and the iPhone,
+  instead of keeping ready green or working blue
+  ([#111](https://github.com/CocoaBeans/mimamori/pull/111)).
 - On the iPhone, a compact agent card no longer squeezes "26 tool calls this turn" into a column a
   word wide beside its clocks: when they don't fit, the clocks and changes go on a line below
   ([#110](https://github.com/CocoaBeans/mimamori/pull/110)).
