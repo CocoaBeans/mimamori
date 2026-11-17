@@ -8,6 +8,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Added
+
+- **Get the iPhone App** in Settings › iPhone opens Mimamori Companion, now free on the App Store,
+  and the README, website and Help point to it
+  ([#113](https://github.com/CocoaBeans/mimamori/pull/113)).
+
 ## [1.5.1] - 2026-11-16
 
 ### Added
