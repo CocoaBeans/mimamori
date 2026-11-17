@@ -5,6 +5,9 @@ import SwiftUI
 
 /// Settings › iPhone: show the agents on paired iPhones, pair one, and remove one.
 struct CompanionSettingsView: View {
+    /// Mimamori Companion on the App Store.
+    static let appStore = URL(string: "https://apps.apple.com/app/id6832420977")!
+
     @Environment(AppModel.self) private var model
     @State private var pairing = false
     @State private var removing: CompanionPairings.Phone?
@@ -45,10 +48,15 @@ struct CompanionSettingsView: View {
                 .help(companion.isOn
                       ? "Show a code to scan with your iPhone's camera"
                       : "Turn on Show agents on your iPhone first")
+                Link(destination: Self.appStore) {
+                    Label("Get the iPhone App", systemImage: "arrow.up.right.square")
+                }
+                .help("Open Mimamori Companion on the App Store, free for iOS 18 or later")
+                .accessibilityHint("Opens the App Store")
             } header: {
                 Text("Paired iPhones")
             } footer: {
-                Text("Install Mimamori on your iPhone, then choose Pair iPhone… and scan the code with the iPhone's camera. Tasks and steps reach the iPhone only when \u{201C}Show tasks and steps in widgets\u{201D} is on, in Settings › Agents.")
+                Text("Install Mimamori Companion on your iPhone from the App Store, then choose Pair iPhone… and scan the code with the iPhone's camera. Tasks and steps reach the iPhone only when \u{201C}Show tasks and steps in widgets\u{201D} is on, in Settings › Agents.")
             }
 
             Section {

@@ -211,7 +211,7 @@ struct HelpTopic: Identifiable {
             actions: [.settings(.companion, "iPhone Settings…")],
             markdown: """
             ## Pairing
-            1. Install Mimamori on your iPhone. It isn't on the App Store yet: it's built from Mimamori's source in Xcode, as the README describes.
+            1. Install **Mimamori Companion** on your iPhone, free on the App Store (**Get the iPhone App** in Settings › iPhone opens it). Built from Mimamori's source instead, as the README describes, it can also stay connected in the background and show a Live Activity.
             2. In **Settings › iPhone**, turn on **Show agents on your iPhone**, then choose **Pair iPhone…**.
             3. Point the iPhone's Camera at the code, and tap the link to open it in Mimamori.
 
