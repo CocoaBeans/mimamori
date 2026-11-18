@@ -19,6 +19,7 @@ public enum AgentEventTranslator {
         ("turn_end", "the agent finished and is ready for your next prompt"),
         ("turn_failed", "the turn ended on an error"),
         ("session_end", "the session closed"),
+        ("tasks_changed", "what the agent runs in the background changed, listed in background_tasks"),
     ]
 
     static let plainNames: [String: HookEvent.Name] = [
@@ -26,6 +27,8 @@ public enum AgentEventTranslator {
         "tool_start": .preToolUse, "tool_end": .postToolUse, "tool_failed": .postToolUseFailure,
         "needs_permission": .permissionRequest, "question": .notification,
         "turn_end": .stop, "turn_failed": .stopFailure, "session_end": .sessionEnd,
+        // Changes no state by itself: only its background_tasks are read.
+        "tasks_changed": .other,
     ]
 
     /// Gemini CLI's own names; it shares SessionStart, SessionEnd and Notification with Claude Code.

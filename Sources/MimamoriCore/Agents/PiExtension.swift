@@ -24,7 +24,7 @@ public enum PiExtension {
     /// The events it posts: Mimamori's plain names, and Claude Code's SubagentStop for a subagent's end.
     public static let postedEvents = [
         "session_start", "turn_start", "tool_start", "tool_end", "tool_failed", "needs_permission", "turn_end",
-        "turn_failed", "session_end", "SubagentStop",
+        "turn_failed", "session_end", "tasks_changed", "SubagentStop",
     ]
 
     /// The extension's source for `host`, posting to `socketPath`: as a path under the home folder
@@ -66,6 +66,10 @@ public enum PiExtension {
     const mainSessions = new Map<string, string>();
     // By session, the prompt that starts its next turn.
     const prompts = new Map<string, string>();
+    // By session, its background jobs as last posted, and what checks on them while it waits:
+    // a job can end with no event of the agent's to say so.
+    const postedJobs = new Map<string, string>();
+    const jobWatches = new Map<string, ReturnType<typeof setInterval>>();
 
     // Posts over the socket with node:http, which both Node (pi) and Bun (OMP) have. Settles
     // whatever happens, within a second.
@@ -114,9 +118,57 @@ public enum PiExtension {
       try { return ctx?.sessionManager?.getSessionId?.() || undefined; } catch { return undefined; }
     }
 
+    // OMP's background jobs (a command it moved to the background, …), listed as Claude Code lists
+    // its own in background_tasks. Subagents are left out: their own events tell of them. pi has
+    // no jobs, and undefined leaves the field out.
+    function jobs(ctx: any): Record<string, unknown>[] | undefined {
+      let snapshot: any;
+      try { snapshot = ctx?.getAsyncJobSnapshot?.(); } catch { return undefined; }
+      if (!Array.isArray(snapshot?.running)) return undefined;
+      return snapshot.running
+        .filter((job: any) => typeof job?.id === "string" && !job.agentId)
+        .map((job: any) => ({ id: job.id, type: "shell", status: "running", description: job.intent || job.label }));
+    }
+
+    function jobKey(list: Record<string, unknown>[]): string {
+      return list.map(job => job.id).join(",");
+    }
+
+    function unwatchJobs(id: string): void {
+      const timer = jobWatches.get(id);
+      if (timer !== undefined) clearInterval(timer);
+      jobWatches.delete(id);
+    }
+
+    // While jobs run, checks on them every few seconds, and posts the list when it changes: the
+    // agent waiting on them sends nothing until one wakes it, if it does.
+    function watchJobs(id: string, ctx: any): void {
+      if (jobWatches.has(id)) return;
+      const timer = setInterval(() => {
+        const list = sessionId(ctx) === id ? jobs(ctx) : undefined;
+        if (list === undefined) { unwatchJobs(id); return; }
+        if (jobKey(list) !== postedJobs.get(id)) {
+          postedJobs.set(id, jobKey(list));
+          post({ event: "tasks_changed", session_id: id, cwd: ctx?.cwd, background_tasks: list });
+        }
+        if (list.length === 0) unwatchJobs(id);
+      }, 5000);
+      (timer as any).unref?.();
+      jobWatches.set(id, timer);
+    }
+
     // A subagent's steps belong to the session that started it, marked with the subagent's id.
+    // The session's own events carry its background jobs.
     function base(event: string, ctx: any): Record<string, unknown> {
-      if (!isSub(ctx)) return { event, session_id: sessionId(ctx), cwd: ctx?.cwd };
+      if (!isSub(ctx)) {
+        const id = sessionId(ctx);
+        const list = jobs(ctx);
+        if (id && list) {
+          postedJobs.set(id, jobKey(list));
+          if (list.length > 0) watchJobs(id, ctx);
+        }
+        return { event, session_id: id, cwd: ctx?.cwd, background_tasks: list };
+      }
       const main = typeof ctx?.cwd === "string" ? mainSessions.get(ctx.cwd) : undefined;
       return { event, session_id: main ?? sessionId(ctx), cwd: ctx?.cwd, agent_id: ctx.agent.id, agent_type: ctx.agent.name };
     }
@@ -198,7 +250,8 @@ public enum PiExtension {
           post({ ...base("SubagentStop", ctx), last_assistant_message: text(last?.content) });
           return;
         }
-        // More work is on its way without you: the turn goes on.
+        // More work is on its way without you: the turn goes on. Waiting only on background jobs,
+        // the turn is yours, and the jobs it posts say what's still running.
         if (event?.willContinue && !event?.awaitingAsyncWork) return;
         if (last?.stopReason === "error") {
           post({ ...base("turn_failed", ctx), error: last.errorMessage ?? "The turn ended on an error" });
@@ -211,9 +264,14 @@ public enum PiExtension {
       pi.on("session_shutdown", (_event: any, ctx: any) => {
         if (isSub(ctx)) return;
         const id = sessionId(ctx);
-        if (id) prompts.delete(id);
         if (typeof ctx?.cwd === "string" && mainSessions.get(ctx.cwd) === id) mainSessions.delete(ctx.cwd);
         post(base("session_end", ctx));
+        // After the last post, which would watch its jobs again.
+        if (id) {
+          prompts.delete(id);
+          postedJobs.delete(id);
+          unwatchJobs(id);
+        }
         return flush();
       });
     }

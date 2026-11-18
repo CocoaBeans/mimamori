@@ -14,6 +14,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
   and the README, website and Help point to it
   ([#113](https://github.com/CocoaBeans/mimamori/pull/113)).
 
+### Fixed
+
+- An OMP agent that ends its turn waiting on a background job, such as a command OMP moved to the
+  background, waits under Waiting on tasks with the job listed, instead of reading as ready, until
+  the job ends. Save the OMP extension again from Settings › Agents › Other Agents to get this.
+
 ## [1.5.1] - 2026-11-16
 
 ### Added

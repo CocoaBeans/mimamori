@@ -452,9 +452,12 @@ struct OMPTests {
         #expect(names.contains("turn_start") && names.contains("turn_end"))
         for event in PiExtension.postedEvents {
             let translated = try #require(translate(#"{"event":"\#(event)","session_id":"s1","cwd":"/repo"}"#), "\(event)")
-            #expect(translated.name != .other, "\(event)")
+            // tasks_changed only lists the background jobs, and changes no state by itself.
+            #expect((translated.name == .other) == (event == "tasks_changed"), "\(event)")
             #expect(translated.agent == .omp)
         }
+        #expect(source.contains(#"event: "tasks_changed""#))
+        #expect(source.contains("ctx?.getAsyncJobSnapshot?.()"))
         // Edits and failures read as they do for every other agent.
         #expect(source.contains(#"event.isError ? "tool_failed" : "tool_end""#))
     }
@@ -474,6 +477,38 @@ struct OMPTests {
         #expect(sub.agentType == "explore")
         let stop = try #require(translate(#"{"event":"SubagentStop","session_id":"s1","cwd":"/repo","agent_id":"0-Explore"}"#))
         #expect(stop.name == .subagentStop)
+    }
+
+    /// As in a live session: a command OMP moved to the background after a minute, a turn that
+    /// ended waiting only on it, and the job ending while the agent sat waiting.
+    @Test func aTurnEndedOnABackgroundJobWaitsOnItUntilItEnds() throws {
+        var machine = AgentStatusMachine()
+        let job = #"[{"id":"bg_2","type":"shell","status":"running","description":"Load test"}]"#
+        _ = machine.apply(try #require(translate(#"{"event":"turn_start","session_id":"s1","cwd":"/repo","prompt":"Run it","background_tasks":[]}"#)))
+        _ = machine.apply(try #require(translate(#"{"event":"tool_start","session_id":"s1","cwd":"/repo","tool_name":"bash","tool_use_id":"b1","tool_input":{"command":"dart run bin/run.dart"},"background_tasks":[]}"#)))
+        _ = machine.apply(try #require(translate(#"{"event":"tool_end","session_id":"s1","cwd":"/repo","tool_name":"bash","tool_use_id":"b1","background_tasks":\#(job)}"#)))
+        #expect(machine.status?.backgroundCommands == 1)
+        #expect(machine.status?.commands.first?.description == "Load test")
+        let notes = machine.apply(try #require(translate(#"{"event":"turn_end","session_id":"s1","cwd":"/repo","background_tasks":\#(job)}"#)))
+        #expect(machine.status?.activity == .ready)
+        #expect(machine.status?.backgroundCommands == 1)
+        #expect(notes.count == 1)
+        // The job ends with no turn: the list says so, and nothing else changes.
+        let ended = machine.apply(try #require(translate(#"{"event":"tasks_changed","session_id":"s1","cwd":"/repo","background_tasks":[]}"#)))
+        #expect(ended.isEmpty)
+        #expect(machine.status?.activity == .ready)
+        #expect(machine.status?.backgroundCommands == 0)
+        #expect(machine.status?.commands.first?.finishedAt != nil)
+    }
+
+    @Test func aTasksChangedMidTurnKeepsTheAgentWorking() throws {
+        var machine = AgentStatusMachine()
+        _ = machine.apply(try #require(translate(#"{"event":"turn_start","session_id":"s1","cwd":"/repo","prompt":"Run it"}"#)))
+        _ = machine.apply(try #require(translate(#"{"event":"tool_start","session_id":"s1","cwd":"/repo","tool_name":"read","tool_use_id":"r1","tool_input":{"path":"a.md"}}"#)))
+        let before = machine.status?.activity
+        _ = machine.apply(try #require(translate(#"{"event":"tasks_changed","session_id":"s1","cwd":"/repo","background_tasks":[{"id":"bg_1","type":"shell"}]}"#)))
+        #expect(machine.status?.activity == before)
+        #expect(machine.status?.backgroundCommands == 1)
     }
 
     @Test func aTurnWithAQuestionNeedsYouUntilItIsAnswered() throws {

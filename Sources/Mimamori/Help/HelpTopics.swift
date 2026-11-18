@@ -173,7 +173,7 @@ struct HelpTopic: Identifiable {
             ## Subagents
             When Claude Code hands work to subagents and stops, an agent moves to Waiting on tasks while any of them runs, "waiting on 2 subagents", and "finished a turn" waits for the last. Its card in the Agents window, and the banner above the diff, list its subagents: what kind each is, what it was asked, its steps and time, and its latest step.
 
-            Commands it runs in the background are listed under **In the background**, with how long each has run and how it ended. They leave the agent Ready, "ready · 2 running in the background", since the turn is yours again, and it waits under Waiting on tasks until they end. The iPhone shows both lists on its cards.
+            Commands it runs in the background are listed under **In the background**, with how long each has run and how it ended. They leave the agent Ready, "ready · 2 running in the background", since the turn is yours again, and it waits under Waiting on tasks until they end. OMP's background jobs, such as a command it moved to the background, are listed the same way. The iPhone shows both lists on its cards.
 
             ## Several agents in one worktree
             Mimamori keeps each session apart, and names a Claude Code session by its title, as the Claude desktop app does, so you can tell which one is asking. When two of them edit the same file, the banner warns you and names the files, since one may undo the other's work.
