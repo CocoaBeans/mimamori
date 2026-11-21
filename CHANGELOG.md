@@ -8,6 +8,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-20
+
 ### Added
 
 - **Get the iPhone App** in Settings › iPhone opens Mimamori Companion, now free on the App Store,
@@ -319,7 +321,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Markdown.
 - Automatic updates through Sparkle.
 
-[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/CocoaBeans/mimamori/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/CocoaBeans/mimamori/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/CocoaBeans/mimamori/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/CocoaBeans/mimamori/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/CocoaBeans/mimamori/compare/v1.3.0...v1.4.0
