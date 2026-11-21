@@ -310,11 +310,25 @@ The widget is an app extension running sandboxed in its own process. Mimamori wr
 
 Mimamori on your iPhone shows your agents while it's on the same network as your Mac, or anywhere over [Tailscale](#away-from-home-over-tailscale), grouped and drawn as the Agents window draws them, with **Details** for each one's task, steps and files.
 
-Get **[Mimamori Companion](https://apps.apple.com/app/id6832420977)**, free on the App Store, for iOS 18 or later. The App Store version shows your agents, notifies you and answers requests while it's open. Building it yourself from `Mimamori.xcodeproj` with the **MimamoriCompanion** scheme, signed with your own team, adds staying connected in the background and the Live Activity, which App Review allows only for audio you can hear (see below). Then:
+Get **[Mimamori Companion](https://apps.apple.com/app/id6832420977)**, free on the App Store, for iOS 18 or later. The App Store version shows your agents, notifies you and answers requests while it's open. Building it yourself from `Mimamori.xcodeproj` with the **MimamoriCompanion** scheme, signed with your own team, adds staying connected in the background and the Live Activity, which App Review allows only for audio you can hear (see below); [Building the iPhone app yourself](#building-the-iphone-app-yourself) has the steps. Then:
 
 1. In **Settings › iPhone**, turn on **Show agents on your iPhone**. Off, the default, Mimamori doesn't listen on the network at all.
 2. Choose **Pair iPhone…**, and point the iPhone's Camera at the code. The link opens the iPhone app, which keeps the pairing.
 3. The iPhone finds your Mac over Bonjour (`_mimamori._tcp`) whenever both are on the network, and the Mac sends what changes, on the widgets' rules.
+
+#### Building the iPhone app yourself
+
+You need a Mac with Xcode 16.4 or later, an iPhone on iOS 18 or later, and an Apple ID. A free one works: the app uses no capability that needs a paid Apple Developer Program membership. But iOS stops opening an app signed by a free account after 7 days, until you build it again. With a membership, it lasts a year.
+
+1. Clone the repository and open `Mimamori.xcodeproj` in Xcode. Sign in under **Xcode › Settings › Accounts** if you haven't.
+2. Choose your team. Select the **Mimamori** project (not a target) in the navigator, then in **Build Settings** set **Development Team** to yours, which every target inherits. A free account's team is named "*Your Name* (Personal Team)".
+3. Give the app IDs of your own, since `com.kevinross.Mimamori.Companion` belongs to the project's team. In the **MimamoriCompanion** target's **General** tab, change **Bundle Identifier** to something like `com.example.Mimamori.Companion`. Then change the **MimamoriLiveActivity** target's to the same followed by `.LiveActivity`: an extension's ID must start with its app's.
+4. On the iPhone, turn on **Developer Mode** in Settings › Privacy & Security (it appears once the iPhone has been connected to Xcode), and let it restart.
+5. Connect the iPhone by cable, or the same Wi-Fi once Xcode has seen it, and unlock it. Choose the **MimamoriCompanion** scheme (not the App Store one) and your iPhone as the destination, then **Product › Run** (⌘R). The first build registers the iPhone and the app's IDs with your team.
+6. If iOS says "Untrusted Developer", trust your Apple ID in Settings › General › VPN & Device Management, then open Mimamori.
+7. In the iPhone app's settings, turn on **Stay connected in the background**, and **Show agents on the Lock Screen** for the Live Activity. Then pair it with your Mac, as above.
+
+Keep either your build or the App Store version on an iPhone, not both. They open the same `mimamori-companion://` pairing link, so with both installed the code may open the wrong one. A build of your own is paired on its own, too: pairing the App Store version doesn't carry over.
 
 #### Away from home, over Tailscale
 

@@ -8,6 +8,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
 
 ## [Unreleased]
 
+### Added
+
+- **Building the iPhone app yourself**, in the README and Help: the steps to build Mimamori
+  Companion with Xcode and install it on your iPhone, to stay connected in the background and show
+  a Live Activity.
+
 ## [1.6.0] - 2026-11-20
 
 ### Added

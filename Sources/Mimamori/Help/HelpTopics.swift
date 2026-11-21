@@ -211,11 +211,14 @@ struct HelpTopic: Identifiable {
             actions: [.settings(.companion, "iPhone Settings…")],
             markdown: """
             ## Pairing
-            1. Install **Mimamori Companion** on your iPhone, free on the App Store (**Get the iPhone App** in Settings › iPhone opens it). Built from Mimamori's source instead, as the README describes, it can also stay connected in the background and show a Live Activity.
+            1. Install **Mimamori Companion** on your iPhone, free on the App Store (**Get the iPhone App** in Settings › iPhone opens it). Built from Mimamori's source instead, it can also stay connected in the background and show a Live Activity (see Building it yourself, below).
             2. In **Settings › iPhone**, turn on **Show agents on your iPhone**, then choose **Pair iPhone…**.
             3. Point the iPhone's Camera at the code, and tap the link to open it in Mimamori.
 
             The iPhone then shows your agents whenever it's on the same network as your Mac, grouped and drawn as the Agents window draws them. Tap **Details** for each agent's task, steps and files, or turn it off for one line each.
+
+            ## Building it yourself
+            With Xcode and an Apple ID, a free one included, you can build the iPhone app from Mimamori's source and install it on your iPhone. Choose your own team for the Mimamori project, give the **MimamoriCompanion** and **MimamoriLiveActivity** targets bundle IDs of your own, turn on Developer Mode on the iPhone, and run the **MimamoriCompanion** scheme on it. The README's *Building the iPhone app yourself* has each step. An app signed with a free Apple ID stops opening after 7 days, until you build it again. Keep either your build or the App Store version on the iPhone, not both, since both open the pairing link.
 
             ## Away from home
             With Tailscale on your Mac and your iPhone, signed in to the same tailnet, the iPhone reaches your Mac from any network, cellular included. There's nothing to set up: the iPhone learns your Mac's tailnet address when it connects at home, and uses it when it can't find the Mac on its own network. **Away from this network** in Settings › iPhone shows the address. The connection stays encrypted with the pairing's key. The App Store version shows your agents this way while it's open.
