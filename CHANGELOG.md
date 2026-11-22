@@ -34,7 +34,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   image's before and after under the second one's name once it finishes
   ([#121](https://github.com/CocoaBeans/mimamori/pull/121)).
 - Clicking a flag's line link in the diff header scrolls to that line every time, not only the
-  first: after you'd scrolled away, a second click on the same link did nothing.
+  first: after you'd scrolled away, a second click on the same link did nothing
+  ([#122](https://github.com/CocoaBeans/mimamori/pull/122)).
 
 ## [1.6.0] - 2026-11-20
 
