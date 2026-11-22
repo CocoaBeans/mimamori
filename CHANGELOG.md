@@ -30,6 +30,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
   or off in the Agents window, or close a window and open it again, and read the same in the
   Agents window and in the worktree's agent banner
   ([#120](https://github.com/CocoaBeans/mimamori/pull/120)).
+- Picking another changed image while a large one is still loading no longer shows the first
+  image's before and after under the second one's name once it finishes.
 
 ## [1.6.0] - 2026-11-20
 

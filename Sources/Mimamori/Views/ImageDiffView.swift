@@ -35,17 +35,25 @@ struct ImageDiffView: View {
         errorText = nil
         // Another file's images go at once; this file's stay up until the new ones are ready.
         if sides?.path != change.path { sides = nil }
+        // After each wait, a load cancelled meanwhile (another file or version picked) shows
+        // nothing: the detached decode runs on regardless, and finishing late it would put the
+        // images it decoded under the newer file's header.
         do {
-            guard let versions = try await session.versions(of: change, inCommit: commit != nil) else {
+            let found = try await session.versions(of: change, inCommit: commit != nil)
+            guard !Task.isCancelled else { return }
+            guard let versions = found else {
                 errorText = "The worktree isn't ready yet."
                 return
             }
             let path = change.path
             // Decoding a large image takes a moment: off the main thread.
-            sides = await Task.detached(priority: .userInitiated) {
+            let decoded = await Task.detached(priority: .userInitiated) {
                 ImageSides(path: path, old: ImageSide(versions.old), new: ImageSide(versions.new))
             }.value
+            guard !Task.isCancelled else { return }
+            sides = decoded
         } catch {
+            guard !Task.isCancelled else { return }
             errorText = error.localizedDescription
         }
     }
