@@ -33,6 +33,8 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Picking another changed image while a large one is still loading no longer shows the first
   image's before and after under the second one's name once it finishes
   ([#121](https://github.com/CocoaBeans/mimamori/pull/121)).
+- Clicking a flag's line link in the diff header scrolls to that line every time, not only the
+  first: after you'd scrolled away, a second click on the same link did nothing.
 
 ## [1.6.0] - 2026-11-20
 

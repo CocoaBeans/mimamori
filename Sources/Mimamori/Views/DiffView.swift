@@ -13,6 +13,8 @@ struct DiffView: View {
     @State private var errorText: String?
     @State private var showAll = false
     @State private var targetLineID: Int?
+    /// Counts the jumps asked for, so asking for the line already jumped to scrolls to it again.
+    @State private var jumpRequest = 0
     /// The file and reviewed version for which you chose the full diff over the since-review one.
     @State private var fullDiffKey: String?
     /// A reviewed blob found missing from the object store.
@@ -216,7 +218,7 @@ struct DiffView: View {
                 DiffContentView(diff: loaded.diff, decorations: loaded.decorations, wrap: model.settings.wrapDiffLines,
                                 sideBySide: model.settings.diffLayout == .sideBySide,
                                 fontSize: model.settings.diffFontSize, showAll: $showAll, targetLineID: $targetLineID,
-                                flags: AttentionFlag.byLine(change.flags),
+                                jumpRequest: jumpRequest, flags: AttentionFlag.byLine(change.flags),
                                 currentBranch: commit == nil ? currentSideName : nil,
                                 notes: noteContext, draft: Binding(get: { noteDraft }, set: { noteDraft = $0 }),
                                 draftText: noteText, discard: hunkDiscarding)
@@ -263,6 +265,7 @@ struct DiffView: View {
             if let line = hunk.lines.first(where: { $0.newNumber == number }) {
                 showAll = true
                 targetLineID = line.id
+                jumpRequest += 1
                 return
             }
         }
@@ -706,6 +709,8 @@ struct DiffContentView: View {
     let fontSize: Double
     @Binding var showAll: Bool
     @Binding var targetLineID: Int?
+    /// Goes up with each jump: what scrolls to `targetLineID`, which may be the line it already is.
+    var jumpRequest = 0
     /// The most severe flag on each line of the new file, so those lines stand out.
     var flags: [Int: AttentionFlag] = [:]
     /// The branch checked out, to name a conflict's current side ("HEAD (main)").
@@ -837,8 +842,8 @@ struct DiffContentView: View {
                     } action: { _, shown in
                         viewport.shown = shown
                     }
-                    .onChange(of: targetLineID) { _, id in
-                        guard let id, let key = key(forLine: id, in: visible.hunks, split: split) else { return }
+                    .onChange(of: jumpRequest) {
+                        guard let id = targetLineID, let key = key(forLine: id, in: visible.hunks, split: split) else { return }
                         withAnimation { proxy.scrollTo(key, anchor: .center) }
                     }
                     .onAppear {
