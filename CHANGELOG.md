@@ -21,7 +21,7 @@ the ones the update window and the release page show, are in [docs/releases](doc
   tooltip showing ([#117](https://github.com/CocoaBeans/mimamori/pull/117)).
 - The open diff no longer draws itself a second time after each load, or each time Mimamori
   rereads a worktree where you've reviewed files or written notes, which happens every time an
-  agent edits a file there.
+  agent edits a file there ([#118](https://github.com/CocoaBeans/mimamori/pull/118)).
 
 ## [1.6.0] - 2026-11-20
 
