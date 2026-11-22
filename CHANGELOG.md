@@ -14,6 +14,12 @@ the ones the update window and the release page show, are in [docs/releases](doc
   Companion with Xcode and install it on your iPhone, to stay connected in the background and show
   a Live Activity ([#116](https://github.com/CocoaBeans/mimamori/pull/116)).
 
+### Fixed
+
+- Tooltips in the main window stay up while an agent works, instead of vanishing after a moment.
+  The toolbar's agent status rebuilt the toolbar each time its timer ticked, and that hid any
+  tooltip showing.
+
 ## [1.6.0] - 2026-11-20
 
 ### Added

@@ -13,7 +13,11 @@ struct AgentStatusPill: View {
         Button {
             showingDetails.toggle()
         } label: {
+            // The description counts seconds, so it sits on the label: when a toolbar item's own
+            // accessibility text changes, SwiftUI rebuilds the toolbar, hiding any tooltip showing.
             PillLabel(rows: rows, now: model.agentNow)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(PillLabel.describe(rows, now: model.agentNow))
         }
         .buttonStyle(.plain)
         .disabled(rows.isEmpty)
@@ -28,7 +32,6 @@ struct AgentStatusPill: View {
             try? await Task.sleep(for: .seconds(4))
             showingDetails = true
         }
-        .accessibilityLabel(PillLabel.describe(rows, now: model.agentNow))
     }
 }
 
