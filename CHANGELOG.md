@@ -26,6 +26,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
   disabled for the moment until the new diff loads, instead of vanishing and coming back. A
   tooltip or a line's note bubble under the pointer no longer disappears with it
   ([#119](https://github.com/CocoaBeans/mimamori/pull/119)).
+- The answers you've started choosing to an agent's questions stay chosen when you turn Details on
+  or off in the Agents window, or close a window and open it again, and read the same in the
+  Agents window and in the worktree's agent banner.
 
 ## [1.6.0] - 2026-11-20
 

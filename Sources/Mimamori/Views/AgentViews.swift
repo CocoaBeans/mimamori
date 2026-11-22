@@ -1391,13 +1391,17 @@ struct QuestionAnswerForm: View {
     let requestID: String
     let questions: [AgentQuestion]
 
-    /// The options chosen, by question.
-    @State private var chosen: [String: Set<String>] = [:]
-    /// Answers of your own, by question.
-    @State private var typed: [String: String] = [:]
+    /// What you've chosen and typed so far. It lives in the hub, so it outlasts this view.
+    private var draft: QuestionDraft { model.agentHub.questionDrafts[requestID] ?? QuestionDraft() }
+
+    private func updateDraft(_ change: (inout QuestionDraft) -> Void) {
+        var copy = draft
+        change(&copy)
+        if copy != draft { model.agentHub.questionDrafts[requestID] = copy }
+    }
 
     private func answer(to question: AgentQuestion) -> String? {
-        question.answer(choosing: chosen[question.question] ?? [], other: typed[question.question] ?? "")
+        question.answer(choosing: draft.chosen[question.question] ?? [], other: draft.typed[question.question] ?? "")
     }
 
     private var answers: [String: String]? {
@@ -1412,9 +1416,12 @@ struct QuestionAnswerForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(questions, id: \.question) { question in
+                let key = question.question
                 QuestionField(question: question,
-                              chosen: Binding(get: { chosen[question.question] ?? [] }, set: { chosen[question.question] = $0 }),
-                              typed: Binding(get: { typed[question.question] ?? "" }, set: { typed[question.question] = $0 }))
+                              chosen: Binding(get: { draft.chosen[key] ?? [] },
+                                              set: { value in updateDraft { $0.chosen[key] = value } }),
+                              typed: Binding(get: { draft.typed[key] ?? "" },
+                                             set: { value in updateDraft { $0.typed[key] = value } }))
             }
             HStack(spacing: 6) {
                 Button {

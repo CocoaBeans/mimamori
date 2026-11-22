@@ -123,6 +123,14 @@ struct AgentContact: Hashable, Identifiable {
     var id: String { agent.id }
 }
 
+/// The answers chosen so far to a request's questions, before Answer sends them.
+struct QuestionDraft: Equatable {
+    /// The options chosen, by question.
+    var chosen: [String: Set<String>] = [:]
+    /// Answers of your own, by question.
+    var typed: [String: String] = [:]
+}
+
 /// A permission request whose hook waits for an answer from Mimamori.
 struct PermissionRequest: Hashable, Identifiable {
     var id: String
@@ -182,6 +190,10 @@ final class AgentHub {
     private(set) var hookLog: [HookLogEntry] = []
     /// Permission requests you can answer in Mimamori, by session (`AgentStatus.key`).
     private(set) var pendingPermissions: [String: PermissionRequest] = [:]
+    /// Answers chosen so far in Mimamori to a request's questions, by request ID. They live here,
+    /// not in the form, so they last while the form is rebuilt (Details turned on or off, a window
+    /// closed and opened) and read the same wherever the request shows. They go with the request.
+    var questionDrafts: [String: QuestionDraft] = [:]
     static let hookLogCapacity = 200
 
     let socketPath: String = Persistence.supportDirectory.appendingPathComponent("mimamori.sock").path
@@ -454,6 +466,7 @@ final class AgentHub {
                     pending.autoAnswer = .init(allow: allow, at: event.receivedAt.addingTimeInterval(TimeInterval(settings.autoAnswerSeconds)))
                 }
             }
+            if let replaced = pendingPermissions[key], replaced.id != id { dropDraft(for: replaced.id) }
             pendingPermissions[key] = pending
             steppedBack.remove(key)
             scheduleAutoAnswer(pending)
@@ -509,7 +522,7 @@ final class AgentHub {
         pendingPermissions.removeValue(forKey: pending.session)
         autoAnswerTasks.removeValue(forKey: id)?.cancel()
         server?.permissions.answer(id, allow ? .allow : .deny)
-        onPermissionSettled(id)
+        settled(id)
         onPermissionAnswered(pending, allow, automatically, phone)
         onPermissionsChange()
         let how = phone.map { " on \($0)" } ?? (automatically ? " by itself, after waiting" : "")
@@ -531,7 +544,7 @@ final class AgentHub {
         pendingPermissions.removeValue(forKey: pending.session)
         autoAnswerTasks.removeValue(forKey: id)?.cancel()
         server?.permissions.answer(id, .answers(questions: questions, answers: answers))
-        onPermissionSettled(id)
+        settled(id)
         onPermissionAnswered(pending, true, false, phone)
         onPermissionsChange()
         Log.agents.notice("Answered \(pending.agent.displayName, privacy: .public)'s \(answers.count) question(s) \(phone.map { "on \($0)" } ?? "in Mimamori", privacy: .public)")
@@ -575,7 +588,7 @@ final class AgentHub {
         guard let pending = pendingPermissions.removeValue(forKey: session) else { return }
         autoAnswerTasks.removeValue(forKey: pending.id)?.cancel()
         server?.permissions.answer(pending.id, nil)
-        onPermissionSettled(pending.id)
+        settled(pending.id)
         onPermissionsChange()
     }
 
@@ -704,6 +717,17 @@ final class AgentHub {
         steppedBack.insert(pending.session)
         settlePermission(for: pending.session)
         schedulePublish(urgent: true)
+    }
+
+    /// A request is over: its notification goes, and the answers you were choosing with it.
+    private func settled(_ id: String) {
+        dropDraft(for: id)
+        onPermissionSettled(id)
+    }
+
+    /// Only when there is one: every write to an observed property redraws its readers.
+    private func dropDraft(for id: String) {
+        if questionDrafts[id] != nil { questionDrafts[id] = nil }
     }
 
     private func pendingPermission(withID id: String) -> PermissionRequest? {
