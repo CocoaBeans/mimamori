@@ -197,7 +197,11 @@ final class WorktreeSession: Identifiable {
     /// Moves the notes on a file to where their lines are in its diff now; only a working-tree
     /// diff against the baseline will do, since notes on removed lines count lines there.
     func reanchorNotes(in diff: FileDiff, for change: FileChange) {
-        guard notes.reanchor(path: change.path, in: diff, blob: change.newOID) else { return }
+        // On a copy: a mutating call on an observed property redraws its readers even when it
+        // changes nothing, and this runs after every diff load.
+        var moved = notes
+        guard moved.reanchor(path: change.path, in: diff, blob: change.newOID) else { return }
+        notes = moved
         onSettingsChanged(self)
     }
 
@@ -543,13 +547,22 @@ final class WorktreeSession: Identifiable {
         if !ownEvents.isEmpty { events = events.indices.filter { !ownEvents.contains($0) }.map { events[$0] } }
         let kept = attributions.filter { byPath[$0.key] != nil }
         if kept.count != attributions.count { attributions = kept }
+        // Pruned on copies, kept only when something went: a mutating call on an observed property
+        // redraws every view reading it, even when it changes nothing, and this runs every refresh.
         // An unavailable baseline lists nothing, which says nothing about what is still changed.
-        if fresh.baseline.isAvailable, !reviews.isEmpty,
-           reviews.prune(keepingPaths: Set(byPath.keys), olderThan: now.addingTimeInterval(-Self.reviewRetention)) {
-            onSettingsChanged(self)
+        if fresh.baseline.isAvailable, !reviews.isEmpty {
+            var pruned = reviews
+            if pruned.prune(keepingPaths: Set(byPath.keys), olderThan: now.addingTimeInterval(-Self.reviewRetention)) {
+                reviews = pruned
+                onSettingsChanged(self)
+            }
         }
-        if !notes.isEmpty, notes.prune(resolvedBefore: now.addingTimeInterval(-Self.resolvedNoteRetention)) {
-            onSettingsChanged(self)
+        if !notes.isEmpty {
+            var pruned = notes
+            if pruned.prune(resolvedBefore: now.addingTimeInterval(-Self.resolvedNoteRetention)) {
+                notes = pruned
+                onSettingsChanged(self)
+            }
         }
         if lastChanged.count > 5000 {
             let cutoff = now.addingTimeInterval(-settings.recencyWindowSeconds * 4)

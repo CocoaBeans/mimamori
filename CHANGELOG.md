@@ -19,6 +19,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - Tooltips in the main window stay up while an agent works, instead of vanishing after a moment.
   The toolbar's agent status rebuilt the toolbar each time its timer ticked, and that hid any
   tooltip showing ([#117](https://github.com/CocoaBeans/mimamori/pull/117)).
+- The open diff no longer draws itself a second time after each load, or each time Mimamori
+  rereads a worktree where you've reviewed files or written notes, which happens every time an
+  agent edits a file there.
 
 ## [1.6.0] - 2026-11-20
 
