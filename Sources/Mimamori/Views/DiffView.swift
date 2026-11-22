@@ -89,9 +89,10 @@ struct DiffView: View {
                         Self.openedDebugDiscard = true
                         discardFileAction()
                         session.discardRequest?.confirmsItself = confirms
-                    } else if let number = Int(target), let diff, number >= 1, number <= diff.hunks.count, let discardAction {
+                    } else if let number = Int(target), let diff, number >= 1, number <= diff.hunks.count,
+                              let perform = hunkDiscarding?.perform {
                         Self.openedDebugDiscard = true
-                        discardAction(diff.hunks[number - 1])
+                        perform(diff.hunks[number - 1])
                         session.discardRequest?.confirmsItself = confirms
                     }
                 }
@@ -106,15 +107,18 @@ struct DiffView: View {
         return (loaded, made)
     }
 
-    /// Asks to throw a hunk away, where that's offered: in the working tree's diff against HEAD,
-    /// as loaded for the version of the file listed now.
-    private var discardAction: ((DiffHunk) -> Void)? {
-        guard session.offersDiscarding, let working = fullWorkingDiff,
-              Discarding.hunkUnsupportedReason(for: working.change) == nil else {
+    /// Throwing hunks away, where that's offered: in the working tree's diff against HEAD. It can
+    /// be done only once that diff is loaded for the version of the file listed now.
+    private var hunkDiscarding: HunkDiscarding? {
+        guard commit == nil, session.offersDiscarding, let loaded, case .workingTree = loaded.source,
+              Discarding.hunkUnsupportedReason(for: change) == nil else {
             return nil
         }
+        guard let working = fullWorkingDiff, Discarding.hunkUnsupportedReason(for: working.change) == nil else {
+            return HunkDiscarding(perform: nil)
+        }
         let session = session
-        return { hunk in
+        return HunkDiscarding { hunk in
             session.discardRequest = DiscardRequest(change: working.change, scope: .hunk(hunk),
                                                     diff: working.loaded.diff, decorations: working.loaded.decorations)
         }
@@ -215,7 +219,7 @@ struct DiffView: View {
                                 flags: AttentionFlag.byLine(change.flags),
                                 currentBranch: commit == nil ? currentSideName : nil,
                                 notes: noteContext, draft: Binding(get: { noteDraft }, set: { noteDraft = $0 }),
-                                draftText: noteText, discard: discardAction)
+                                draftText: noteText, discard: hunkDiscarding)
             }
         } else if let errorText {
             ContentUnavailableView("Could Not Load Diff", systemImage: "exclamationmark.triangle",
@@ -713,7 +717,7 @@ struct DiffContentView: View {
     /// Its words. Only the composer reads them as it draws; this view reads them only to save.
     var draftText = NoteDraftText()
     /// Asks to throw a hunk away; nil where hunks can't be discarded.
-    var discard: ((DiffHunk) -> Void)? = nil
+    var discard: HunkDiscarding? = nil
 
     private static let initialLimit = 2500
     /// Where the notes above the diff are, to scroll a new whole-file note into view.
@@ -897,15 +901,15 @@ struct DiffContentView: View {
         notesAboveDiff
         let index = noteIndex(visible.hunks)
         ForEach(visible.hunks) { hunk in
-            let onDiscard = discardAction(for: hunk)
-            hunkSection(pinned: pinned, header: HunkHeaderRow(hunk: hunk, fontSize: fontSize, onDiscard: onDiscard)) {
+            let discardHunk = discardAction(for: hunk)
+            hunkSection(pinned: pinned, header: HunkHeaderRow(hunk: hunk, fontSize: fontSize, discard: discardHunk)) {
                 ForEach(hunk.lines) { line in
                     DiffLineRow(line: line, wrap: wrap, fontSize: fontSize, numberWidth: numberWidth,
                                 syntax: decorations.syntax[line.id], emphasis: decorations.emphasis[line.id],
                                 isTarget: line.id == targetLineID, flag: flag(for: line),
                                 conflict: placement(for: line), currentBranch: currentBranch,
                                 note: index.mark(for: line), onNote: noteAction(for: line, in: hunk),
-                                onDiscardHunk: onDiscard)
+                                discardHunk: discardHunk)
                         .id(DiffRowKey(hunk: hunk.id, row: line.id))
                     noteRows(after: [line.id], index: index, inset: numberWidth * 2 + 20)
                 }
@@ -919,8 +923,8 @@ struct DiffContentView: View {
         notesAboveDiff
         let index = noteIndex(visible.hunks)
         ForEach(visible.hunks) { hunk in
-            let onDiscard = discardAction(for: hunk)
-            hunkSection(pinned: pinned, header: HunkHeaderRow(hunk: hunk, fontSize: fontSize, onDiscard: onDiscard)) {
+            let discardHunk = discardAction(for: hunk)
+            hunkSection(pinned: pinned, header: HunkHeaderRow(hunk: hunk, fontSize: fontSize, discard: discardHunk)) {
                 ForEach(SideBySide.rows(for: hunk)) { row in
                     // Removed lines take notes on the left, the rest on the right.
                     let left = row.left?.kind == .deletion ? row.left : nil
@@ -931,7 +935,7 @@ struct DiffContentView: View {
                                  leftNote: left.map(index.mark) ?? .none, rightNote: right.map(index.mark) ?? .none,
                                  onNoteLeft: left.flatMap { noteAction(for: $0, in: hunk) },
                                  onNoteRight: right.flatMap { noteAction(for: $0, in: hunk) },
-                                 onDiscardHunk: onDiscard)
+                                 discardHunk: discardHunk)
                         .id(DiffRowKey(hunk: hunk.id, row: row.id))
                     noteRows(after: [left?.id, right?.id].compactMap { $0 }, index: index, inset: numberWidth + 8)
                 }
@@ -971,10 +975,11 @@ struct DiffContentView: View {
 
     /// Asks to discard `hunk` whole: one cut short for display is still discarded as the
     /// confirmation shows it, all of it.
-    private func discardAction(for hunk: DiffHunk) -> (() -> Void)? {
+    private func discardAction(for hunk: DiffHunk) -> HunkDiscard? {
         guard let discard else { return nil }
+        guard let perform = discard.perform else { return HunkDiscard(action: nil) }
         let whole = diff.hunks.first { $0.id == hunk.id } ?? hunk
-        return { discard(whole) }
+        return HunkDiscard { perform(whole) }
     }
 
     // MARK: Notes
@@ -1149,7 +1154,7 @@ struct HunkHeaderRow: View {
     let hunk: DiffHunk
     let fontSize: Double
     /// Asks to throw the hunk away; nil where hunks can't be discarded.
-    var onDiscard: (() -> Void)? = nil
+    var discard: HunkDiscard? = nil
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1158,8 +1163,8 @@ struct HunkHeaderRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if let onDiscard {
-                Button(action: onDiscard) {
+            if let discard {
+                Button { discard.action?() } label: {
                     Label("Discard…", systemImage: "arrow.uturn.backward")
                 }
                 .buttonStyle(.borderless)
@@ -1168,6 +1173,7 @@ struct HunkHeaderRow: View {
                 .fixedSize()
                 .help("Throw this hunk away: its lines go back to how they are in the last commit, after a snapshot")
                 .accessibilityLabel("Discard hunk")
+                .disabled(discard.action == nil)
             }
         }
         .padding(.horizontal, 10)
@@ -1272,7 +1278,7 @@ struct DiffLineRow: View {
     /// Starts a note on this line; nil where notes can't go.
     var onNote: (() -> Void)? = nil
     /// Asks to discard the line's hunk, from the gutter's context menu.
-    var onDiscardHunk: (() -> Void)? = nil
+    var discardHunk: HunkDiscard? = nil
     @State private var hovering = false
 
     private var place: String {
@@ -1310,7 +1316,7 @@ struct DiffLineRow: View {
                     .frame(width: 12, alignment: .center)
                     .foregroundStyle(line.kind == .addition ? .green : line.kind == .deletion ? .red : .secondary)
             }
-            .discardHunkMenu(onDiscardHunk)
+            .discardHunkMenu(discardHunk)
             if let conflict, conflict.part.isMarker {
                 ConflictStyle.label(conflict, currentBranch: currentBranch, fontSize: fontSize)
                     .padding(.trailing, 12)
@@ -1406,14 +1412,14 @@ struct SplitLineRow: View {
     var onNoteLeft: (() -> Void)? = nil
     var onNoteRight: (() -> Void)? = nil
     /// Asks to discard the row's hunk, from either gutter's context menu.
-    var onDiscardHunk: (() -> Void)? = nil
+    var discardHunk: HunkDiscard? = nil
 
     var body: some View {
         HStack(spacing: 0) {
             SplitCell(line: row.left, number: row.left?.oldNumber,
                       syntax: row.left.flatMap { decorations.syntax[$0.id] },
                       emphasis: row.left.flatMap { decorations.emphasis[$0.id] },
-                      numberWidth: numberWidth, note: leftNote, onNote: onNoteLeft, onDiscardHunk: onDiscardHunk)
+                      numberWidth: numberWidth, note: leftNote, onNote: onNoteLeft, discardHunk: discardHunk)
             Rectangle()
                 .fill(Color.secondary.opacity(0.25))
                 .frame(width: 1)
@@ -1421,7 +1427,7 @@ struct SplitLineRow: View {
                       syntax: row.right.flatMap { decorations.syntax[$0.id] },
                       emphasis: row.right.flatMap { decorations.emphasis[$0.id] },
                       numberWidth: numberWidth, flag: flag, conflict: conflict, currentBranch: currentBranch,
-                      note: rightNote, onNote: onNoteRight, onDiscardHunk: onDiscardHunk)
+                      note: rightNote, onNote: onNoteRight, discardHunk: discardHunk)
         }
         // Both cells take the taller one's height, so their backgrounds line up.
         .fixedSize(horizontal: false, vertical: true)
@@ -1446,7 +1452,7 @@ private struct SplitCell: View {
     var currentBranch: String? = nil
     var note: NoteMark = .none
     var onNote: (() -> Void)? = nil
-    var onDiscardHunk: (() -> Void)? = nil
+    var discardHunk: HunkDiscard? = nil
     @State private var hovering = false
 
     var body: some View {
@@ -1462,7 +1468,7 @@ private struct SplitCell: View {
                     }
                 }
                 .padding(.trailing, 8)
-                .discardHunkMenu(onDiscardHunk)
+                .discardHunkMenu(discardHunk)
             if let conflict, conflict.part.isMarker, let line {
                 ConflictStyle.label(conflict, currentBranch: currentBranch, fontSize: nil)
                     .padding(.trailing, 8)

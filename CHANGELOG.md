@@ -22,6 +22,9 @@ the ones the update window and the release page show, are in [docs/releases](doc
 - The open diff no longer draws itself a second time after each load, or each time Mimamori
   rereads a worktree where you've reviewed files or written notes, which happens every time an
   agent edits a file there ([#118](https://github.com/CocoaBeans/mimamori/pull/118)).
+- While an agent edits the file whose diff is open, each hunk's Discard button stays in place,
+  disabled for the moment until the new diff loads, instead of vanishing and coming back. A
+  tooltip or a line's note bubble under the pointer no longer disappears with it.
 
 ## [1.6.0] - 2026-11-20
 

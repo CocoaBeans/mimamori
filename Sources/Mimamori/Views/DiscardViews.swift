@@ -386,13 +386,27 @@ struct DiscardUndoBar: View {
     @MainActor private static var undidForDebugging = false
 }
 
+/// Throwing a diff's hunks away, where it offers that. `perform` is nil while the diff on screen is
+/// older than the file listed, as just after an agent writes it: the offer stays meanwhile, so its
+/// buttons and menus are disabled for a moment rather than leaving and coming back, which would
+/// rebuild every line's gutter and hide a tooltip showing.
+struct HunkDiscarding {
+    var perform: ((DiffHunk) -> Void)?
+}
+
+/// One hunk's Discard, shown wherever hunks can be discarded; disabled while `action` is nil.
+struct HunkDiscard {
+    var action: (() -> Void)?
+}
+
 extension View {
     /// A line's context menu with Discard This Hunk, where hunks can be discarded.
     @ViewBuilder
-    func discardHunkMenu(_ action: (() -> Void)?) -> some View {
-        if let action {
+    func discardHunkMenu(_ discard: HunkDiscard?) -> some View {
+        if let discard {
             contextMenu {
-                Button("Discard This Hunk…", action: action)
+                Button("Discard This Hunk…") { discard.action?() }
+                    .disabled(discard.action == nil)
             }
         } else {
             self
